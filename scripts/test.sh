@@ -5,8 +5,10 @@ required_files=(
   "README.md"
   "docs/technical_spec_v0_2.md"
   "docs/autodeploy.md"
+  "docs/llm_logging_policy.md"
   ".github/workflows/ci.yml"
   ".github/workflows/deploy.yml"
+  "scripts/smoke_test.sh"
 )
 
 for file in "${required_files[@]}"; do
@@ -17,3 +19,5 @@ for file in "${required_files[@]}"; do
 done
 
 echo "All required files are present."
+
+bash scripts/smoke_test.sh
