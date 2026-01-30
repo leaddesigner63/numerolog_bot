@@ -5,6 +5,7 @@ required_files=(
   "README.md"
   "docs/technical_spec_v0_2.md"
   "docs/autodeploy.md"
+  "docs/autodeploy_runbook.md"
   "docs/llm_logging_policy.md"
   ".github/workflows/ci.yml"
   ".github/workflows/deploy.yml"
