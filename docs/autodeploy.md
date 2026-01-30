@@ -114,6 +114,7 @@ OPENAI_API_KEY=...
 GEMINI_API_KEY=...
 LLM_PROVIDER=openai
 APP_ENV=production
+ERROR_LOG_PATH=/opt/samurai/shared/logs/app.log
 ```
 
 ## 8) Проверка деплоя
