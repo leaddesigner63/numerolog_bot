@@ -12,6 +12,7 @@
 
 - `docs/technical_spec_v0_2.md` — полное ТЗ v0.2.
 - `docs/autodeploy.md` — пошаговые инструкции по автодеплою.
+- `docs/autodeploy_runbook.md` — краткая пошаговая памятка по автодеплою.
 - `docs/llm_logging_policy.md` — формат логирования LLM-вызовов и политика хранения истории.
 - `.github/workflows/ci.yml` — CI (проверка структуры проекта).
 - `.github/workflows/deploy.yml` — шаблон автодеплоя.

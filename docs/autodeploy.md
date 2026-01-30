@@ -42,7 +42,8 @@ ssh-keygen -t ed25519 -C "github-actions"
 
 Добавьте в GitHub Secrets/Variables:
 
-- `APP_DIR` (например: `/opt/samurai`)
+- `DEPLOY_PATH` (например: `/opt/samurai/repo`)
+- `SERVICE_NAME` (например: `samurai-bot`)
 - `APP_ENV` (например: `production`)
 - при необходимости — ключи Telegram и LLM (лучше через secret manager)
 
@@ -52,13 +53,13 @@ ssh-keygen -t ed25519 -C "github-actions"
 
 ## 4) Структура деплоя
 
-Проект деплоится в папку `APP_DIR` и обновляется при пуше в ветку `main`.
+Проект деплоится в папку `DEPLOY_PATH` и обновляется при пуше в ветку `main`.
 
 Пример структуры на сервере:
 
 ```
 /opt/samurai
-  ├─ repo/     # git clone
+  ├─ repo/     # git clone (DEPLOY_PATH=/opt/samurai/repo)
   ├─ releases/ # опционально
   └─ shared/   # .env, storage, logs
 ```
@@ -67,11 +68,42 @@ ssh-keygen -t ed25519 -C "github-actions"
 
 В репозитории уже есть шаблон `.github/workflows/deploy.yml`.
 
-1. Проверьте, что workflow использует нужную ветку (`main`) и корректный путь `APP_DIR`.
+1. Проверьте, что workflow использует нужную ветку (`main`) и корректный путь `DEPLOY_PATH`.
 2. При необходимости обновите команды деплоя (например, сборка контейнера, миграции БД, рестарт сервиса).
 3. Для ручного деплоя используйте `workflow_dispatch` и выберите окружение (`staging`/`production`).
 
-## 6) Подготовка .env на сервере
+## 6) Подготовка systemd-сервиса
+
+Создайте unit-файл сервиса (пример) `/etc/systemd/system/samurai-bot.service`:
+
+```
+[Unit]
+Description=SamurAI Telegram bot
+After=network.target
+
+[Service]
+Type=simple
+User=samurai
+WorkingDirectory=/opt/samurai/repo
+EnvironmentFile=/opt/samurai/shared/.env
+ExecStart=/usr/bin/env bash -lc "./scripts/run.sh"
+Restart=on-failure
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Замените `./scripts/run.sh` на реальную команду запуска вашего приложения (например, `php bot.php` или `docker compose up -d`).
+
+Затем активируйте сервис:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now samurai-bot
+```
+
+## 7) Подготовка .env на сервере
 
 Создайте файл `/opt/samurai/shared/.env` (для production) и `/opt/samurai-staging/shared/.env`
 (для staging) и добавьте туда переменные:
@@ -84,7 +116,7 @@ LLM_PROVIDER=openai
 APP_ENV=production
 ```
 
-## 7) Проверка деплоя
+## 8) Проверка деплоя
 
 После пуша в `main` проверьте вкладку **Actions** на GitHub и логи на сервере:
 
@@ -92,7 +124,7 @@ APP_ENV=production
 journalctl -u samurai-bot -f
 ```
 
-## 8) Рекомендации
+## 9) Рекомендации
 
 - Используйте отдельные секреты для staging/production.
 - Храните конфиги и ключи только в `shared/.env` или секретах.
