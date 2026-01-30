@@ -34,6 +34,9 @@ ssh-keygen -t ed25519 -C "github-actions"
 - `SSH_PRIVATE_KEY`
 - `SSH_HOST` (например: `203.0.113.10`)
 - `SSH_USER` (например: `samurai`)
+- `SSH_PORT` (например: `22`)
+- `DEPLOY_PATH` (например: `/opt/samurai/repo`)
+- `SERVICE_NAME` (например: `samurai-bot`)
 
 ## 3) Настройка переменных окружения
 
@@ -42,6 +45,10 @@ ssh-keygen -t ed25519 -C "github-actions"
 - `APP_DIR` (например: `/opt/samurai`)
 - `APP_ENV` (например: `production`)
 - при необходимости — ключи Telegram и LLM (лучше через secret manager)
+
+Рекомендация: заведите два независимых окружения GitHub Actions — `staging` и `production`.
+Тогда у каждого окружения будут свои секреты (`SSH_*`, `DEPLOY_PATH`, ключи LLM), что исключит
+перемешивание ключей и упростит релизы.
 
 ## 4) Структура деплоя
 
@@ -62,16 +69,19 @@ ssh-keygen -t ed25519 -C "github-actions"
 
 1. Проверьте, что workflow использует нужную ветку (`main`) и корректный путь `APP_DIR`.
 2. При необходимости обновите команды деплоя (например, сборка контейнера, миграции БД, рестарт сервиса).
+3. Для ручного деплоя используйте `workflow_dispatch` и выберите окружение (`staging`/`production`).
 
 ## 6) Подготовка .env на сервере
 
-Создайте файл `/opt/samurai/shared/.env` и добавьте туда переменные:
+Создайте файл `/opt/samurai/shared/.env` (для production) и `/opt/samurai-staging/shared/.env`
+(для staging) и добавьте туда переменные:
 
 ```
 TELEGRAM_BOT_TOKEN=...
 OPENAI_API_KEY=...
 GEMINI_API_KEY=...
 LLM_PROVIDER=openai
+APP_ENV=production
 ```
 
 ## 7) Проверка деплоя
