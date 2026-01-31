@@ -6,6 +6,7 @@
 
 ```
 .github/workflows # GitHub Actions (автодеплой)
+  deploy.yml       # workflow автодеплоя
 alembic/        # миграции Alembic
 app/
   api/            # HTTP API (FastAPI)
@@ -218,3 +219,8 @@ sudo systemctl restart numerolog.target
 
 Пошаговые инструкции по автодеплою через GitHub Actions находятся в
 [`AUTODEPLOY_INSTRUCTIONS.md`](AUTODEPLOY_INSTRUCTIONS.md).
+
+Ключевые секреты для workflow:
+- `SERVICE_NAME` — имя systemd-сервиса или target для перезапуска.
+- `SERVICE_NAMES` — опционально, список сервисов/target’ов через пробел (имеет приоритет).
+- `ENV_FILE`, `DEPLOY_PATH`, `SSH_HOST`, `SSH_USER`, `SSH_PORT`, `SSH_PRIVATE_KEY` — инфраструктурные параметры.

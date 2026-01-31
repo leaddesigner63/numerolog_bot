@@ -40,11 +40,13 @@ jobs:
           USER: ${{ secrets.SSH_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
+          SERVICE_NAMES: ${{ secrets.SERVICE_NAMES }}
           ENV_FILE: ${{ secrets.ENV_FILE }}
         run: |
           ssh -p "$PORT" "$USER@$HOST" \
             DEPLOY_PATH="$DEPLOY_PATH" \
             SERVICE_NAME="$SERVICE_NAME" \
+            SERVICE_NAMES="$SERVICE_NAMES" \
             ENV_FILE="$ENV_FILE" \
             "bash -se" <<'EOF'
           set -e
@@ -89,6 +91,13 @@ jobs:
             php scripts/migrate.php
           fi
 
-          systemctl restart "$SERVICE_NAME"
-          systemctl --no-pager --full status "$SERVICE_NAME" | head -n 40
+          SERVICES="${SERVICE_NAMES:-$SERVICE_NAME}"
+          if [ -z "$SERVICES" ]; then
+            echo "SERVICE_NAME or SERVICE_NAMES must be set."
+            exit 1
+          fi
+
+          systemctl daemon-reload
+          systemctl restart $SERVICES
+          systemctl --no-pager --full status $SERVICES | head -n 40
           EOF
