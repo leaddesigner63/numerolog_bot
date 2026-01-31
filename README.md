@@ -15,6 +15,8 @@ app/
   db/             # модели и подключение к БД
   payments/       # платёжные провайдеры и проверки webhook
 scripts/        # вспомогательные скрипты
+  deploy.sh     # серверный деплой-скрипт (используется GitHub Actions)
+  test.sh       # локальные проверки
 AUTODEPLOY_INSTRUCTIONS.md # инструкция по автодеплою
 TZ.md           # техническое задание (ТЗ)
 ```
@@ -224,3 +226,8 @@ sudo systemctl restart numerolog.target
 - `SERVICE_NAME` — имя systemd-сервиса или target для перезапуска.
 - `SERVICE_NAMES` — опционально, список сервисов/target’ов через пробел (имеет приоритет).
 - `ENV_FILE`, `DEPLOY_PATH`, `SSH_HOST`, `SSH_USER`, `SSH_PORT`, `SSH_PRIVATE_KEY` — инфраструктурные параметры.
+
+Workflow запускает `scripts/deploy.sh` на сервере. Проверьте, что unit-файлы
+созданы и имена сервисов совпадают с тем, что вы передали в `SERVICE_NAME`/`SERVICE_NAMES`.
+Если получаете ошибку вида `...service: command not found`, это признак отсутствующего unit-файла
+или неверного имени сервиса.
