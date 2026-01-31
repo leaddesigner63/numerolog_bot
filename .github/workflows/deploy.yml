@@ -2,12 +2,22 @@ name: Deploy to server
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
   workflow_dispatch:
+    inputs:
+      environment:
+        description: "Deployment environment"
+        required: true
+        default: "production"
+        type: choice
+        options:
+          - production
+          - staging
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'production' }}
 
     steps:
       - name: Checkout
@@ -16,20 +26,20 @@ jobs:
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
         with:
-          ssh-private-key: ${{ secrets.DEPLOY_SSH_KEY }}
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
       - name: Add server to known_hosts
         run: |
           mkdir -p ~/.ssh
-          ssh-keyscan -p "${{ secrets.DEPLOY_PORT }}" -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts
+          ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Deploy (git reset + optional script)
+      - name: Deploy (git reset + restart service)
         env:
-          HOST: ${{ secrets.DEPLOY_HOST }}
-          PORT: ${{ secrets.DEPLOY_PORT }}
-          USER: ${{ secrets.DEPLOY_USER }}
+          HOST: ${{ secrets.SSH_HOST }}
+          PORT: ${{ secrets.SSH_PORT }}
+          USER: ${{ secrets.SSH_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
-          DEPLOY_SERVICE: ${{ secrets.DEPLOY_SERVICE }}
+          SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
         run: |
           ssh -p "$PORT" "$USER@$HOST" "set -e;
             cd '$DEPLOY_PATH';
@@ -37,14 +47,15 @@ jobs:
             git reset --hard origin/main;
             git clean -fd;
 
-            if [ -f requirements.txt ] && [ -x .venv/bin/pip ]; then
-              .venv/bin/pip install -r requirements.txt;
+            # если есть venv/requirements.txt — обновим зависимости (необязательно)
+            if [ -f requirements.txt ] && [ -x venv/bin/pip ]; then
+              venv/bin/pip install -r requirements.txt;
             fi
 
-            if [ -x scripts/deploy.sh ]; then
-              scripts/deploy.sh;
-            elif [ -n '$DEPLOY_SERVICE' ]; then
-              systemctl restart '$DEPLOY_SERVICE';
-              systemctl --no-pager --full status '$DEPLOY_SERVICE' | head -n 40;
+            if [ -f scripts/migrate.php ]; then
+              php scripts/migrate.php;
             fi
+
+            systemctl restart '$SERVICE_NAME';
+            systemctl --no-pager --full status '$SERVICE_NAME' | head -n 40;
           "
