@@ -21,6 +21,11 @@ final class RepositoryProvider
         return new UserProfilesRepository($this->pdo);
     }
 
+    public function userStates(): UserStatesRepository
+    {
+        return new UserStatesRepository($this->pdo);
+    }
+
     public function purchases(): PurchasesRepository
     {
         return new PurchasesRepository($this->pdo);
