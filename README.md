@@ -63,7 +63,9 @@ uvicorn app.main:app --reload
 python -m app.bot.polling
 ```
 
-## Запуск через tmux (рекомендуется для сервера)
+## Локальная отладка
+
+### Запуск через tmux (не рекомендуется для продакшена)
 
 1. Установите tmux и создайте сессию:
 
@@ -97,6 +99,67 @@ tmux detach
 
 ```bash
 tmux attach -t numerolog_bot
+```
+
+> Для продакшена используйте `systemd`, чтобы гарантировать один экземпляр процесса и автозапуск при перезагрузке сервера.
+
+## Запуск через systemd
+
+`systemd` обеспечивает запуск **ровно одного экземпляра** сервиса (API и бота) и автоматический рестарт при сбоях.
+
+### Пример unit-файла для API (`/etc/systemd/system/numerolog-api.service`)
+
+```ini
+[Unit]
+Description=Numerolog Bot API (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=deployer
+WorkingDirectory=/var/www/numerolog_bot
+EnvironmentFile=/etc/numerolog_bot/.env
+ExecStart=/var/www/numerolog_bot/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Пример unit-файла для бота (`/etc/systemd/system/numerolog-bot.service`)
+
+```ini
+[Unit]
+Description=Numerolog Bot (Telegram, aiogram)
+After=network.target
+
+[Service]
+Type=simple
+User=deployer
+WorkingDirectory=/var/www/numerolog_bot
+EnvironmentFile=/etc/numerolog_bot/.env
+ExecStart=/var/www/numerolog_bot/.venv/bin/python -m app.bot.polling
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### Управление сервисами
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now numerolog-api.service
+sudo systemctl enable --now numerolog-bot.service
+```
+
+**Стандартный способ перезапуска после деплоя:**
+
+```bash
+sudo systemctl restart numerolog-api.service
+sudo systemctl restart numerolog-bot.service
 ```
 
 ## Использование
