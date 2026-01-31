@@ -42,47 +42,53 @@ jobs:
           SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
           ENV_FILE: ${{ secrets.ENV_FILE }}
         run: |
-          ssh -p "$PORT" "$USER@$HOST" "set -e;
-            cd '$DEPLOY_PATH';
-            git fetch --all;
-            git reset --hard origin/main;
-            # Не удаляем важные локальные файлы (например, .env и каталоги с данными)
-            git clean -fd \
-              -e .env \
-              -e .env.* \
-              -e venv \
-              -e .venv \
-              -e .python-version \
-              -e data \
-              -e storage \
-              -e uploads \
-              -e logs;
+          ssh -p "$PORT" "$USER@$HOST" \
+            DEPLOY_PATH="$DEPLOY_PATH" \
+            SERVICE_NAME="$SERVICE_NAME" \
+            ENV_FILE="$ENV_FILE" \
+            "bash -se" <<'EOF'
+          set -e
 
-            # если есть venv/requirements.txt — обновим зависимости (необязательно)
-            if [ -f requirements.txt ] && [ -x venv/bin/pip ]; then
-              venv/bin/pip install -r requirements.txt;
+          cd "$DEPLOY_PATH"
+          git fetch --all
+          git reset --hard origin/main
+          # Не удаляем важные локальные файлы (например, .env и каталоги с данными)
+          git clean -fd \
+            -e .env \
+            -e .env.* \
+            -e venv \
+            -e .venv \
+            -e .python-version \
+            -e data \
+            -e storage \
+            -e uploads \
+            -e logs
+
+          # если есть venv/requirements.txt — обновим зависимости (необязательно)
+          if [ -f requirements.txt ] && [ -x venv/bin/pip ]; then
+            venv/bin/pip install -r requirements.txt
+          fi
+
+          if [ -n "${ENV_FILE:-}" ] && [ -f "$ENV_FILE" ]; then
+            set -a
+            . "$ENV_FILE"
+            set +a
+          fi
+
+          if [ -f alembic.ini ]; then
+            ALEMBIC_CMD="alembic"
+            if [ -x venv/bin/alembic ]; then
+              ALEMBIC_CMD="venv/bin/alembic"
             fi
-
-            if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
-              set -a;
-              . "$ENV_FILE";
-              set +a;
+            if [ -x "$ALEMBIC_CMD" ]; then
+              "$ALEMBIC_CMD" upgrade head
             fi
+          fi
 
-            if [ -f alembic.ini ]; then
-              ALEMBIC_CMD="alembic";
-              if [ -x venv/bin/alembic ]; then
-                ALEMBIC_CMD="venv/bin/alembic";
-              fi
-              if [ -x "$ALEMBIC_CMD" ]; then
-                "$ALEMBIC_CMD" upgrade head;
-              fi
-            fi
+          if [ -f scripts/migrate.php ]; then
+            php scripts/migrate.php
+          fi
 
-            if [ -f scripts/migrate.php ]; then
-              php scripts/migrate.php;
-            fi
-
-            systemctl restart '$SERVICE_NAME';
-            systemctl --no-pager --full status '$SERVICE_NAME' | head -n 40;
-          "
+          systemctl restart "$SERVICE_NAME"
+          systemctl --no-pager --full status "$SERVICE_NAME" | head -n 40
+          EOF
