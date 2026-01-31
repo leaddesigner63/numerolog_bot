@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from app.bot.screen_manager import screen_manager
 from app.core.config import settings
+from app.core.report_service import report_service
 from app.db.models import FreeLimit, Order, OrderStatus, PaymentProvider as PaymentProviderEnum, Tariff, User
 from app.db.session import get_session
 from app.payments import get_payment_provider
@@ -202,12 +203,44 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
                 if user.free_limit:
                     user.free_limit.last_t0_at = datetime.utcnow()
         next_screen = "S5" if tariff in {Tariff.T2.value, Tariff.T3.value} else "S6"
-        await screen_manager.show_screen(
-            bot=callback.bot,
-            chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
-            screen_id=next_screen,
-        )
+        if next_screen == "S6":
+            await screen_manager.show_screen(
+                bot=callback.bot,
+                chat_id=callback.message.chat.id,
+                user_id=callback.from_user.id,
+                screen_id="S6",
+            )
+            report = await report_service.generate_report(
+                user_id=callback.from_user.id,
+                state=screen_manager.update_state(callback.from_user.id).data,
+            )
+            if report:
+                screen_manager.update_state(
+                    callback.from_user.id,
+                    report_text=report.text,
+                    report_provider=report.provider,
+                    report_model=report.model,
+                )
+                await screen_manager.show_screen(
+                    bot=callback.bot,
+                    chat_id=callback.message.chat.id,
+                    user_id=callback.from_user.id,
+                    screen_id="S7",
+                )
+            else:
+                await screen_manager.show_screen(
+                    bot=callback.bot,
+                    chat_id=callback.message.chat.id,
+                    user_id=callback.from_user.id,
+                    screen_id="S10",
+                )
+        else:
+            await screen_manager.show_screen(
+                bot=callback.bot,
+                chat_id=callback.message.chat.id,
+                user_id=callback.from_user.id,
+                screen_id=next_screen,
+            )
         await callback.answer()
         return
 
@@ -244,6 +277,30 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
             user_id=callback.from_user.id,
             screen_id="S6",
         )
+        report = await report_service.generate_report(
+            user_id=callback.from_user.id,
+            state=screen_manager.update_state(callback.from_user.id).data,
+        )
+        if report:
+            screen_manager.update_state(
+                callback.from_user.id,
+                report_text=report.text,
+                report_provider=report.provider,
+                report_model=report.model,
+            )
+            await screen_manager.show_screen(
+                bot=callback.bot,
+                chat_id=callback.message.chat.id,
+                user_id=callback.from_user.id,
+                screen_id="S7",
+            )
+        else:
+            await screen_manager.show_screen(
+                bot=callback.bot,
+                chat_id=callback.message.chat.id,
+                user_id=callback.from_user.id,
+                screen_id="S10",
+            )
         await callback.answer()
         return
 

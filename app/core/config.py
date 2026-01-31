@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     llm_primary: str = "gemini"
     llm_fallback: str = "openai"
     llm_timeout_seconds: int = 35
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-1.5-flash"
+    openai_api_key: str | None = None
+    openai_model: str = "gpt-4o-mini"
 
     payment_provider: str = "prodamus"
     prodamus_form_url: str | None = None
