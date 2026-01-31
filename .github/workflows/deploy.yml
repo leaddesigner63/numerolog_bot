@@ -40,6 +40,7 @@ jobs:
           USER: ${{ secrets.SSH_USER }}
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
           SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
+          ENV_FILE: ${{ secrets.ENV_FILE }}
         run: |
           ssh -p "$PORT" "$USER@$HOST" "set -e;
             cd '$DEPLOY_PATH';
@@ -60,6 +61,22 @@ jobs:
             # если есть venv/requirements.txt — обновим зависимости (необязательно)
             if [ -f requirements.txt ] && [ -x venv/bin/pip ]; then
               venv/bin/pip install -r requirements.txt;
+            fi
+
+            if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+              set -a;
+              . "$ENV_FILE";
+              set +a;
+            fi
+
+            if [ -f alembic.ini ]; then
+              ALEMBIC_CMD="alembic";
+              if [ -x venv/bin/alembic ]; then
+                ALEMBIC_CMD="venv/bin/alembic";
+              fi
+              if [ -x "$ALEMBIC_CMD" ]; then
+                "$ALEMBIC_CMD" upgrade head;
+              fi
             fi
 
             if [ -f scripts/migrate.php ]; then
