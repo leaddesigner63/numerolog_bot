@@ -13,12 +13,15 @@
 - `docs/technical_spec_v0_2.md` — полное ТЗ v0.2.
 - `docs/autodeploy.md` — пошаговые инструкции по автодеплою.
 - `docs/autodeploy_runbook.md` — краткая пошаговая памятка по автодеплою.
+- `docs/autodeploy_steps.md` — расширенный чек-лист автодеплоя.
 - `docs/llm_logging_policy.md` — формат логирования LLM-вызовов и политика хранения истории.
 - `config/` — конфигурация и загрузка переменных окружения (ключи не коммитятся).
 - `.github/workflows/ci.yml` — CI (проверка структуры проекта).
 - `.github/workflows/deploy.yml` — шаблон автодеплоя.
 - `scripts/test.sh` — локальный тест целостности.
 - `scripts/smoke_test.sh` — базовые smoke-тесты (запуск, БД, тестовое сообщение).
+- `scripts/migrate.php` — запуск миграций базы данных.
+- `storage/migrations/` — SQL-миграции схемы.
 
 Базовые директории приложения (заготовки): `bot/`, `domain/`, `storage/`, `llm/`, `pdf/`, `admin/`, `export/`.
 
@@ -30,6 +33,12 @@
 
 ```bash
 bash scripts/test.sh
+```
+
+4. Инициализируйте базу данных:
+
+```bash
+php scripts/migrate.php
 ```
 
 > Примечание: код приложения не реализован — это документационная и инфраструктурная база для дальнейшей разработки.

@@ -10,7 +10,7 @@
 sudo adduser samurai
 sudo usermod -aG sudo samurai
 sudo apt-get update
-sudo apt-get install -y git docker.io docker-compose-plugin
+sudo apt-get install -y git docker.io docker-compose-plugin php-cli
 ```
 
 2. Убедитесь, что Docker запущен:
@@ -72,6 +72,8 @@ ssh-keygen -t ed25519 -C "github-actions"
 2. При необходимости обновите команды деплоя (например, сборка контейнера, миграции БД, рестарт сервиса).
 3. Для ручного деплоя используйте `workflow_dispatch` и выберите окружение (`staging`/`production`).
 
+> В текущем шаблоне деплоя миграции запускаются автоматически через `php scripts/migrate.php`.
+
 ## 6) Подготовка systemd-сервиса
 
 Создайте unit-файл сервиса (пример) `/etc/systemd/system/samurai-bot.service`:
@@ -95,6 +97,7 @@ WantedBy=multi-user.target
 ```
 
 Замените `./scripts/run.sh` на реальную команду запуска вашего приложения (например, `php bot.php` или `docker compose up -d`).
+Если используется SQLite, убедитесь, что путь из `DB_DSN` доступен пользователю сервиса (например, `/opt/samurai/shared/numerolog.sqlite`).
 
 Затем активируйте сервис:
 
@@ -115,6 +118,7 @@ GEMINI_API_KEY=...
 LLM_PROVIDER=openai
 APP_ENV=production
 ERROR_LOG_PATH=/opt/samurai/shared/logs/app.log
+DB_DSN=sqlite:/opt/samurai/shared/numerolog.sqlite
 ```
 
 ## 8) Проверка деплоя

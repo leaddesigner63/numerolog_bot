@@ -25,6 +25,12 @@
 - `ERROR_LOG_PATH` — путь до файла ошибок (по умолчанию `storage/logs/app.log`).
 - `APP_DISPLAY_ERRORS` — показывать ли ошибки в stdout (обычно `false`).
 
+## База данных
+
+- `DB_DSN` — DSN подключения (по умолчанию `sqlite:storage/numerolog.sqlite`).
+- `DB_USER` — пользователь БД (для SQLite можно оставить пустым).
+- `DB_PASSWORD` — пароль БД (для SQLite можно оставить пустым).
+
 ## Пример (без секретов)
 
 ```env
@@ -39,4 +45,7 @@ LLM_TIMEOUT_SECONDS=60
 LLM_FALLBACK_ENABLED=false
 ERROR_LOG_PATH=/opt/samurai/shared/logs/app.log
 APP_DISPLAY_ERRORS=false
+DB_DSN=sqlite:/opt/samurai/shared/numerolog.sqlite
+DB_USER=
+DB_PASSWORD=
 ```

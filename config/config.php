@@ -68,4 +68,10 @@ return [
         'error_log_path' => env_value('ERROR_LOG_PATH', dirname(__DIR__) . '/storage/logs/app.log'),
         'display_errors' => env_bool('APP_DISPLAY_ERRORS', false),
     ],
+    'db' => [
+        'dsn' => env_value('DB_DSN', 'sqlite:' . dirname(__DIR__) . '/storage/numerolog.sqlite'),
+        'user' => env_value('DB_USER', ''),
+        'password' => env_value('DB_PASSWORD', ''),
+        'options' => [],
+    ],
 ];

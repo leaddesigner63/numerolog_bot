@@ -52,6 +52,10 @@ jobs:
               venv/bin/pip install -r requirements.txt;
             fi
 
+            if [ -f scripts/migrate.php ]; then
+              php scripts/migrate.php;
+            fi
+
             systemctl restart '$SERVICE_NAME';
             systemctl --no-pager --full status '$SERVICE_NAME' | head -n 40;
           "
