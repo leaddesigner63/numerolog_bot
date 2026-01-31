@@ -6,7 +6,7 @@
 1. Создайте пользователя для деплоя (без root), например `deployer`.
 2. Создайте директорию для проекта, например `/var/www/numerolog_bot`.
 3. Убедитесь, что на сервере установлены `git`, `python` и `bash`.
-4. (Опционально) создайте systemd-сервис для бота/API.
+4. Создайте systemd-сервисы для API и бота (см. ниже пример unit-файлов).
 5. Разместите секреты **вне репозитория** (например, `/etc/numerolog_bot/.env`) и подключите их через systemd (`EnvironmentFile=`) или экспортом переменных окружения.
 6. Проверьте, что `PAYMENT_WEBHOOK_URL` указывает на внешний HTTPS-адрес вашего backend (например, `https://api.example.com/webhooks/payments`).
 
@@ -50,3 +50,74 @@ Workflow уже делает `git reset`, (опционально) обновл�
 
 ## 7. Проверка
 После пуша в `main` убедитесь, что репозиторий развернулся в директории `DEPLOY_PATH` и, при необходимости, перезапустились сервисы.
+
+## 8. Systemd: unit-файлы для API и бота
+Создайте два unit-файла (пример ниже) и не запускайте процессы вручную в продакшене — **избегайте tmux/ручных запусков**, используйте systemd.
+
+### 8.1. API (`/etc/systemd/system/numerolog-api.service`)
+```ini
+[Unit]
+Description=Numerolog Bot API (FastAPI)
+After=network.target
+
+[Service]
+Type=simple
+User=deployer
+WorkingDirectory=/var/www/numerolog_bot
+EnvironmentFile=/etc/numerolog_bot/.env
+ExecStart=/var/www/numerolog_bot/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 8.2. Бот (`/etc/systemd/system/numerolog-bot.service`)
+```ini
+[Unit]
+Description=Numerolog Bot (Telegram, aiogram)
+After=network.target
+
+[Service]
+Type=simple
+User=deployer
+WorkingDirectory=/var/www/numerolog_bot
+EnvironmentFile=/etc/numerolog_bot/.env
+ExecStart=/var/www/numerolog_bot/.venv/bin/python -m app.bot.polling
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 8.3. Общий target, объединяющий оба сервиса
+Создайте target-файл и включайте/перезапускайте его одной командой.
+
+`/etc/systemd/system/numerolog.target`:
+```ini
+[Unit]
+Description=Numerolog Bot (API + Bot)
+Requires=numerolog-api.service numerolog-bot.service
+After=network.target
+```
+
+Команды:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now numerolog-api.service numerolog-bot.service
+sudo systemctl enable --now numerolog.target
+```
+
+### 8.4. Перезапуск и гарантия одиночных процессов
+Используйте `systemctl restart` — он **гарантирует одиночные процессы** и предотвращает размножение инстансов:
+```bash
+sudo systemctl restart numerolog-api.service
+sudo systemctl restart numerolog-bot.service
+```
+
+Если используете target:
+```bash
+sudo systemctl restart numerolog.target
+```

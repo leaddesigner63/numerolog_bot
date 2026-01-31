@@ -65,7 +65,7 @@ python -m app.bot.polling
 
 ## Локальная отладка
 
-### Запуск через tmux (не рекомендуется для продакшена)
+### Запуск через tmux (только для локальной отладки, **не для продакшена**)
 
 1. Установите tmux и создайте сессию:
 
@@ -101,7 +101,7 @@ tmux detach
 tmux attach -t numerolog_bot
 ```
 
-> Для продакшена используйте `systemd`, чтобы гарантировать один экземпляр процесса и автозапуск при перезагрузке сервера.
+> Для продакшена используйте **только** `systemd`, чтобы гарантировать один экземпляр процесса и автозапуск при перезагрузке сервера. Ручные запуски и `tmux` в продакшене не используйте.
 
 ## Запуск через systemd
 
@@ -155,11 +155,31 @@ sudo systemctl enable --now numerolog-api.service
 sudo systemctl enable --now numerolog-bot.service
 ```
 
-**Стандартный способ перезапуска после деплоя:**
+**Стандартный способ перезапуска после деплоя (гарантирует одиночные процессы и предотвращает размножение инстансов):**
 
 ```bash
 sudo systemctl restart numerolog-api.service
 sudo systemctl restart numerolog-bot.service
+```
+
+### Пример target для общего управления
+
+Если хотите управлять API и ботом одной командой, создайте target:
+
+```ini
+# /etc/systemd/system/numerolog.target
+[Unit]
+Description=Numerolog Bot (API + Bot)
+Requires=numerolog-api.service numerolog-bot.service
+After=network.target
+```
+
+Команды:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now numerolog.target
+sudo systemctl restart numerolog.target
 ```
 
 ## Использование
