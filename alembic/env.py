@@ -6,6 +6,7 @@ from logging.config import fileConfig
 from pathlib import Path
 
 from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy import engine_from_config, pool
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -19,12 +20,20 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
+load_dotenv(PROJECT_ROOT / ".env")
+
 
 def get_database_url() -> str:
     database_url = os.getenv("DATABASE_URL")
     if database_url:
         return database_url
-    raise RuntimeError("DATABASE_URL is not set for Alembic")
+    fallback_url = config.get_main_option("sqlalchemy.url")
+    if fallback_url and fallback_url != "driver://user:pass@localhost/dbname":
+        return fallback_url
+    raise RuntimeError(
+        "DATABASE_URL is not set for Alembic. "
+        "Set DATABASE_URL in the environment/.env or configure sqlalchemy.url in alembic.ini."
+    )
 
 
 config.set_main_option("sqlalchemy.url", get_database_url())
