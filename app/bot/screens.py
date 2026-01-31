@@ -184,19 +184,23 @@ def screen_s6(_: dict[str, Any]) -> ScreenContent:
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
-def screen_s7(_: dict[str, Any]) -> ScreenContent:
-    text = (
-        "Ваш отчёт готов.\n\n"
-        "• Резюме\n"
-        "• Сильные стороны\n"
-        "• Зоны потенциального роста\n"
-        "• Ориентиры по сферам\n\n"
-        "Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
-        "Все выводы носят аналитический и описательный характер.\n"
-        "Ответственность за решения остаётся за пользователем.\n"
-        "Сервис не гарантирует финансовых или иных результатов.\n"
-        "Возвратов нет."
-    )
+def screen_s7(state: dict[str, Any]) -> ScreenContent:
+    report_text = state.get("report_text")
+    if report_text:
+        text = report_text
+    else:
+        text = (
+            "Ваш отчёт готов.\n\n"
+            "• Резюме\n"
+            "• Сильные стороны\n"
+            "• Зоны потенциального роста\n"
+            "• Ориентиры по сферам\n\n"
+            "Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
+            "Все выводы носят аналитический и описательный характер.\n"
+            "Ответственность за решения остаётся за пользователем.\n"
+            "Сервис не гарантирует финансовых или иных результатов.\n"
+            "Возвратов нет."
+        )
     rows = [
         [
             InlineKeyboardButton(text="Выгрузить PDF", callback_data="report:pdf"),
@@ -248,6 +252,16 @@ def screen_s9(state: dict[str, Any]) -> ScreenContent:
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
+def screen_s10(_: dict[str, Any]) -> ScreenContent:
+    text = "Сервис временно недоступен. Попробуйте позже."
+    rows = [
+        [InlineKeyboardButton(text="Тарифы", callback_data="screen:S1")],
+        *(_global_menu()),
+    ]
+    keyboard = _build_keyboard(rows)
+    return ScreenContent(messages=[text], keyboard=keyboard)
+
+
 SCREEN_REGISTRY = {
     "S0": screen_s0,
     "S1": screen_s1,
@@ -259,4 +273,5 @@ SCREEN_REGISTRY = {
     "S7": screen_s7,
     "S8": screen_s8,
     "S9": screen_s9,
+    "S10": screen_s10,
 }

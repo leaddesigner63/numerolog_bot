@@ -12,6 +12,8 @@ app/
   api/            # HTTP API (FastAPI)
   bot/            # Telegram-бот (aiogram)
   core/           # конфигурация и общие утилиты
+    llm_router.py # LLM-маршрутизатор (Gemini -> ChatGPT)
+    report_service.py # сервис генерации отчёта
   db/             # модели и подключение к БД
   payments/       # платёжные провайдеры и проверки webhook
 scripts/        # вспомогательные скрипты
@@ -192,6 +194,8 @@ sudo systemctl restart numerolog.target
 - Для платных тарифов создаётся заказ в БД, оплата подтверждается перед генерацией отчёта.
 - Для тарифа Т0 действует лимит 1 раз в месяц (настраивается через `FREE_T0_COOLDOWN_HOURS`).
 - Webhook оплаты принимает запросы на `/webhooks/payments` и проверяет подпись провайдера.
+- Генерация отчётов использует LLM-маршрутизатор: Gemini (основной) с ограниченными ретраями, fallback на ChatGPT API.
+- Если недоступны оба провайдера, бот показывает экран “Сервис временно недоступен”.
 
 ## Логика тарифов и оплат
 
@@ -211,6 +215,8 @@ sudo systemctl restart numerolog.target
 
 - `FEEDBACK_GROUP_CHAT_ID`, `FEEDBACK_GROUP_URL`, `FEEDBACK_MODE`
 - `LLM_PRIMARY`, `LLM_FALLBACK`, `LLM_TIMEOUT_SECONDS`
+- `GEMINI_API_KEY`, `GEMINI_MODEL`
+- `OPENAI_API_KEY`, `OPENAI_MODEL`
 - `PAYMENT_PROVIDER`, `PRODAMUS_FORM_URL`, `PRODAMUS_SECRET`, `PRODAMUS_WEBHOOK_SECRET`,
   `CLOUDPAYMENTS_PUBLIC_ID`, `CLOUDPAYMENTS_API_SECRET`, `PAYMENT_WEBHOOK_URL`
 - `FREE_T0_COOLDOWN_HOURS`
