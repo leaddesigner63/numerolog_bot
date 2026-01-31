@@ -1,4 +1,85 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Автодеплой: шаги приложения не настроены. Добавьте команды в scripts/deploy.sh."
+DEPLOY_PATH="${DEPLOY_PATH:-}"
+GIT_REF="${GIT_REF:-origin/main}"
+ENV_FILE="${ENV_FILE:-}"
+SERVICE_NAME="${SERVICE_NAME:-}"
+SERVICE_NAMES="${SERVICE_NAMES:-}"
+
+if [ -z "$DEPLOY_PATH" ]; then
+  echo "DEPLOY_PATH не задан. Укажите путь к директории проекта на сервере."
+  exit 1
+fi
+
+if [ ! -d "$DEPLOY_PATH" ]; then
+  echo "DEPLOY_PATH не существует: $DEPLOY_PATH"
+  exit 1
+fi
+
+cd "$DEPLOY_PATH"
+
+git fetch --all --prune
+git reset --hard "$GIT_REF"
+# Не удаляем важные локальные файлы (например, .env и каталоги с данными)
+git clean -fd \
+  -e .env \
+  -e .env.* \
+  -e venv \
+  -e .venv \
+  -e .python-version \
+  -e data \
+  -e storage \
+  -e uploads \
+  -e logs
+
+if [ -f requirements.txt ]; then
+  if [ -x .venv/bin/pip ]; then
+    .venv/bin/pip install -r requirements.txt
+  elif [ -x venv/bin/pip ]; then
+    venv/bin/pip install -r requirements.txt
+  fi
+fi
+
+if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
+  set -a
+  . "$ENV_FILE"
+  set +a
+fi
+
+if [ -f alembic.ini ]; then
+  ALEMBIC_CMD="alembic"
+  if [ -x .venv/bin/alembic ]; then
+    ALEMBIC_CMD=".venv/bin/alembic"
+  elif [ -x venv/bin/alembic ]; then
+    ALEMBIC_CMD="venv/bin/alembic"
+  fi
+  if [ -x "$ALEMBIC_CMD" ]; then
+    "$ALEMBIC_CMD" upgrade head
+  fi
+fi
+
+if [ -f scripts/migrate.php ]; then
+  php scripts/migrate.php
+fi
+
+SERVICES="${SERVICE_NAMES:-$SERVICE_NAME}"
+if [ -z "$SERVICES" ]; then
+  echo "SERVICE_NAME или SERVICE_NAMES должны быть заданы."
+  exit 1
+fi
+
+SYSTEMCTL="systemctl"
+if [ "${EUID:-$(id -u)}" -ne 0 ] && command -v sudo >/dev/null 2>&1; then
+  SYSTEMCTL="sudo systemctl"
+fi
+
+read -r -a services <<< "$SERVICES"
+if [ "${#services[@]}" -eq 0 ]; then
+  echo "Не удалось разобрать список сервисов: $SERVICES"
+  exit 1
+fi
+
+$SYSTEMCTL daemon-reload
+$SYSTEMCTL restart -- "${services[@]}"
+$SYSTEMCTL --no-pager --full status -- "${services[@]}" | head -n 80
