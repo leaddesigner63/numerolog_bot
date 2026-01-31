@@ -90,4 +90,10 @@ curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
 sudo systemctl status samurai-bot
 ```
 
+4. Убедитесь, что миграции применились (таблицы `messages` и `llm_call_logs` созданы):
+
+```bash
+php scripts/migrate.php
+```
+
 Если всё прошло успешно, бот будет автоматически обновляться при каждом пуше в `main`.

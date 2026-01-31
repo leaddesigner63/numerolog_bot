@@ -147,6 +147,10 @@ final class BotService
                 'last_seen_at' => $this->now(),
             ]);
 
+            $this->logSystemEvent($user['id'], 'tariff_selected', [
+                'tariff_id' => $tariffId,
+            ]);
+
             $this->repositories->userStates()->upsert([
                 'user_id' => $user['id'],
                 'state' => self::STATE_BIRTH_DATE,
@@ -220,6 +224,7 @@ final class BotService
             }
 
             $formData['birth_date'] = $text;
+            $this->logSystemEvent($user['id'], 'form_step_birth_date');
             $this->updateState($user['id'], self::STATE_BIRTH_TIME, $formData, $state['tariff_id']);
             $this->sendMessage($chatId, $user['id'], 'Введите время рождения (ЧЧ:ММ) или напишите «не знаю».');
             return;
@@ -236,6 +241,7 @@ final class BotService
                 $formData['birth_time'] = $text;
             }
 
+            $this->logSystemEvent($user['id'], 'form_step_birth_time');
             $this->updateState($user['id'], self::STATE_BIRTH_NAME, $formData, $state['tariff_id']);
             $this->sendMessage($chatId, $user['id'], 'Введите ФИО при рождении.');
             return;
@@ -248,6 +254,7 @@ final class BotService
             }
 
             $formData['birth_name'] = $text;
+            $this->logSystemEvent($user['id'], 'form_step_birth_name');
             $this->updateState($user['id'], self::STATE_BIRTH_PLACE, $formData, $state['tariff_id']);
             $this->sendMessage($chatId, $user['id'], 'Введите место рождения (город/страна).');
             return;
@@ -260,6 +267,7 @@ final class BotService
             }
 
             $formData['birth_place'] = $text;
+            $this->logSystemEvent($user['id'], 'form_step_birth_place');
             $this->finalizeProfile($user, $chatId, $state, $formData);
         }
     }
@@ -321,6 +329,9 @@ final class BotService
         ]);
 
         $this->sendReport($chatId, $user['id'], $result->getText());
+        $this->logSystemEvent($user['id'], 'report_sent', [
+            'report_id' => $reportId,
+        ]);
 
         $this->repositories->reportSessions()->insert([
             'report_id' => $reportId,
@@ -454,6 +465,18 @@ final class BotService
         ]);
     }
 
+    /** @param array<string, mixed>|null $payload */
+    private function logSystemEvent(int $userId, string $event, ?array $payload = null): void
+    {
+        $this->logMessage(
+            $userId,
+            'out',
+            'system_event',
+            $event,
+            $payload === null ? null : json_encode($payload, JSON_UNESCAPED_UNICODE)
+        );
+    }
+
     /** @return array<string, mixed> */
     private function decodeFormData(?string $json): array
     {
@@ -556,6 +579,10 @@ final class BotService
             $question,
             json_encode(['session_id' => $session['id'], 'report_id' => $report['id']], JSON_UNESCAPED_UNICODE)
         );
+        $this->logSystemEvent($user['id'], 'followup_question', [
+            'session_id' => $session['id'],
+            'report_id' => $report['id'],
+        ]);
 
         $result = $this->reportGenerator->answerFollowup(
             (int) $user['id'],
@@ -569,6 +596,10 @@ final class BotService
         );
 
         $this->sendFollowupMessage($chatId, $user['id'], $result->getText(), (int) $session['id'], (int) $report['id']);
+        $this->logSystemEvent($user['id'], 'followup_answer', [
+            'session_id' => $session['id'],
+            'report_id' => $report['id'],
+        ]);
 
         $newCount = (int) $session['followup_count'] + 1;
         $update = ['followup_count' => $newCount];
@@ -804,6 +835,10 @@ final class BotService
             'status' => 'running',
             'created_at' => $this->now(),
         ]);
+        $this->logSystemEvent($user['id'], 'broadcast_started', [
+            'broadcast_id' => $broadcastId,
+            'segment' => $segment,
+        ]);
 
         $targets = $this->repositories->users()->findBySegment($segment);
         $sent = 0;
@@ -858,6 +893,12 @@ final class BotService
         $current = $this->repositories->broadcasts()->findById($broadcastId);
         $status = ($current['status'] ?? '') === 'stopped' ? 'stopped' : 'completed';
         $this->repositories->broadcasts()->update($broadcastId, ['status' => $status]);
+        $this->logSystemEvent($user['id'], $status === 'stopped' ? 'broadcast_stopped' : 'broadcast_completed', [
+            'broadcast_id' => $broadcastId,
+            'segment' => $segment,
+            'sent' => $sent,
+            'failed' => $failed,
+        ]);
 
         $this->sendMessage(
             $chatId,
@@ -877,6 +918,9 @@ final class BotService
         }
 
         $this->repositories->broadcasts()->update((int) $broadcast['id'], ['status' => 'stopped']);
+        $this->logSystemEvent($user['id'], 'broadcast_stopped', [
+            'broadcast_id' => $broadcast['id'],
+        ]);
         $this->sendMessage($chatId, (int) $user['id'], 'Рассылка остановлена.');
         return true;
     }
