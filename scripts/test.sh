@@ -7,12 +7,15 @@ required_files=(
   "docs/autodeploy.md"
   "docs/autodeploy_runbook.md"
   "docs/llm_logging_policy.md"
+  "docs/autodeploy_steps.md"
   "config/config.php"
   "config/bootstrap.php"
   "config/README.md"
   ".github/workflows/ci.yml"
   ".github/workflows/deploy.yml"
   "scripts/smoke_test.sh"
+  "scripts/migrate.php"
+  "storage/migrations/001_init.sql"
 )
 
 required_dirs=(

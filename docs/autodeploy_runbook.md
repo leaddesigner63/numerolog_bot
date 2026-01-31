@@ -9,7 +9,7 @@
 sudo adduser samurai
 sudo usermod -aG sudo samurai
 sudo apt-get update
-sudo apt-get install -y git docker.io docker-compose-plugin
+sudo apt-get install -y git docker.io docker-compose-plugin php-cli
 sudo systemctl enable --now docker
 ```
 
@@ -58,6 +58,7 @@ OPENAI_API_KEY=...
 GEMINI_API_KEY=...
 LLM_PROVIDER=openai
 APP_ENV=production
+DB_DSN=sqlite:/opt/samurai/shared/numerolog.sqlite
 ENV
 ```
 
