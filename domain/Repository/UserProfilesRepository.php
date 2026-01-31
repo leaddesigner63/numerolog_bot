@@ -21,6 +21,18 @@ final class UserProfilesRepository extends AbstractRepository
         return $this->findAllBy('user_id', $userId);
     }
 
+    /** @return array<string, mixed>|null */
+    public function findCurrentByUserId(int $userId): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            sprintf('SELECT * FROM %s WHERE user_id = :user_id AND is_current = 1 ORDER BY id DESC LIMIT 1', $this->table)
+        );
+        $stmt->execute(['user_id' => $userId]);
+        $result = $stmt->fetch();
+
+        return $result === false ? null : $result;
+    }
+
     public function markNotCurrentByUserId(int $userId): void
     {
         $stmt = $this->pdo->prepare(

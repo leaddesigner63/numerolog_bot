@@ -74,4 +74,10 @@ return [
         'password' => env_value('DB_PASSWORD', ''),
         'options' => [],
     ],
+    'pdf' => [
+        'storage_dir' => env_value('PDF_STORAGE_DIR', dirname(__DIR__) . '/storage/pdfs'),
+        'font_regular' => env_value('PDF_FONT_REGULAR', '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'),
+        'font_bold' => env_value('PDF_FONT_BOLD', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
+        'app_name' => env_value('PDF_APP_NAME', 'SamurAI'),
+    ],
 ];

@@ -8,7 +8,7 @@
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y git php php-cli php-curl
+sudo apt-get install -y git php php-cli php-curl php-gd fonts-dejavu-core
 ```
 
 2. Создайте директорию деплоя и клонируйте репозиторий:
@@ -26,6 +26,7 @@ git clone <URL_РЕПОЗИТОРИЯ> .
 - `TELEGRAM_BOT_TOKEN`
 - `DB_DSN` (например, `sqlite:/opt/samurai/storage/numerolog.sqlite`)
 - `LLM_PROVIDER` и ключи LLM (если требуется)
+- `PDF_FONT_REGULAR` и `PDF_FONT_BOLD` (если шрифты лежат не в стандартном пути)
 
 ## 2. Настройте systemd сервис
 
