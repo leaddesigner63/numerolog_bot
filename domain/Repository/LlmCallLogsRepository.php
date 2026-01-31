@@ -27,4 +27,10 @@ final class LlmCallLogsRepository extends AbstractRepository
     {
         return $this->findAllBy('report_id', $reportId);
     }
+
+    /** @return array<int, array<string, mixed>> */
+    public function findByUserId(int $userId): array
+    {
+        return $this->findAllBy('user_id', $userId);
+    }
 }

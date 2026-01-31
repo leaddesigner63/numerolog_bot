@@ -11,13 +11,19 @@ require_once __DIR__ . '/../domain/Repository/AbstractRepository.php';
 require_once __DIR__ . '/../domain/Repository/UsersRepository.php';
 require_once __DIR__ . '/../domain/Repository/UserProfilesRepository.php';
 require_once __DIR__ . '/../domain/Repository/UserStatesRepository.php';
+require_once __DIR__ . '/../domain/Repository/PurchasesRepository.php';
 require_once __DIR__ . '/../domain/Repository/ReportsRepository.php';
 require_once __DIR__ . '/../domain/Repository/ReportSessionsRepository.php';
 require_once __DIR__ . '/../domain/Repository/MessagesRepository.php';
+require_once __DIR__ . '/../domain/Repository/AdminsRepository.php';
+require_once __DIR__ . '/../domain/Repository/BroadcastsRepository.php';
+require_once __DIR__ . '/../domain/Repository/BroadcastLogsRepository.php';
 require_once __DIR__ . '/../domain/Repository/TariffPoliciesRepository.php';
 require_once __DIR__ . '/../domain/Repository/LlmCallLogsRepository.php';
 require_once __DIR__ . '/../domain/Repository/RepositoryProvider.php';
 
+require_once __DIR__ . '/../admin/StatsService.php';
+require_once __DIR__ . '/../export/ExportService.php';
 require_once __DIR__ . '/../bot/TelegramClient.php';
 require_once __DIR__ . '/../llm/LLMProvider.php';
 require_once __DIR__ . '/../llm/LlmResult.php';
@@ -51,6 +57,13 @@ if (!is_array($update)) {
 
 $pdo = Database::connect($config['db'] ?? []);
 $repositories = new RepositoryProvider($pdo);
+$statsService = new StatsService($pdo, new DateTimeZone('Etc/GMT-3'));
+$exportConfig = $config['export'] ?? [];
+$exportService = new ExportService(
+    $pdo,
+    $repositories,
+    (string) ($exportConfig['storage_dir'] ?? (dirname(__DIR__) . '/storage/exports'))
+);
 $telegram = new TelegramClient($token);
 $reportGenerator = new ReportGenerator($config, $repositories->llmCallLogs());
 $pdfConfig = $config['pdf'] ?? [];
@@ -60,7 +73,8 @@ $pdfGenerator = new PdfReportGenerator(
     (string) ($pdfConfig['font_bold'] ?? '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
     (string) ($pdfConfig['app_name'] ?? 'SamurAI')
 );
-$botService = new BotService($repositories, $telegram, $reportGenerator, $pdfGenerator);
+$broadcastConfig = $config['broadcast'] ?? [];
+$botService = new BotService($repositories, $telegram, $reportGenerator, $pdfGenerator, $statsService, $exportService, $broadcastConfig);
 $botService->handleUpdate($update);
 
 echo 'OK';

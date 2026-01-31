@@ -18,4 +18,16 @@ final class BroadcastsRepository extends AbstractRepository
     {
         return $this->findAllBy('created_by_tg_id', $tgId);
     }
+
+    /** @return array<string, mixed>|null */
+    public function findLatestByStatus(string $status): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            sprintf('SELECT * FROM %s WHERE status = :status ORDER BY id DESC LIMIT 1', $this->table)
+        );
+        $stmt->execute(['status' => $status]);
+        $result = $stmt->fetch();
+
+        return $result === false ? null : $result;
+    }
 }

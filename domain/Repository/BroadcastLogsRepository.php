@@ -18,4 +18,10 @@ final class BroadcastLogsRepository extends AbstractRepository
     {
         return $this->findAllBy('broadcast_id', $broadcastId);
     }
+
+    /** @return array<int, array<string, mixed>> */
+    public function findByUserId(int $userId): array
+    {
+        return $this->findAllBy('user_id', $userId);
+    }
 }

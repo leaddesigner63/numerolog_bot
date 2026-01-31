@@ -18,6 +18,18 @@ final class AdminsRepository extends AbstractRepository
         return $this->findOneBy('tg_id', $tgId);
     }
 
+    /** @return array<string, mixed>|null */
+    public function findByUsername(string $username): ?array
+    {
+        return $this->findOneBy('username', $username);
+    }
+
+    public function deleteByTgId(string $tgId): void
+    {
+        $stmt = $this->pdo->prepare(sprintf('DELETE FROM %s WHERE tg_id = :tg_id', $this->table));
+        $stmt->execute(['tg_id' => $tgId]);
+    }
+
     /** @param array<string, mixed> $data */
     public function upsertByTgId(array $data): void
     {

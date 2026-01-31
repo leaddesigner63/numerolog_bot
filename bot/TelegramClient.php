@@ -14,7 +14,7 @@ final class TelegramClient
     }
 
     /** @param array<string, mixed>|null $replyMarkup */
-    public function sendMessage(string $chatId, string $text, ?array $replyMarkup = null): void
+    public function sendMessage(string $chatId, string $text, ?array $replyMarkup = null): bool
     {
         $payload = [
             'chat_id' => $chatId,
@@ -26,23 +26,27 @@ final class TelegramClient
             $payload['reply_markup'] = json_encode($replyMarkup, JSON_UNESCAPED_UNICODE);
         }
 
-        $this->call('sendMessage', $payload);
+        $result = $this->call('sendMessage', $payload);
+
+        return $result['ok'] ?? false;
     }
 
-    public function answerCallbackQuery(string $callbackQueryId, string $text = ''): void
+    public function answerCallbackQuery(string $callbackQueryId, string $text = ''): bool
     {
         $payload = ['callback_query_id' => $callbackQueryId];
         if ($text !== '') {
             $payload['text'] = $text;
         }
 
-        $this->call('answerCallbackQuery', $payload);
+        $result = $this->call('answerCallbackQuery', $payload);
+
+        return $result['ok'] ?? false;
     }
 
-    public function sendDocument(string $chatId, string $filePath, string $filename, string $caption = ''): void
+    public function sendDocument(string $chatId, string $filePath, string $filename, string $caption = ''): bool
     {
         if (!is_file($filePath)) {
-            return;
+            return false;
         }
 
         $payload = [
@@ -54,15 +58,17 @@ final class TelegramClient
             $payload['caption'] = $caption;
         }
 
-        $this->call('sendDocument', $payload);
+        $result = $this->call('sendDocument', $payload);
+
+        return $result['ok'] ?? false;
     }
 
     /** @param array<string, mixed> $payload */
-    private function call(string $method, array $payload): void
+    private function call(string $method, array $payload): array
     {
         $ch = curl_init($this->apiBase . $method);
         if ($ch === false) {
-            return;
+            return ['ok' => false, 'description' => 'curl_init_failed'];
         }
 
         curl_setopt_array($ch, [
@@ -76,9 +82,16 @@ final class TelegramClient
         $response = curl_exec($ch);
         if ($response === false) {
             curl_close($ch);
-            return;
+            return ['ok' => false, 'description' => 'curl_exec_failed'];
         }
 
         curl_close($ch);
+
+        $decoded = json_decode($response, true);
+        if (!is_array($decoded)) {
+            return ['ok' => false, 'description' => 'invalid_response'];
+        }
+
+        return $decoded;
     }
 }
