@@ -1,13 +1,18 @@
 from __future__ import annotations
 
 import os
+import sys
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.db.base import Base
-from app.db import models  # noqa: F401
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(PROJECT_ROOT))
+
+from app.db.base import Base  # noqa: E402
+from app.db import models  # noqa: F401,E402
 
 config = context.config
 
