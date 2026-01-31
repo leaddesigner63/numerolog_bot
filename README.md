@@ -2,14 +2,23 @@
 
 Каркас проекта для Telegram-бота “ИИ-аналитик личных данных”. Стек: **Python + FastAPI + aiogram**.
 
-## Структура каталогов
+## Структура проекта
 
 ```
+alembic/        # миграции Alembic
 app/
   api/            # HTTP API (FastAPI)
   bot/            # Telegram-бот (aiogram)
   core/           # конфигурация и общие утилиты
+  db/             # модели и подключение к БД
+scripts/        # вспомогательные скрипты
+TZ.md           # техническое задание (ТЗ)
 ```
+
+## Предварительные требования
+
+- Python 3.12+
+- PostgreSQL (для работы с базой данных)
 
 ## Локальный запуск
 
@@ -27,17 +36,35 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-3. Запустите API:
+3. Настройте подключение к БД в `.env`:
+
+```
+DATABASE_URL=postgresql://user:password@localhost:5432/numerolog_bot
+```
+
+4. Выполните миграции:
+
+```bash
+alembic upgrade head
+```
+
+5. Запустите API:
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-4. Запустите бота в режиме polling:
+6. Запустите бота в режиме polling:
 
 ```bash
 python -m app.bot.polling
 ```
+
+## Использование
+
+- Откройте чат с ботом в Telegram и нажмите **Start**.
+- Управляйте сценариями через inline-клавиатуру: тарифы, оферта, обратная связь.
+- Для платных тарифов оплата подтверждается перед генерацией отчёта.
 
 ## Переменные окружения
 
@@ -55,3 +82,8 @@ python -m app.bot.polling
 - `FREE_T0_COOLDOWN_HOURS`
 - `DATABASE_URL`, `PDF_STORAGE_BUCKET`, `PDF_STORAGE_KEY`
 - `ENV`, `LOG_LEVEL`
+
+## Автодеплой
+
+Пошаговые инструкции по автодеплою через GitHub Actions находятся в
+[`AUTODEPLOY_INSTRUCTIONS.md`](AUTODEPLOY_INSTRUCTIONS.md).
