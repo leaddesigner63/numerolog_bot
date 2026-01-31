@@ -37,7 +37,7 @@ def _build_keyboard(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMar
 
 def _format_tariff_label(tariff: str) -> str:
     if tariff == "T0":
-        return "T0 - бесплатно"
+        return "Т0"
     return tariff
 
 
@@ -53,7 +53,7 @@ def screen_s0(_: dict[str, Any]) -> ScreenContent:
 def screen_s1(_: dict[str, Any]) -> ScreenContent:
     text = (
         "Тарифы:\n\n"
-        "T0 - бесплатно — 0 ₽ (1 раз в месяц)\n"
+        "Т0 — 0 ₽ (1 раз в месяц)\n"
         "T1 — 560 ₽\n"
         "T2 — 2190 ₽\n"
         "T3 — 5930 ₽\n\n"
@@ -61,7 +61,7 @@ def screen_s1(_: dict[str, Any]) -> ScreenContent:
     )
     rows = [
         [
-            InlineKeyboardButton(text="Получить T0 - бесплатно", callback_data="tariff:T0"),
+            InlineKeyboardButton(text="Получить Т0", callback_data="tariff:T0"),
         ],
         [
             InlineKeyboardButton(text="Выбрать T1", callback_data="tariff:T1"),
