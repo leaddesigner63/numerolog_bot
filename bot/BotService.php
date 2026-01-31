@@ -56,21 +56,38 @@ final class BotService
         $user = $this->upsertUser($from);
         $text = trim((string) ($message['text'] ?? ''));
 
-        if ($text !== '') {
-            $this->logMessage($user['id'], 'in', 'text', $text, null);
-        }
-
         if ($text === '' || $text === '/start') {
+            if ($text !== '') {
+                $this->logMessage($user['id'], 'in', 'text', $text, null);
+            }
             $this->handleStart($user, $chatId);
             return;
         }
 
         $state = $this->repositories->userStates()->findByUserId((int) $user['id']);
         if ($state === null || ($state['state'] ?? self::STATE_IDLE) === self::STATE_IDLE) {
+            $followupContext = $this->resolveFollowupContext((int) $user['id']);
+            if ($followupContext !== null) {
+                if ($this->isFollowupAvailable($followupContext['session'], $followupContext['tariff_policy'])) {
+                    $this->handleFollowupQuestion($user, $chatId, $followupContext, $text);
+                } else {
+                    $this->closeFollowupSession((int) $followupContext['session']['id']);
+                    $this->logMessage($user['id'], 'in', 'text', $text, null);
+                    $this->sendTariffPrompt(
+                        $chatId,
+                        $user['id'],
+                        'Сессия вопросов завершена. Вы можете начать новый расчёт, выбрав тариф.'
+                    );
+                }
+                return;
+            }
+
+            $this->logMessage($user['id'], 'in', 'text', $text, null);
             $this->sendTariffPrompt($chatId, $user['id']);
             return;
         }
 
+        $this->logMessage($user['id'], 'in', 'text', $text, null);
         $this->handleFormInput($user, $chatId, $state, $text);
     }
 
@@ -255,15 +272,6 @@ final class BotService
             'created_at' => $this->now(),
         ]);
 
-        $this->repositories->reportSessions()->insert([
-            'report_id' => $reportId,
-            'user_id' => $user['id'],
-            'is_followup_open' => 1,
-            'followup_count' => 0,
-            'created_at' => $this->now(),
-            'closed_at' => null,
-        ]);
-
         $this->repositories->userStates()->upsert([
             'user_id' => $user['id'],
             'state' => self::STATE_IDLE,
@@ -273,6 +281,15 @@ final class BotService
         ]);
 
         $this->sendReport($chatId, $user['id'], $result->getText());
+
+        $this->repositories->reportSessions()->insert([
+            'report_id' => $reportId,
+            'user_id' => $user['id'],
+            'is_followup_open' => 1,
+            'followup_count' => 0,
+            'created_at' => $this->now(),
+            'closed_at' => null,
+        ]);
     }
 
     /** @param array<string, mixed> $from */
@@ -379,6 +396,18 @@ final class BotService
         $this->logMessage($userId, 'out', 'text', $text, null);
     }
 
+    private function sendFollowupMessage(string $chatId, int $userId, string $text, int $sessionId, int $reportId): void
+    {
+        $this->telegram->sendMessage($chatId, $text);
+        $this->logMessage(
+            $userId,
+            'out',
+            'followup',
+            $text,
+            json_encode(['session_id' => $sessionId, 'report_id' => $reportId], JSON_UNESCAPED_UNICODE)
+        );
+    }
+
     private function updateState(int $userId, string $state, array $formData, ?int $tariffId): void
     {
         $this->repositories->userStates()->upsert([
@@ -417,5 +446,146 @@ final class BotService
     private function now(): string
     {
         return (new DateTimeImmutable('now', new DateTimeZone('UTC')))->format('c');
+    }
+
+    /**
+     * @return array{session: array<string, mixed>, report: array<string, mixed>, tariff_policy: array<string, mixed>|null}|null
+     */
+    private function resolveFollowupContext(int $userId): ?array
+    {
+        $session = $this->repositories->reportSessions()->findLatestOpenByUserId($userId);
+        if ($session === null) {
+            return null;
+        }
+
+        $report = $this->repositories->reports()->findById((int) $session['report_id']);
+        if ($report === null) {
+            return null;
+        }
+
+        $tariffPolicy = $this->repositories->tariffPolicies()->findByTariffId((int) $report['tariff_id']);
+
+        return [
+            'session' => $session,
+            'report' => $report,
+            'tariff_policy' => $tariffPolicy,
+        ];
+    }
+
+    /** @param array<string, mixed> $session */
+    private function isFollowupAvailable(array $session, ?array $tariffPolicy): bool
+    {
+        $limit = (int) ($tariffPolicy['followup_limit'] ?? 0);
+        if ($limit > 0 && (int) $session['followup_count'] >= $limit) {
+            return false;
+        }
+
+        $windowHours = $tariffPolicy['followup_window_hours'] ?? null;
+        if ($windowHours === null) {
+            return true;
+        }
+
+        $windowHours = (int) $windowHours;
+        if ($windowHours <= 0) {
+            return true;
+        }
+
+        $createdAt = new DateTimeImmutable((string) $session['created_at']);
+        $expiresAt = $createdAt->modify(sprintf('+%d hours', $windowHours));
+        $now = new DateTimeImmutable('now', new DateTimeZone('UTC'));
+
+        return $now <= $expiresAt;
+    }
+
+    private function closeFollowupSession(int $sessionId): void
+    {
+        $this->repositories->reportSessions()->update($sessionId, [
+            'is_followup_open' => 0,
+            'closed_at' => $this->now(),
+        ]);
+    }
+
+    /**
+     * @param array<string, mixed> $user
+     * @param array{session: array<string, mixed>, report: array<string, mixed>, tariff_policy: array<string, mixed>|null} $context
+     */
+    private function handleFollowupQuestion(array $user, string $chatId, array $context, string $question): void
+    {
+        $session = $context['session'];
+        $report = $context['report'];
+        $tariffPolicy = $context['tariff_policy'];
+
+        $profile = $this->repositories->userProfiles()->findById((int) $report['profile_id']);
+        if ($profile === null) {
+            $profile = $this->repositories->userProfiles()->findCurrentByUserId((int) $user['id']);
+        }
+
+        if ($profile === null) {
+            $this->logMessage($user['id'], 'in', 'text', $question, null);
+            $this->sendMessage($chatId, $user['id'], 'Не удалось найти профиль для follow-up вопроса.');
+            return;
+        }
+
+        $history = $this->buildFollowupHistory((int) $user['id'], (string) $session['created_at']);
+        $this->logMessage(
+            $user['id'],
+            'in',
+            'followup',
+            $question,
+            json_encode(['session_id' => $session['id'], 'report_id' => $report['id']], JSON_UNESCAPED_UNICODE)
+        );
+
+        $result = $this->reportGenerator->answerFollowup(
+            (int) $user['id'],
+            (int) $report['id'],
+            (int) $session['id'],
+            $profile,
+            $tariffPolicy,
+            (string) $report['report_text'],
+            $history,
+            $question
+        );
+
+        $this->sendFollowupMessage($chatId, $user['id'], $result->getText(), (int) $session['id'], (int) $report['id']);
+
+        $newCount = (int) $session['followup_count'] + 1;
+        $update = ['followup_count' => $newCount];
+        $limit = (int) ($tariffPolicy['followup_limit'] ?? 0);
+        if ($limit > 0 && $newCount >= $limit) {
+            $update['is_followup_open'] = 0;
+            $update['closed_at'] = $this->now();
+        }
+
+        $this->repositories->reportSessions()->update((int) $session['id'], $update);
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function buildFollowupHistory(int $userId, string $since): array
+    {
+        $messages = $this->repositories->messages()->findFollowupsByUserIdSince($userId, $since);
+        $history = [];
+        $pendingQuestion = null;
+
+        foreach ($messages as $message) {
+            $direction = $message['direction'] ?? '';
+            $text = $message['text'] ?? '';
+
+            if ($direction === 'in') {
+                $pendingQuestion = $text;
+                continue;
+            }
+
+            if ($direction === 'out' && $pendingQuestion !== null) {
+                $history[] = [
+                    'question' => $pendingQuestion,
+                    'answer' => $text,
+                ];
+                $pendingQuestion = null;
+            }
+        }
+
+        return $history;
     }
 }
