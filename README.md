@@ -5,22 +5,22 @@
 ## Структура проекта
 
 ```
-.github/workflows # GitHub Actions (автодеплой)
-  deploy.yml       # workflow автодеплоя
-alembic/        # миграции Alembic
+.github/workflows     # GitHub Actions (автодеплой)
+  deploy.yml          # workflow автодеплоя
+alembic/              # миграции Alembic
 app/
-  api/            # HTTP API (FastAPI)
-  bot/            # Telegram-бот (aiogram)
-  core/           # конфигурация и общие утилиты
-    llm_router.py # LLM-маршрутизатор (Gemini -> ChatGPT)
+  api/                # HTTP API (FastAPI)
+  bot/                # Telegram-бот (aiogram)
+  core/               # конфигурация и общие утилиты
+    llm_router.py     # LLM-маршрутизатор (Gemini -> ChatGPT)
     report_service.py # сервис генерации отчёта
-  db/             # модели и подключение к БД
-  payments/       # платёжные провайдеры и проверки webhook
-scripts/        # вспомогательные скрипты
-  deploy.sh     # серверный деплой-скрипт (используется GitHub Actions)
-  test.sh       # локальные проверки
-AUTODEPLOY_INSTRUCTIONS.md # инструкция по автодеплою
-TZ.md           # техническое задание (ТЗ)
+  db/                 # модели и подключение к БД
+  payments/           # платёжные провайдеры и проверки webhook
+scripts/              # вспомогательные скрипты
+  deploy.sh           # серверный деплой-скрипт (используется GitHub Actions)
+  test.sh             # локальные проверки
+AUTODEPLOY_INSTRUCTIONS.md # пошаговая инструкция по автодеплою
+TZ.md                 # техническое задание (ТЗ)
 ```
 
 ## Предварительные требования
@@ -233,8 +233,10 @@ sudo systemctl restart numerolog.target
 - `SERVICE_NAMES` — опционально, список сервисов/target’ов через пробел (имеет приоритет).
 - `ENV_FILE`, `DEPLOY_PATH`, `SSH_HOST`, `SSH_USER`, `SSH_PORT`, `SSH_PRIVATE_KEY` — инфраструктурные параметры.
 
-Workflow запускает `scripts/deploy.sh` на сервере. Проверьте, что unit-файлы
-созданы и имена сервисов совпадают с тем, что вы передали в `SERVICE_NAME`/`SERVICE_NAMES`.
-Если получаете ошибку вида `...service: command not found`, это признак отсутствующего unit-файла
-или неверного имени сервиса.
-.
+Workflow запускает `scripts/deploy.sh` на сервере и передаёт ссылку на ветку,
+в которую был сделан push (например, `origin/work` или `origin/main`).
+По умолчанию workflow настроен на ветки `main` и `work` — убедитесь, что ваш push выполняется
+в одну из них или расширьте список веток в `.github/workflows/deploy.yml`.
+Проверьте, что unit-файлы созданы и имена сервисов совпадают с тем, что вы передали
+в `SERVICE_NAME`/`SERVICE_NAMES`. Если получаете ошибку вида
+`...service: command not found`, это признак отсутствующего unit-файла или неверного имени сервиса.

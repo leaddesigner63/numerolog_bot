@@ -2,7 +2,7 @@ name: Deploy to server
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "work" ]
   workflow_dispatch:
     inputs:
       environment:
@@ -42,13 +42,14 @@ jobs:
           SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
           SERVICE_NAMES: ${{ secrets.SERVICE_NAMES }}
           ENV_FILE: ${{ secrets.ENV_FILE }}
+          GIT_REF: origin/${{ github.ref_name }}
         run: |
           ssh -p "$PORT" "$USER@$HOST" \
             "env DEPLOY_PATH='$DEPLOY_PATH' \
             SERVICE_NAME='$SERVICE_NAME' \
             SERVICE_NAMES='$SERVICE_NAMES' \
             ENV_FILE='$ENV_FILE' \
-            GIT_REF='origin/main' \
+            GIT_REF='$GIT_REF' \
             bash -se" <<'EOF'
           set -euo pipefail
 

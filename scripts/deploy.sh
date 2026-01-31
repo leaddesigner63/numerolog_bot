@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DEPLOY_PATH="${DEPLOY_PATH:-}"
-GIT_REF="${GIT_REF:-origin/main}"
+GIT_REF="${GIT_REF:-}"
 ENV_FILE="${ENV_FILE:-}"
 SERVICE_NAME="${SERVICE_NAME:-}"
 SERVICE_NAMES="${SERVICE_NAMES:-}"
@@ -18,6 +18,14 @@ if [ ! -d "$DEPLOY_PATH" ]; then
 fi
 
 cd "$DEPLOY_PATH"
+
+if [ -z "$GIT_REF" ]; then
+  if CURRENT_BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null); then
+    GIT_REF="origin/${CURRENT_BRANCH}"
+  else
+    GIT_REF="origin/main"
+  fi
+fi
 
 git fetch --all --prune
 git reset --hard "$GIT_REF"
