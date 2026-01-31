@@ -45,7 +45,17 @@ jobs:
             cd '$DEPLOY_PATH';
             git fetch --all;
             git reset --hard origin/main;
-            git clean -fd;
+            # Не удаляем важные локальные файлы (например, .env и каталоги с данными)
+            git clean -fd \
+              -e .env \
+              -e .env.* \
+              -e venv \
+              -e .venv \
+              -e .python-version \
+              -e data \
+              -e storage \
+              -e uploads \
+              -e logs;
 
             # если есть venv/requirements.txt — обновим зависимости (необязательно)
             if [ -f requirements.txt ] && [ -x venv/bin/pip ]; then
