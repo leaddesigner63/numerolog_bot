@@ -39,6 +39,24 @@ final class TelegramClient
         $this->call('answerCallbackQuery', $payload);
     }
 
+    public function sendDocument(string $chatId, string $filePath, string $filename, string $caption = ''): void
+    {
+        if (!is_file($filePath)) {
+            return;
+        }
+
+        $payload = [
+            'chat_id' => $chatId,
+            'document' => new CURLFile($filePath, 'application/pdf', $filename),
+        ];
+
+        if ($caption !== '') {
+            $payload['caption'] = $caption;
+        }
+
+        $this->call('sendDocument', $payload);
+    }
+
     /** @param array<string, mixed> $payload */
     private function call(string $method, array $payload): void
     {

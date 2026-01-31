@@ -25,6 +25,8 @@ require_once __DIR__ . '/../llm/LlmResponseNormalizer.php';
 require_once __DIR__ . '/../llm/OpenAIProvider.php';
 require_once __DIR__ . '/../llm/GeminiProvider.php';
 require_once __DIR__ . '/../llm/ReportGenerator.php';
+require_once __DIR__ . '/../pdf/SimplePdfImageWriter.php';
+require_once __DIR__ . '/../pdf/PdfReportGenerator.php';
 require_once __DIR__ . '/../bot/BotService.php';
 
 $token = (string) getenv('TELEGRAM_BOT_TOKEN');
@@ -51,7 +53,14 @@ $pdo = Database::connect($config['db'] ?? []);
 $repositories = new RepositoryProvider($pdo);
 $telegram = new TelegramClient($token);
 $reportGenerator = new ReportGenerator($config, $repositories->llmCallLogs());
-$botService = new BotService($repositories, $telegram, $reportGenerator);
+$pdfConfig = $config['pdf'] ?? [];
+$pdfGenerator = new PdfReportGenerator(
+    (string) ($pdfConfig['storage_dir'] ?? (__DIR__ . '/../storage/pdfs')),
+    (string) ($pdfConfig['font_regular'] ?? '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'),
+    (string) ($pdfConfig['font_bold'] ?? '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
+    (string) ($pdfConfig['app_name'] ?? 'SamurAI')
+);
+$botService = new BotService($repositories, $telegram, $reportGenerator, $pdfGenerator);
 $botService->handleUpdate($update);
 
 echo 'OK';

@@ -31,6 +31,13 @@
 - `DB_USER` — пользователь БД (для SQLite можно оставить пустым).
 - `DB_PASSWORD` — пароль БД (для SQLite можно оставить пустым).
 
+## PDF-отчёты
+
+- `PDF_STORAGE_DIR` — каталог для сохранения PDF (по умолчанию `storage/pdfs`).
+- `PDF_FONT_REGULAR` — путь к TTF-шрифту (по умолчанию `DejaVuSans.ttf`).
+- `PDF_FONT_BOLD` — путь к TTF-шрифту (по умолчанию `DejaVuSans-Bold.ttf`).
+- `PDF_APP_NAME` — текст бренда для футера (по умолчанию `SamurAI`).
+
 ## Пример (без секретов)
 
 ```env
@@ -48,4 +55,8 @@ APP_DISPLAY_ERRORS=false
 DB_DSN=sqlite:/opt/samurai/shared/numerolog.sqlite
 DB_USER=
 DB_PASSWORD=
+PDF_STORAGE_DIR=/opt/samurai/shared/pdfs
+PDF_FONT_REGULAR=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
+PDF_FONT_BOLD=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
+PDF_APP_NAME=SamurAI
 ```

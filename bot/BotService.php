@@ -13,15 +13,18 @@ final class BotService
     private RepositoryProvider $repositories;
     private TelegramClient $telegram;
     private ReportGenerator $reportGenerator;
+    private PdfReportGenerator $pdfReportGenerator;
 
     public function __construct(
         RepositoryProvider $repositories,
         TelegramClient $telegram,
-        ReportGenerator $reportGenerator
+        ReportGenerator $reportGenerator,
+        PdfReportGenerator $pdfReportGenerator
     ) {
         $this->repositories = $repositories;
         $this->telegram = $telegram;
         $this->reportGenerator = $reportGenerator;
+        $this->pdfReportGenerator = $pdfReportGenerator;
     }
 
     /** @param array<string, mixed> $update */
@@ -136,7 +139,7 @@ final class BotService
         }
 
         if ($data === 'action:pdf') {
-            $this->sendMessage($chatId, $user['id'], 'Функция PDF скоро будет доступна.');
+            $this->sendReportPdf($chatId, $user['id']);
             return;
         }
 
@@ -330,6 +333,44 @@ final class BotService
 
         $this->telegram->sendMessage($chatId, $text, $keyboard);
         $this->logMessage($userId, 'out', 'report', $text, json_encode($keyboard, JSON_UNESCAPED_UNICODE));
+    }
+
+    private function sendReportPdf(string $chatId, int $userId): void
+    {
+        $report = $this->repositories->reports()->findLatestByUserId($userId);
+        if ($report === null) {
+            $this->sendMessage($chatId, $userId, 'Пока нет отчёта для формирования PDF.');
+            return;
+        }
+
+        $profile = $this->repositories->userProfiles()->findById((int) $report['profile_id']);
+        if ($profile === null) {
+            $profile = $this->repositories->userProfiles()->findCurrentByUserId($userId);
+        }
+
+        if ($profile === null) {
+            $this->sendMessage($chatId, $userId, 'Не удалось найти профиль для отчёта.');
+            return;
+        }
+
+        $tariffPolicy = $this->repositories->tariffPolicies()->findByTariffId((int) $report['tariff_id']);
+
+        try {
+            $pdfData = $this->pdfReportGenerator->generate($report, $profile, $tariffPolicy);
+        } catch (Throwable $exception) {
+            $this->sendMessage($chatId, $userId, 'Не удалось сформировать PDF. Попробуйте позже.');
+            return;
+        }
+
+        $this->telegram->sendDocument($chatId, $pdfData['path'], $pdfData['filename'], 'Ваш PDF-отчёт готов.');
+
+        $this->logMessage(
+            $userId,
+            'out',
+            'system_event',
+            'pdf_downloaded',
+            json_encode(['report_id' => $report['id'] ?? null], JSON_UNESCAPED_UNICODE)
+        );
     }
 
     private function sendMessage(string $chatId, int $userId, string $text): void

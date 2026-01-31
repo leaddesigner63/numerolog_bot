@@ -21,4 +21,16 @@ final class ReportsRepository extends AbstractRepository
     {
         return $this->findAllBy('user_id', $userId);
     }
+
+    /** @return array<string, mixed>|null */
+    public function findLatestByUserId(int $userId): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            sprintf('SELECT * FROM %s WHERE user_id = :user_id ORDER BY id DESC LIMIT 1', $this->table)
+        );
+        $stmt->execute(['user_id' => $userId]);
+        $result = $stmt->fetch();
+
+        return $result === false ? null : $result;
+    }
 }
