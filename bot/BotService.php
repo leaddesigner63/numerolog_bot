@@ -239,15 +239,16 @@ final class BotService
         $tariffPolicy = $this->repositories->tariffPolicies()->findByTariffId($tariffId);
 
         $result = $this->reportGenerator->generate((int) $user['id'], $tariffId, $formData, $tariffPolicy);
+        $resultPayload = $result->toArray();
 
         $reportId = $this->repositories->reports()->insert([
             'user_id' => $user['id'],
             'tariff_id' => $tariffId,
             'profile_id' => $profileId,
-            'report_text' => $result['text'],
-            'report_json' => json_encode($result, JSON_UNESCAPED_UNICODE),
-            'llm_provider' => $result['provider'],
-            'llm_model' => $result['model'],
+            'report_text' => $result->getText(),
+            'report_json' => json_encode($resultPayload, JSON_UNESCAPED_UNICODE),
+            'llm_provider' => $result->getProvider(),
+            'llm_model' => $result->getModel(),
             'created_at' => $this->now(),
         ]);
 
@@ -268,7 +269,7 @@ final class BotService
             'updated_at' => $this->now(),
         ]);
 
-        $this->sendReport($chatId, $user['id'], $result['text']);
+        $this->sendReport($chatId, $user['id'], $result->getText());
     }
 
     /** @param array<string, mixed> $from */

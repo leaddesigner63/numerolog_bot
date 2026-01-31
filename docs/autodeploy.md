@@ -1,136 +1,44 @@
-# Автодеплой: пошаговая инструкция
+# Автодеплой (GitHub Actions)
 
-Ниже описан базовый, воспроизводимый сценарий автодеплоя через GitHub Actions и SSH. Он подходит для VPS (Ubuntu 22.04+) и может быть адаптирован под ваш стек (PHP/Node/Go).
+Этот проект уже содержит workflow автодеплоя в `.github/workflows/deploy.yml`. Ниже — пошаговая инструкция по настройке.
 
-## 1) Подготовка сервера
+## 1. Подготовить сервер
 
-1. Создайте пользователя и установите зависимости:
+1. Создайте системного пользователя для деплоя (например, `deploy`).
+2. Клонируйте репозиторий на сервер в каталог, который будет использоваться для деплоя:
+   ```bash
+   git clone <REPO_URL> /opt/numerolog_bot
+   ```
+3. Убедитесь, что сервис бота настроен как systemd‑юнит (пример: `numerolog-bot.service`).
+4. Проверьте, что командой `systemctl restart <SERVICE_NAME>` сервис успешно перезапускается.
 
-```bash
-sudo adduser samurai
-sudo usermod -aG sudo samurai
-sudo apt-get update
-sudo apt-get install -y git docker.io docker-compose-plugin php-cli
-```
+## 2. Настроить SSH‑доступ
 
-2. Убедитесь, что Docker запущен:
+1. Сгенерируйте SSH‑ключ (рекомендуется ED25519):
+   ```bash
+   ssh-keygen -t ed25519 -C "deploy@numerolog-bot"
+   ```
+2. Добавьте публичный ключ в `~/.ssh/authorized_keys` пользователя деплоя на сервере.
 
-```bash
-sudo systemctl enable --now docker
-```
+## 3. Добавить секреты в GitHub
 
-## 2) Подготовка SSH-доступа для GitHub Actions
+Перейдите в **Settings → Secrets and variables → Actions** и добавьте секреты:
 
-1. Сгенерируйте ключ на локальной машине или в CI:
+- `SSH_PRIVATE_KEY` — приватный ключ, который имеет доступ к серверу.
+- `SSH_HOST` — домен или IP сервера.
+- `SSH_PORT` — SSH‑порт (например, `22`).
+- `SSH_USER` — пользователь деплоя (например, `deploy`).
+- `DEPLOY_PATH` — путь к каталогу репозитория на сервере (например, `/opt/numerolog_bot`).
+- `SERVICE_NAME` — имя systemd‑сервиса (например, `numerolog-bot`).
 
-```bash
-ssh-keygen -t ed25519 -C "github-actions"
-```
+## 4. Проверить deploy workflow
 
-2. Добавьте публичный ключ в `~/.ssh/authorized_keys` на сервере пользователя `samurai`.
+1. Слейте изменения в `main` — деплой запустится автоматически.
+2. Или запустите вручную в **Actions → Deploy to server** и выберите окружение.
+3. Убедитесь, что в логе workflow нет ошибок.
 
-3. Сохраните приватный ключ в секретах репозитория GitHub:
+## 5. Рекомендации
 
-- `SSH_PRIVATE_KEY`
-- `SSH_HOST` (например: `203.0.113.10`)
-- `SSH_USER` (например: `samurai`)
-- `SSH_PORT` (например: `22`)
-- `DEPLOY_PATH` (например: `/opt/samurai/repo`)
-- `SERVICE_NAME` (например: `samurai-bot`)
-
-## 3) Настройка переменных окружения
-
-Добавьте в GitHub Secrets/Variables:
-
-- `DEPLOY_PATH` (например: `/opt/samurai/repo`)
-- `SERVICE_NAME` (например: `samurai-bot`)
-- `APP_ENV` (например: `production`)
-- при необходимости — ключи Telegram и LLM (лучше через secret manager)
-
-Рекомендация: заведите два независимых окружения GitHub Actions — `staging` и `production`.
-Тогда у каждого окружения будут свои секреты (`SSH_*`, `DEPLOY_PATH`, ключи LLM), что исключит
-перемешивание ключей и упростит релизы.
-
-## 4) Структура деплоя
-
-Проект деплоится в папку `DEPLOY_PATH` и обновляется при пуше в ветку `main`.
-
-Пример структуры на сервере:
-
-```
-/opt/samurai
-  ├─ repo/     # git clone (DEPLOY_PATH=/opt/samurai/repo)
-  ├─ releases/ # опционально
-  └─ shared/   # .env, storage, logs
-```
-
-## 5) Использование deploy workflow
-
-В репозитории уже есть шаблон `.github/workflows/deploy.yml`.
-
-1. Проверьте, что workflow использует нужную ветку (`main`) и корректный путь `DEPLOY_PATH`.
-2. При необходимости обновите команды деплоя (например, сборка контейнера, миграции БД, рестарт сервиса).
-3. Для ручного деплоя используйте `workflow_dispatch` и выберите окружение (`staging`/`production`).
-
-> В текущем шаблоне деплоя миграции запускаются автоматически через `php scripts/migrate.php`.
-
-## 6) Подготовка systemd-сервиса
-
-Создайте unit-файл сервиса (пример) `/etc/systemd/system/samurai-bot.service`:
-
-```
-[Unit]
-Description=SamurAI Telegram bot
-After=network.target
-
-[Service]
-Type=simple
-User=samurai
-WorkingDirectory=/opt/samurai/repo
-EnvironmentFile=/opt/samurai/shared/.env
-ExecStart=/usr/bin/env bash -lc "./scripts/run.sh"
-Restart=on-failure
-RestartSec=5s
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Замените `./scripts/run.sh` на реальную команду запуска вашего приложения (например, `php bot.php` или `docker compose up -d`).
-Если используется SQLite, убедитесь, что путь из `DB_DSN` доступен пользователю сервиса (например, `/opt/samurai/shared/numerolog.sqlite`).
-
-Затем активируйте сервис:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable --now samurai-bot
-```
-
-## 7) Подготовка .env на сервере
-
-Создайте файл `/opt/samurai/shared/.env` (для production) и `/opt/samurai-staging/shared/.env`
-(для staging) и добавьте туда переменные:
-
-```
-TELEGRAM_BOT_TOKEN=...
-OPENAI_API_KEY=...
-GEMINI_API_KEY=...
-LLM_PROVIDER=openai
-APP_ENV=production
-ERROR_LOG_PATH=/opt/samurai/shared/logs/app.log
-DB_DSN=sqlite:/opt/samurai/shared/numerolog.sqlite
-```
-
-## 8) Проверка деплоя
-
-После пуша в `main` проверьте вкладку **Actions** на GitHub и логи на сервере:
-
-```bash
-journalctl -u samurai-bot -f
-```
-
-## 9) Рекомендации
-
-- Используйте отдельные секреты для staging/production.
-- Храните конфиги и ключи только в `shared/.env` или секретах.
-- Добавьте healthcheck-эндпоинт и алертинг по ошибкам.
+- Храните реальные API‑ключи в `.env` или секрет‑хранилище на сервере, а не в репозитории.
+- Используйте отдельного пользователя и ограничьте его права только необходимыми.
+- Добавьте мониторинг и уведомления об ошибках деплоя.

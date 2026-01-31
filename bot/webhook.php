@@ -19,6 +19,11 @@ require_once __DIR__ . '/../domain/Repository/LlmCallLogsRepository.php';
 require_once __DIR__ . '/../domain/Repository/RepositoryProvider.php';
 
 require_once __DIR__ . '/../bot/TelegramClient.php';
+require_once __DIR__ . '/../llm/LLMProvider.php';
+require_once __DIR__ . '/../llm/LlmResult.php';
+require_once __DIR__ . '/../llm/LlmResponseNormalizer.php';
+require_once __DIR__ . '/../llm/OpenAIProvider.php';
+require_once __DIR__ . '/../llm/GeminiProvider.php';
 require_once __DIR__ . '/../llm/ReportGenerator.php';
 require_once __DIR__ . '/../bot/BotService.php';
 
