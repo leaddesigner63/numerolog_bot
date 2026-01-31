@@ -19,4 +19,19 @@ final class ReportSessionsRepository extends AbstractRepository
     {
         return $this->findAllBy('report_id', $reportId);
     }
+
+    /** @return array<string, mixed>|null */
+    public function findLatestOpenByUserId(int $userId): ?array
+    {
+        $stmt = $this->pdo->prepare(
+            sprintf(
+                'SELECT * FROM %s WHERE user_id = :user_id AND is_followup_open = 1 ORDER BY id DESC LIMIT 1',
+                $this->table
+            )
+        );
+        $stmt->execute(['user_id' => $userId]);
+        $result = $stmt->fetch();
+
+        return $result === false ? null : $result;
+    }
 }
