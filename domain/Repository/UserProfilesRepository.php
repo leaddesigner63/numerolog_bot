@@ -20,4 +20,12 @@ final class UserProfilesRepository extends AbstractRepository
     {
         return $this->findAllBy('user_id', $userId);
     }
+
+    public function markNotCurrentByUserId(int $userId): void
+    {
+        $stmt = $this->pdo->prepare(
+            sprintf('UPDATE %s SET is_current = 0 WHERE user_id = :user_id', $this->table)
+        );
+        $stmt->execute(['user_id' => $userId]);
+    }
 }

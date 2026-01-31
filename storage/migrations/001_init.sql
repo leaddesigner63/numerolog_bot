@@ -24,6 +24,15 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS user_states (
+    user_id INTEGER PRIMARY KEY,
+    state TEXT NOT NULL,
+    tariff_id INTEGER,
+    form_json TEXT,
+    updated_at TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS purchases (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
