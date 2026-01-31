@@ -93,9 +93,21 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
 
 def screen_s3(state: dict[str, Any]) -> ScreenContent:
     selected_tariff = state.get("selected_tariff", "T1–T3")
+    order_id = state.get("order_id")
+    order_status = state.get("order_status")
+    order_amount = state.get("order_amount")
+    order_currency = state.get("order_currency", "RUB")
+    order_block = ""
+    if order_id and order_status:
+        order_block = (
+            f"\n\nЗаказ №{order_id}. "
+            f"Статус: {order_status}. "
+            f"Сумма: {order_amount} {order_currency}."
+        )
     text = (
         f"Оплата тарифа {selected_tariff}.\n\n"
         "Оплачивая, вы подтверждаете согласие с офертой. Возвратов нет."
+        f"{order_block}"
     )
     rows: list[list[InlineKeyboardButton]] = []
     if settings.prodamus_form_url:
@@ -215,6 +227,20 @@ def screen_s8(_: dict[str, Any]) -> ScreenContent:
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
+def screen_s9(state: dict[str, Any]) -> ScreenContent:
+    next_available = state.get("t0_next_available", "неизвестно")
+    text = (
+        "Бесплатный отчёт доступен раз в месяц.\n\n"
+        f"Следующий доступен: {next_available}."
+    )
+    rows = [
+        [InlineKeyboardButton(text="Тарифы", callback_data="screen:S1")],
+        *(_global_menu()),
+    ]
+    keyboard = _build_keyboard(rows)
+    return ScreenContent(messages=[text], keyboard=keyboard)
+
+
 SCREEN_REGISTRY = {
     "S0": screen_s0,
     "S1": screen_s1,
@@ -225,4 +251,5 @@ SCREEN_REGISTRY = {
     "S6": screen_s6,
     "S7": screen_s7,
     "S8": screen_s8,
+    "S9": screen_s9,
 }
