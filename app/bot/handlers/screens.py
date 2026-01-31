@@ -8,8 +8,9 @@ from sqlalchemy import select
 
 from app.bot.screen_manager import screen_manager
 from app.core.config import settings
-from app.db.models import FreeLimit, Order, OrderStatus, PaymentProvider, Tariff, User
+from app.db.models import FreeLimit, Order, OrderStatus, PaymentProvider as PaymentProviderEnum, Tariff, User
 from app.db.session import get_session
+from app.payments import get_payment_provider
 
 
 router = Router()
@@ -21,13 +22,13 @@ TARIFF_PRICES = {
 }
 
 
-def _get_payment_provider() -> PaymentProvider:
+def _get_payment_provider() -> PaymentProviderEnum:
     provider = settings.payment_provider.lower()
-    if provider == PaymentProvider.CLOUDPAYMENTS.value:
-        return PaymentProvider.CLOUDPAYMENTS
-    if provider == PaymentProvider.PRODAMUS.value:
-        return PaymentProvider.PRODAMUS
-    return PaymentProvider.PRODAMUS
+    if provider == PaymentProviderEnum.CLOUDPAYMENTS.value:
+        return PaymentProviderEnum.CLOUDPAYMENTS
+    if provider == PaymentProviderEnum.PRODAMUS.value:
+        return PaymentProviderEnum.PRODAMUS
+    return PaymentProviderEnum.PRODAMUS
 
 
 def _get_or_create_user(session, telegram_user_id: int) -> User:
@@ -113,9 +114,12 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
             with get_session() as session:
                 user = _get_or_create_user(session, callback.from_user.id)
                 order = _create_order(session, user, Tariff(tariff))
+                provider = get_payment_provider(order.provider.value)
+                payment_link = provider.create_payment_link(order, user=user)
                 screen_manager.update_state(
                     callback.from_user.id,
                     selected_tariff=tariff,
+                    payment_url=payment_link.url if payment_link else None,
                     **_refresh_order_state(order),
                 )
 
