@@ -35,6 +35,12 @@ def _build_keyboard(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMar
     return builder.as_markup()
 
 
+def _format_tariff_label(tariff: str) -> str:
+    if tariff == "T0":
+        return "T0 - бесплатно"
+    return tariff
+
+
 def screen_s0(_: dict[str, Any]) -> ScreenContent:
     text = (
         "ИИ-аналитик личных данных помогает структурировать опыт и увидеть рабочие гипотезы.\n\n"
@@ -47,7 +53,7 @@ def screen_s0(_: dict[str, Any]) -> ScreenContent:
 def screen_s1(_: dict[str, Any]) -> ScreenContent:
     text = (
         "Тарифы:\n\n"
-        "T0 — 0 ₽ (1 раз в месяц)\n"
+        "T0 - бесплатно — 0 ₽ (1 раз в месяц)\n"
         "T1 — 560 ₽\n"
         "T2 — 2190 ₽\n"
         "T3 — 5930 ₽\n\n"
@@ -55,7 +61,7 @@ def screen_s1(_: dict[str, Any]) -> ScreenContent:
     )
     rows = [
         [
-            InlineKeyboardButton(text="Получить T0", callback_data="tariff:T0"),
+            InlineKeyboardButton(text="Получить T0 - бесплатно", callback_data="tariff:T0"),
         ],
         [
             InlineKeyboardButton(text="Выбрать T1", callback_data="tariff:T1"),
@@ -69,7 +75,7 @@ def screen_s1(_: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s2(state: dict[str, Any]) -> ScreenContent:
-    selected_tariff = state.get("selected_tariff", "T1–T3")
+    selected_tariff = _format_tariff_label(state.get("selected_tariff", "T1–T3"))
     text = (
         f"Оферта и правила перед оплатой ({selected_tariff}).\n\n"
         "Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
@@ -92,7 +98,7 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s3(state: dict[str, Any]) -> ScreenContent:
-    selected_tariff = state.get("selected_tariff", "T1–T3")
+    selected_tariff = _format_tariff_label(state.get("selected_tariff", "T1–T3"))
     order_id = state.get("order_id")
     order_status = state.get("order_status")
     order_amount = state.get("order_amount")
@@ -131,7 +137,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s4(state: dict[str, Any]) -> ScreenContent:
-    selected_tariff = state.get("selected_tariff", "T0")
+    selected_tariff = _format_tariff_label(state.get("selected_tariff", "T0"))
     text = (
         f"Мои данные для тарифа {selected_tariff}.\n\n"
         "Шаг 1: Имя\n"
@@ -151,7 +157,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s5(state: dict[str, Any]) -> ScreenContent:
-    selected_tariff = state.get("selected_tariff", "T2/T3")
+    selected_tariff = _format_tariff_label(state.get("selected_tariff", "T2/T3"))
     text = (
         f"Лайтовая анкета для {selected_tariff}.\n\n"
         "1) Опыт и проекты\n"
