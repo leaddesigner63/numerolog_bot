@@ -2,12 +2,16 @@ from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 
+from app.bot.screen_manager import screen_manager
+
 router = Router()
 
 
 @router.message(CommandStart())
 async def handle_start(message: Message) -> None:
-    await message.answer(
-        "Добро пожаловать! Этот бот готовит аналитический отчёт по вашим данным.\n"
-        "Выберите тариф или ознакомьтесь с офертой через меню."
+    await screen_manager.show_screen(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        screen_id="S0",
     )
