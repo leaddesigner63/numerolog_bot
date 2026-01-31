@@ -38,6 +38,15 @@
 - `PDF_FONT_BOLD` — путь к TTF-шрифту (по умолчанию `DejaVuSans-Bold.ttf`).
 - `PDF_APP_NAME` — текст бренда для футера (по умолчанию `SamurAI`).
 
+## Рассылка
+
+- `BROADCAST_BATCH_SIZE` — размер пачки рассылки (по умолчанию `25`).
+- `BROADCAST_SLEEP_US` — пауза между сообщениями в микросекундах (по умолчанию `200000`).
+
+## Экспорт
+
+- `EXPORT_STORAGE_DIR` — каталог для файлов экспорта (по умолчанию `storage/exports`).
+
 ## Пример (без секретов)
 
 ```env
@@ -59,4 +68,7 @@ PDF_STORAGE_DIR=/opt/samurai/shared/pdfs
 PDF_FONT_REGULAR=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf
 PDF_FONT_BOLD=/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf
 PDF_APP_NAME=SamurAI
+BROADCAST_BATCH_SIZE=25
+BROADCAST_SLEEP_US=200000
+EXPORT_STORAGE_DIR=/opt/samurai/shared/exports
 ```

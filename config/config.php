@@ -80,4 +80,11 @@ return [
         'font_bold' => env_value('PDF_FONT_BOLD', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'),
         'app_name' => env_value('PDF_APP_NAME', 'SamurAI'),
     ],
+    'broadcast' => [
+        'batch_size' => env_int('BROADCAST_BATCH_SIZE', 25),
+        'sleep_us' => env_int('BROADCAST_SLEEP_US', 200000),
+    ],
+    'export' => [
+        'storage_dir' => env_value('EXPORT_STORAGE_DIR', dirname(__DIR__) . '/storage/exports'),
+    ],
 ];

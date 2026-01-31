@@ -48,6 +48,24 @@ abstract class AbstractRepository
         return $result === false ? null : $result;
     }
 
+    /** @return array<int, array<string, mixed>> */
+    public function findAll(): array
+    {
+        $stmt = $this->pdo->query(sprintf('SELECT * FROM %s', $this->table));
+
+        return $stmt === false ? [] : $stmt->fetchAll();
+    }
+
+    public function countAll(): int
+    {
+        $stmt = $this->pdo->query(sprintf('SELECT COUNT(*) FROM %s', $this->table));
+        if ($stmt === false) {
+            return 0;
+        }
+
+        return (int) $stmt->fetchColumn();
+    }
+
     /** @return array<string, mixed>|null */
     public function findOneBy(string $column, mixed $value): ?array
     {

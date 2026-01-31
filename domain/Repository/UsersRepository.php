@@ -22,6 +22,31 @@ final class UsersRepository extends AbstractRepository
         return $this->findOneBy('tg_id', $tgId);
     }
 
+    /** @return array<string, mixed>|null */
+    public function findByUsername(string $username): ?array
+    {
+        return $this->findOneBy('username', $username);
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function findBySegment(string $segment): array
+    {
+        $segment = strtolower($segment);
+        if ($segment === 'all') {
+            return $this->findAll();
+        }
+
+        if ($segment === 'bought') {
+            return $this->findAllBy('is_bought', 1);
+        }
+
+        if ($segment === 'not_bought') {
+            return $this->findAllBy('is_bought', 0);
+        }
+
+        return [];
+    }
+
     /** @param array<string, mixed> $data */
     public function upsertByTgId(array $data): void
     {
