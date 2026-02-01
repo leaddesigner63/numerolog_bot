@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import re
 from typing import Any
 
@@ -12,7 +12,8 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 
 from app.bot.handlers.screen_manager import screen_manager
-from app.db.models import Order, OrderStatus, User, UserProfile
+from app.core.config import settings
+from app.db.models import FreeLimit, Order, OrderStatus, User, UserProfile
 from app.db.session import get_session
 
 router = Router()
@@ -27,17 +28,51 @@ class ProfileStates(StatesGroup):
     birth_place = State()
 
 
+def _safe_int(value: str | int | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _get_or_create_user(session, telegram_user_id: int) -> User:
     user = session.execute(
         select(User).where(User.telegram_user_id == telegram_user_id)
     ).scalar_one_or_none()
     if user:
+        if not user.free_limit:
+            free_limit = session.execute(
+                select(FreeLimit).where(FreeLimit.user_id == user.id)
+            ).scalar_one_or_none()
+            if free_limit:
+                user.free_limit = free_limit
+            else:
+                free_limit = FreeLimit(user_id=user.id)
+                session.add(free_limit)
+                user.free_limit = free_limit
         return user
 
     user = User(telegram_user_id=telegram_user_id)
     session.add(user)
     session.flush()
+    free_limit = FreeLimit(user_id=user.id)
+    session.add(free_limit)
+    user.free_limit = free_limit
     return user
+
+
+def _t0_cooldown_status(session, telegram_user_id: int) -> tuple[bool, str | None]:
+    user = _get_or_create_user(session, telegram_user_id)
+    free_limit = user.free_limit
+    last_t0_at = free_limit.last_t0_at if free_limit else None
+    cooldown = timedelta(hours=settings.free_t0_cooldown_hours)
+    now = datetime.now(timezone.utc)
+    if last_t0_at and now < last_t0_at + cooldown:
+        next_available = last_t0_at + cooldown
+        return False, next_available.strftime("%Y-%m-%d %H:%M UTC")
+    return True, None
 
 
 def _profile_payload(profile: UserProfile | None) -> dict[str, Any]:
@@ -105,10 +140,38 @@ async def start_profile_wizard(message: Message, state: FSMContext) -> None:
 async def _ensure_paid_profile_access(callback: CallbackQuery) -> bool:
     state_snapshot = screen_manager.update_state(callback.from_user.id)
     selected_tariff = state_snapshot.data.get("selected_tariff")
+    if not selected_tariff:
+        await callback.message.answer("Сначала выберите тариф.")
+        await screen_manager.show_screen(
+            bot=callback.bot,
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+            screen_id="S1",
+        )
+        return False
+    if selected_tariff == "T0":
+        with get_session() as session:
+            t0_allowed, next_available = _t0_cooldown_status(
+                session, callback.from_user.id
+            )
+        if not t0_allowed:
+            screen_manager.update_state(
+                callback.from_user.id,
+                selected_tariff="T0",
+                t0_next_available=next_available,
+            )
+            await screen_manager.show_screen(
+                bot=callback.bot,
+                chat_id=callback.message.chat.id,
+                user_id=callback.from_user.id,
+                screen_id="S9",
+            )
+            return False
     if selected_tariff not in {"T1", "T2", "T3"}:
         return True
 
     order_id = state_snapshot.data.get("order_id")
+    order_id = _safe_int(order_id)
     if not order_id:
         await callback.message.answer("Сначала выберите тариф и завершите оплату.")
         await screen_manager.show_screen(
@@ -120,7 +183,7 @@ async def _ensure_paid_profile_access(callback: CallbackQuery) -> bool:
         return False
 
     with get_session() as session:
-        order = session.get(Order, int(order_id))
+        order = session.get(Order, order_id)
         if not order or order.status != OrderStatus.PAID:
             if order:
                 screen_manager.update_state(
