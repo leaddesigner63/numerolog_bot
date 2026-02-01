@@ -183,6 +183,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     birth_place = _format_birth_place(profile.get("birth_place"))
     birth_time = profile.get("birth_time") or "не указано"
     profile_flow = state.get("profile_flow")
+    is_t0 = selected_tariff == "Т0"
     if profile:
         text = (
             f"Мои данные для тарифа {selected_tariff}:\n\n"
@@ -191,6 +192,15 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             f"Время рождения: {birth_time}\n"
             f"Место рождения: {birth_place}\n\n"
             "Это режим просмотра. Для изменения данных нажмите «Перезаполнить»."
+        )
+    elif is_t0:
+        text = (
+            "В бесплатном превью-отчёте ты увидишь, на что он обратил внимание в первую "
+            "очередь: ключевые сильные стороны, возможные зоны роста и формат полного "
+            "анализа. Коротко и по делу. Начни с малого — дальше решать тебе. Краткий мини "
+            "отчёт (~30 % полного): несколько сильных сторон, возможные зоны роста и "
+            "аккуратная ретроспектива, чтобы оценить подход. Кстати, это честный бесплатный "
+            "доступ, поэтому можно всего раз в месяц."
         )
     else:
         text = (
@@ -206,6 +216,12 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         rows.append(
             [InlineKeyboardButton(text="Перезаполнить", callback_data="profile:start")]
         )
+    elif is_t0:
+        rows.append([InlineKeyboardButton(text="Старт", callback_data="profile:start")])
+        rows.append([InlineKeyboardButton(text="Назад", callback_data="screen:S1")])
+        rows.append(
+            [InlineKeyboardButton(text="Обратная связь", callback_data="screen:S8")]
+        )
     else:
         rows.append(
             [InlineKeyboardButton(text="Заполнить данные", callback_data="profile:start")]
@@ -214,7 +230,8 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         rows.append(
             [InlineKeyboardButton(text="Продолжить", callback_data="profile:save")]
         )
-    rows.extend(_global_menu())
+    if not is_t0 or profile:
+        rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
