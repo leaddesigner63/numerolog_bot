@@ -7,6 +7,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
+    BigInteger,
     JSON,
     Numeric,
     String,
@@ -57,7 +58,7 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    telegram_user_id: Mapped[int] = mapped_column(Integer, unique=True, index=True)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow
     )
@@ -193,7 +194,7 @@ class QuestionnaireResponse(Base):
 class ScreenStateRecord(Base):
     __tablename__ = "screen_states"
 
-    telegram_user_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     screen_id: Mapped[str | None] = mapped_column(String(16))
     message_ids: Mapped[list[int] | None] = mapped_column(JSON)
     data: Mapped[dict | None] = mapped_column(JSON)
