@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 from app.core.llm_router import LLMResponse, LLMUnavailableError, llm_router
-from app.core.report_safety import report_safety
+from app.core.report_safety import FORBIDDEN_WORDS, report_safety
 from app.db.models import Order, OrderStatus, Report, ReportModel, Tariff
 from app.db.session import get_session
 
@@ -31,15 +32,14 @@ SYSTEM_PROMPT = """
 class ReportService:
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
+        forbidden_terms = [*FORBIDDEN_WORDS, "натальный", "натальные", "натальной", "натальных"]
+        self._facts_forbidden_regexes = [
+            re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
+            for term in forbidden_terms
+        ]
 
     async def generate_report(self, *, user_id: int, state: dict[str, Any]) -> LLMResponse | None:
-        facts_pack = {
-            "user_id": user_id,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "tariff": state.get("selected_tariff"),
-            "profile": state.get("profile"),
-            "questionnaire": state.get("questionnaire"),
-        }
+        facts_pack = self._build_facts_pack(user_id=user_id, state=state)
         prompt = SYSTEM_PROMPT
         attempts = 0
         safety_history: list[dict[str, Any]] = []
@@ -156,5 +156,48 @@ class ReportService:
         if provider == "openai":
             return ReportModel.CHATGPT
         return None
+
+    def _build_facts_pack(self, *, user_id: int, state: dict[str, Any]) -> dict[str, Any]:
+        profile = state.get("profile") or {}
+        questionnaire = state.get("questionnaire") or {}
+        facts_pack = {
+            "user_id": user_id,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "tariff": state.get("selected_tariff"),
+            "profile": {
+                "name": profile.get("name"),
+                "birth_date": profile.get("birth_date"),
+                "birth_time": profile.get("birth_time"),
+                "birth_place": {
+                    "city": (profile.get("birth_place") or {}).get("city"),
+                    "region": (profile.get("birth_place") or {}).get("region"),
+                    "country": (profile.get("birth_place") or {}).get("country"),
+                },
+            },
+            "questionnaire": {
+                "version": questionnaire.get("version"),
+                "status": questionnaire.get("status"),
+                "answers": questionnaire.get("answers") or {},
+            },
+        }
+        return self._sanitize_facts_pack(facts_pack)
+
+    def _sanitize_facts_pack(self, payload: Any) -> Any:
+        if payload is None:
+            return None
+        if isinstance(payload, str):
+            return self._sanitize_text(payload)
+        if isinstance(payload, dict):
+            return {key: self._sanitize_facts_pack(value) for key, value in payload.items()}
+        if isinstance(payload, list):
+            return [self._sanitize_facts_pack(value) for value in payload]
+        return payload
+
+    def _sanitize_text(self, text: str) -> str:
+        sanitized = text
+        for regex in self._facts_forbidden_regexes:
+            sanitized = regex.sub("удалено", sanitized)
+        sanitized = re.sub(r"\s{2,}", " ", sanitized).strip()
+        return sanitized
 
 report_service = ReportService()
