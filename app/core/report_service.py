@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any
 
+from app.bot.questionnaire.config import load_questionnaire_config
 from app.core.llm_router import LLMResponse, LLMUnavailableError, llm_router
 from app.core.report_safety import FORBIDDEN_WORDS, report_safety
 from app.db.models import Order, OrderStatus, Report, ReportModel, Tariff
@@ -164,6 +165,8 @@ class ReportService:
     def _build_facts_pack(self, *, user_id: int, state: dict[str, Any]) -> dict[str, Any]:
         profile = state.get("profile") or {}
         questionnaire = state.get("questionnaire") or {}
+        normalized_profile = self._normalize_profile(profile)
+        normalized_questionnaire = self._normalize_questionnaire(questionnaire)
         facts_pack = {
             "user_id": user_id,
             "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -182,6 +185,10 @@ class ReportService:
                 "version": questionnaire.get("version"),
                 "status": questionnaire.get("status"),
                 "answers": questionnaire.get("answers") or {},
+            },
+            "normalized": {
+                "profile": normalized_profile,
+                "questionnaire": normalized_questionnaire,
             },
         }
         return self._sanitize_facts_pack(facts_pack)
@@ -203,5 +210,55 @@ class ReportService:
             sanitized = regex.sub("удалено", sanitized)
         sanitized = re.sub(r"\s{2,}", " ", sanitized).strip()
         return sanitized
+
+    @staticmethod
+    def _normalize_profile(profile: dict[str, Any]) -> dict[str, Any]:
+        birth_place = profile.get("birth_place") or {}
+        return {
+            "name": (profile.get("name") or "").strip() or None,
+            "birth_date": profile.get("birth_date"),
+            "birth_time": profile.get("birth_time"),
+            "birth_place_city": (birth_place.get("city") or "").strip() or None,
+            "birth_place_region": (birth_place.get("region") or "").strip() or None,
+            "birth_place_country": (birth_place.get("country") or "").strip() or None,
+        }
+
+    def _normalize_questionnaire(self, questionnaire: dict[str, Any]) -> dict[str, Any]:
+        answers = questionnaire.get("answers") or {}
+        config = load_questionnaire_config()
+        normalized_answers: list[dict[str, Any]] = []
+        for question_id, question in config.questions.items():
+            if question_id not in answers:
+                continue
+            raw_answer = answers.get(question_id)
+            answer_label = None
+            if question.question_type == "choice":
+                answer_label = next(
+                    (
+                        option.get("label")
+                        for option in question.options
+                        if str(option.get("value")) == str(raw_answer)
+                    ),
+                    None,
+                )
+            elif question.question_type == "scale":
+                labels = (question.scale or {}).get("labels") or {}
+                answer_label = labels.get(str(raw_answer))
+            normalized_answers.append(
+                {
+                    "id": question_id,
+                    "type": question.question_type,
+                    "required": question.required,
+                    "question": question.text,
+                    "answer": raw_answer,
+                    "answer_label": answer_label,
+                }
+            )
+        return {
+            "version": questionnaire.get("version") or config.version,
+            "status": questionnaire.get("status"),
+            "answers": normalized_answers,
+            "answers_count": len(normalized_answers),
+        }
 
 report_service = ReportService()

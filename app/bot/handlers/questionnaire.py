@@ -230,10 +230,46 @@ def _upsert_progress(
 async def _send_question(
     *,
     message: Message,
-    question: QuestionnaireQuestion,
+    question: QuestionnaireQuestion | None,
 ) -> None:
+    if not question:
+        await message.answer(
+            "Не удалось загрузить вопрос анкеты. Попробуйте начать заново через «Заполнить анкету»."
+        )
+        return
     keyboard = _build_keyboard(question)
     await message.answer(question.text, reply_markup=keyboard)
+
+
+async def _restore_state_from_db(
+    *,
+    message: Message,
+    state: FSMContext,
+    config_version: str,
+    fallback_question_id: str | None,
+) -> dict[str, Any]:
+    with get_session() as session:
+        user = _get_or_create_user(session, message.from_user.id)
+        response = session.execute(
+            select(QuestionnaireResponse).where(
+                QuestionnaireResponse.user_id == user.id,
+                QuestionnaireResponse.questionnaire_version == config_version,
+            )
+        ).scalar_one_or_none()
+    if response:
+        current_question_id = response.current_question_id or fallback_question_id
+        answers = response.answers or {}
+        await state.set_state(QuestionnaireStates.answering)
+        await state.update_data(
+            questionnaire_version=config_version,
+            current_question_id=current_question_id,
+            answers=answers,
+        )
+        return {
+            "current_question_id": current_question_id,
+            "answers": answers,
+        }
+    return {}
 
 
 @router.callback_query(F.data == "questionnaire:start")
@@ -283,7 +319,10 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
         current_question_id=current_question_id,
         answers=answers,
     )
-    await _send_question(message=callback.message, question=config.get_question(current_question_id))
+    await _send_question(
+        message=callback.message,
+        question=config.get_question(current_question_id),
+    )
     _update_screen_state(callback.from_user.id, response)
     await callback.answer()
 
@@ -315,7 +354,10 @@ async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> N
         current_question_id=config.start_question_id,
         answers={},
     )
-    await _send_question(message=callback.message, question=config.get_question(config.start_question_id))
+    await _send_question(
+        message=callback.message,
+        question=config.get_question(config.start_question_id),
+    )
     _update_screen_state(callback.from_user.id, response)
     await callback.answer()
 
@@ -353,6 +395,15 @@ async def _handle_answer(
     config = load_questionnaire_config()
     data = await state.get_data()
     current_question_id = data.get("current_question_id")
+    if not current_question_id:
+        restored = await _restore_state_from_db(
+            message=message,
+            state=state,
+            config_version=config.version,
+            fallback_question_id=config.start_question_id,
+        )
+        current_question_id = restored.get("current_question_id")
+        data = {**data, **restored}
     if question_id and question_id != current_question_id:
         await message.answer("Этот вопрос уже не актуален. Пожалуйста, продолжите текущий шаг.")
         return
@@ -361,6 +412,11 @@ async def _handle_answer(
         return
 
     question = config.get_question(current_question_id)
+    if not question:
+        await message.answer(
+            "Не удалось найти текущий вопрос анкеты. Попробуйте начать заполнение заново."
+        )
+        return
     is_valid, normalized, error = _validate_answer(question, answer)
     if not is_valid:
         await message.answer(error or "Некорректный ответ.")
@@ -372,6 +428,8 @@ async def _handle_answer(
 
     completed_at = None
     status = QuestionnaireStatus.IN_PROGRESS
+    if next_question_id and next_question_id not in config.questions:
+        next_question_id = None
     if next_question_id is None:
         status = QuestionnaireStatus.COMPLETED
         completed_at = datetime.now(timezone.utc)
