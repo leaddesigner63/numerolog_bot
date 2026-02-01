@@ -371,10 +371,7 @@ def screen_s9(state: dict[str, Any]) -> ScreenContent:
             f"Следующий доступен: {next_available}."
         ),
     )
-    rows = [
-        [InlineKeyboardButton(text="Тарифы", callback_data="screen:S1")],
-        *(_global_menu()),
-    ]
+    rows = _global_menu()
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
