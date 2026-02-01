@@ -14,7 +14,7 @@ from app.bot.questionnaire.config import (
     load_questionnaire_config,
     resolve_next_question_id,
 )
-from app.bot.screen_manager import screen_manager
+from app.bot.handlers.screen_manager import screen_manager
 from app.db.models import QuestionnaireResponse, QuestionnaireStatus, User
 from app.db.session import get_session
 

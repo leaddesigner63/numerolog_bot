@@ -89,7 +89,7 @@ class ScreenManager:
         for message_id in list(state.message_ids):
             try:
                 await bot.delete_message(chat_id=chat_id, message_id=message_id)
-            except (TelegramBadRequest, TelegramForbiddenError) as exc:
+            except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
                 delete_failed = True
                 self._logger.info(
                     "screen_cleanup_failed",
@@ -132,7 +132,7 @@ class ScreenManager:
                 text=content.messages[0],
                 reply_markup=content.keyboard,
             )
-        except (TelegramBadRequest, TelegramForbiddenError) as exc:
+        except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
             self._logger.info(
                 "screen_edit_failed",
                 extra={

@@ -4,7 +4,7 @@ from aiogram import F, Router
 from aiogram.filters import BaseFilter
 from aiogram.types import Message
 
-from app.bot.screen_manager import screen_manager
+from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
 
 

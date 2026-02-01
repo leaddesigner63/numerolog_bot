@@ -2,7 +2,7 @@ from aiogram import Router
 from aiogram.filters import Command
 from aiogram.types import Message
 
-from app.bot.screen_manager import screen_manager
+from app.bot.handlers.screen_manager import screen_manager
 
 router = Router()
 

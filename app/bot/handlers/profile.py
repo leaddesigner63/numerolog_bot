@@ -11,7 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import select
 
-from app.bot.screen_manager import screen_manager
+from app.bot.handlers.screen_manager import screen_manager
 from app.db.models import User, UserProfile
 from app.db.session import get_session
 

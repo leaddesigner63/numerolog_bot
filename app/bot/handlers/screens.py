@@ -8,7 +8,7 @@ from aiogram.types import BufferedInputFile, CallbackQuery
 from sqlalchemy import select
 
 from app.bot.questionnaire.config import load_questionnaire_config
-from app.bot.screen_manager import screen_manager
+from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
 from app.core.pdf_service import pdf_service
 from app.core.report_service import report_service
