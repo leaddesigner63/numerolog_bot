@@ -85,7 +85,11 @@ def screen_s1(_: dict[str, Any]) -> ScreenContent:
         ],
         [
             InlineKeyboardButton(text="В чем твоя сила?", callback_data="tariff:T1"),
+        ],
+        [
             InlineKeyboardButton(text="Где твои деньги?", callback_data="tariff:T2"),
+        ],
+        [
             InlineKeyboardButton(text="Твой путь к себе!", callback_data="tariff:T3"),
         ],
     ]
