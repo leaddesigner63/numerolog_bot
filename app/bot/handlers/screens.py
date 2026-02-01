@@ -41,6 +41,8 @@ TARIFF_PRICES = {
     Tariff.T3: 5930,
 }
 
+PAID_TARIFFS = {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}
+
 
 def _get_payment_provider() -> PaymentProviderEnum:
     provider = settings.payment_provider.lower()
@@ -206,8 +208,65 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         if screen_id == "S4":
             with get_session() as session:
                 _refresh_profile_state(session, callback.from_user.id)
+                state_snapshot = screen_manager.update_state(callback.from_user.id)
+                order_id = state_snapshot.data.get("order_id")
+                if order_id:
+                    order = session.get(Order, int(order_id))
+                    if order:
+                        screen_manager.update_state(
+                            callback.from_user.id, **_refresh_order_state(order)
+                        )
+        if screen_id == "S3":
+            state_snapshot = screen_manager.update_state(callback.from_user.id)
+            if not state_snapshot.data.get("order_id") and state_snapshot.data.get(
+                "selected_tariff"
+            ) in PAID_TARIFFS:
+                await callback.message.answer(
+                    "Сначала выберите тариф и создайте заказ."
+                )
+                await screen_manager.show_screen(
+                    bot=callback.bot,
+                    chat_id=callback.message.chat.id,
+                    user_id=callback.from_user.id,
+                    screen_id="S1",
+                )
+                await callback.answer()
+                return
         if screen_id == "S5":
+            state_snapshot = screen_manager.update_state(callback.from_user.id)
+            selected_tariff = state_snapshot.data.get("selected_tariff")
+            if selected_tariff not in {Tariff.T2.value, Tariff.T3.value}:
+                await callback.message.answer(
+                    "Анкета доступна только для тарифов T2 и T3."
+                )
+                await screen_manager.show_screen(
+                    bot=callback.bot,
+                    chat_id=callback.message.chat.id,
+                    user_id=callback.from_user.id,
+                    screen_id="S1",
+                )
+                await callback.answer()
+                return
             with get_session() as session:
+                order_id = state_snapshot.data.get("order_id")
+                if order_id:
+                    order = session.get(Order, int(order_id))
+                    if order:
+                        screen_manager.update_state(
+                            callback.from_user.id, **_refresh_order_state(order)
+                        )
+                    if not order or order.status != OrderStatus.PAID:
+                        await callback.message.answer(
+                            "Сначала подтвердите оплату, чтобы перейти к анкете."
+                        )
+                        await screen_manager.show_screen(
+                            bot=callback.bot,
+                            chat_id=callback.message.chat.id,
+                            user_id=callback.from_user.id,
+                            screen_id="S3",
+                        )
+                        await callback.answer()
+                        return
                 _refresh_questionnaire_state(session, callback.from_user.id)
         if screen_id == "S7":
             state = screen_manager.update_state(callback.from_user.id)

@@ -139,12 +139,18 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
             "к осмыслению своих возможностей?)"
         ),
     )
-    rows = [
+    rows: list[list[InlineKeyboardButton]] = []
+    rows.append([_refunds_button()])
+    offer_button = _offer_button()
+    if offer_button:
+        rows.append([offer_button])
+    rows.append(
         [
-            InlineKeyboardButton(text="Назад", callback_data="screen:S1"),
+            InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1"),
             InlineKeyboardButton(text="Приступаем!🤩", callback_data="screen:S3"),
-        ],
-    ]
+        ]
+    )
+    rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
@@ -163,14 +169,14 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             f"Статус: {order_status}. "
             f"Сумма: {order_amount} {order_currency}."
         )
-    text = _with_screen_prefix(
-        "S3",
-        (
-            f"Оплата тарифа {selected_tariff}.\n\n"
-            "Оплачивая, вы подтверждаете согласие с офертой. Возвратов нет."
-            f"{order_block}"
-        ),
-    )
+    text_parts = [
+        f"Оплата тарифа {selected_tariff}.\n\n"
+        "Оплачивая, вы подтверждаете согласие с офертой. Возвратов нет."
+        f"{order_block}"
+    ]
+    if not payment_url:
+        text_parts.append("\n\nПлатёжная ссылка пока недоступна. Проверьте настройки провайдера.")
+    text = _with_screen_prefix("S3", "".join(text_parts))
     offer_button = _offer_button()
     if not offer_button:
         text += "\n\nСсылка на оферту пока не настроена."
@@ -206,11 +212,14 @@ def _format_birth_place(place: dict[str, Any] | None) -> str:
 
 
 def screen_s4(state: dict[str, Any]) -> ScreenContent:
-    selected_tariff = _format_tariff_label(state.get("selected_tariff", "T0"))
+    selected_tariff_raw = state.get("selected_tariff", "T0")
+    selected_tariff = _format_tariff_label(selected_tariff_raw)
     profile = state.get("profile") or {}
     birth_place = _format_birth_place(profile.get("birth_place"))
     birth_time = profile.get("birth_time") or "не указано"
     profile_flow = state.get("profile_flow")
+    order_status = (state.get("order_status") or "").lower()
+    requires_payment = selected_tariff_raw in {"T1", "T2", "T3"} and order_status != "paid"
     is_t0 = selected_tariff == "Т0"
     if profile:
         text = _with_screen_prefix(
@@ -259,11 +268,14 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         rows.append(
             [InlineKeyboardButton(text="Обратная связь", callback_data="screen:S8")]
         )
+    elif requires_payment:
+        rows.append([InlineKeyboardButton(text="К оплате", callback_data="screen:S3")])
+        rows.append([InlineKeyboardButton(text="Тарифы", callback_data="screen:S1")])
     else:
         rows.append(
             [InlineKeyboardButton(text="Заполнить данные", callback_data="profile:start")]
         )
-    if profile_flow and profile:
+    if profile_flow and profile and not requires_payment:
         rows.append(
             [InlineKeyboardButton(text="Продолжить", callback_data="profile:save")]
         )
