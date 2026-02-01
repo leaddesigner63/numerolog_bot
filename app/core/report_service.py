@@ -29,6 +29,14 @@ SYSTEM_PROMPT = """
 - «Сервис не гарантирует финансовых или иных результатов»
 """.strip()
 
+REPORT_FRAMEWORK_TEMPLATE = """
+Единый каркас отчёта (используй разделы строго по тарифу):
+- T0: витрина структуры, краткое резюме (5–7 пунктов), сильные стороны, зоны роста, ориентиры по сферам, короткая нейтральная ретроспектива (2–3 предложения), дисклеймеры.
+- T1: полный краткий отчёт с теми же секциями, но без сокращений.
+- T2: всё из T1 + блок «Фокус на деньги» (2–4 сценария с логикой, навыками, форматом дохода без обещаний, рисками, способом проверки за 2–4 недели).
+- T3: всё из T2 + план действий (1 месяц по неделям, 1 год по месяцам) + блок «Энергия/отношения» без медицины.
+""".strip()
+
 
 class ReportService:
     def __init__(self) -> None:
@@ -41,10 +49,12 @@ class ReportService:
 
     async def generate_report(self, *, user_id: int, state: dict[str, Any]) -> LLMResponse | None:
         facts_pack = self._build_facts_pack(user_id=user_id, state=state)
-        prompt = SYSTEM_PROMPT
+        base_prompt = self._build_system_prompt(state)
+        prompt = base_prompt
         attempts = 0
         safety_history: list[dict[str, Any]] = []
         last_response: LLMResponse | None = None
+        evaluation = None
 
         while True:
             try:
@@ -64,9 +74,9 @@ class ReportService:
                 break
 
             attempts += 1
-            prompt = report_safety.build_retry_prompt(SYSTEM_PROMPT, evaluation)
+            prompt = report_safety.build_retry_prompt(base_prompt, evaluation)
 
-        if last_response and evaluation.is_safe:
+        if last_response and evaluation and evaluation.is_safe:
             safety_flags = report_safety.build_flags(
                 attempts=attempts,
                 history=safety_history,
@@ -81,7 +91,28 @@ class ReportService:
             )
             return last_response
 
-        if last_response:
+        if last_response and evaluation:
+            if evaluation.red_zones:
+                safety_flags = report_safety.build_flags(
+                    attempts=attempts,
+                    history=safety_history,
+                    provider=last_response.provider,
+                    model=last_response.model,
+                    safe_refusal=True,
+                )
+                safe_response = LLMResponse(
+                    text=report_safety.build_safe_refusal(),
+                    provider="safety_filter",
+                    model="safe_refusal",
+                )
+                self._persist_report(
+                    user_id=user_id,
+                    state=state,
+                    response=safe_response,
+                    safety_flags=safety_flags,
+                    force_store=True,
+                )
+                return safe_response
             self._logger.warning(
                 "report_safety_failed",
                 extra={"user_id": user_id, "attempts": attempts},
@@ -100,6 +131,23 @@ class ReportService:
                 force_store=True,
             )
         return None
+
+    def _build_system_prompt(self, state: dict[str, Any]) -> str:
+        tariff_value = state.get("selected_tariff")
+        tariff_label = None
+        if tariff_value:
+            try:
+                tariff_label = Tariff(tariff_value).value
+            except ValueError:
+                tariff_label = None
+        tariff_label = tariff_label or Tariff.T1.value
+        return (
+            f"{SYSTEM_PROMPT}\n\n"
+            f"Текущий тариф: {tariff_label}.\n"
+            f"{REPORT_FRAMEWORK_TEMPLATE}\n"
+            "Сформируй отчёт только для указанного тарифа, "
+            "используй чёткие заголовки и списки."
+        )
 
     def _persist_report(
         self,
