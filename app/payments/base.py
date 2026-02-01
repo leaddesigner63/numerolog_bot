@@ -29,3 +29,7 @@ class PaymentProvider(abc.ABC):
     @abc.abstractmethod
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str]) -> WebhookResult:
         raise NotImplementedError
+
+    @abc.abstractmethod
+    def check_payment_status(self, order: Order) -> WebhookResult | None:
+        raise NotImplementedError

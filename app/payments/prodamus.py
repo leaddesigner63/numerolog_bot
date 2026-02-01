@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 from urllib.parse import urlencode
 
+import httpx
+
 from app.core.config import Settings
 from app.db.models import Order, PaymentProvider as PaymentProviderEnum, User
 from app.payments.base import PaymentLink, PaymentProvider, WebhookResult
@@ -56,6 +58,29 @@ class ProdamusProvider(PaymentProvider):
             is_paid=_is_paid_status(webhook.status),
         )
 
+    def check_payment_status(self, order: Order) -> WebhookResult | None:
+        status_url = self._settings.prodamus_status_url
+        secret = self._settings.prodamus_secret
+        if not status_url or not secret:
+            return None
+        payload = {"order_id": str(order.id), "secret": secret}
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(status_url, json=payload)
+                response.raise_for_status()
+        except httpx.RequestError:
+            return None
+        except httpx.HTTPStatusError:
+            return None
+        data = _safe_json(response)
+        status = _extract_status_value(data)
+        payment_id = _extract_payment_id_value(data)
+        return WebhookResult(
+            order_id=order.id,
+            provider_payment_id=payment_id,
+            is_paid=_is_paid_status(status),
+        )
+
 
 def _find_signature(headers: Mapping[str, str], raw_body: bytes) -> str | None:
     lowered = {key.lower(): value for key, value in headers.items()}
@@ -96,3 +121,39 @@ def _is_paid_status(status: str | None) -> bool:
     if not status:
         return False
     return status.lower() in {"paid", "success", "succeeded", "completed"}
+
+
+def _safe_json(response: httpx.Response) -> dict[str, Any]:
+    try:
+        data = response.json()
+    except json.JSONDecodeError:
+        return {}
+    if isinstance(data, dict):
+        return data
+    return {}
+
+
+def _extract_status_value(payload: Mapping[str, Any]) -> str | None:
+    for key in ("status", "payment_status"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            return value
+    result = payload.get("result")
+    if isinstance(result, dict):
+        value = result.get("status")
+        if isinstance(value, str):
+            return value
+    return None
+
+
+def _extract_payment_id_value(payload: Mapping[str, Any]) -> str | None:
+    for key in ("payment_id", "transaction_id"):
+        value = payload.get(key)
+        if isinstance(value, str):
+            return value
+    result = payload.get("result")
+    if isinstance(result, dict):
+        value = result.get("payment_id") or result.get("transaction_id")
+        if isinstance(value, str):
+            return value
+    return None

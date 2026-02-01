@@ -223,6 +223,8 @@ sudo systemctl restart numerolog.target
 - Поддерживаются типы вопросов: `text`, `choice`, `scale`, обязательность и переходы по логике.
 - Ответы сохраняются по мере ввода и используются при формировании facts-pack для LLM.
 - Webhook оплаты принимает запросы на `/webhooks/payments` и проверяет подпись провайдера.
+- Кнопка “Я оплатил(а)” запрашивает статус у платёжного провайдера и переводит на ввод данных
+  только после подтверждения оплаты.
 - Генерация отчётов использует LLM-маршрутизатор: Gemini (основной) с ограниченными ретраями, fallback на ChatGPT API.
 - Если недоступны оба провайдера, бот показывает экран “Сервис временно недоступен”.
 
@@ -248,7 +250,8 @@ sudo systemctl restart numerolog.target
 - `GEMINI_API_KEY`, `GEMINI_MODEL`
 - `OPENAI_API_KEY`, `OPENAI_MODEL`
 - `PAYMENT_PROVIDER`, `PRODAMUS_FORM_URL`, `PRODAMUS_SECRET`, `PRODAMUS_WEBHOOK_SECRET`,
-  `CLOUDPAYMENTS_PUBLIC_ID`, `CLOUDPAYMENTS_API_SECRET`, `PAYMENT_WEBHOOK_URL`
+  `PRODAMUS_STATUS_URL`, `CLOUDPAYMENTS_PUBLIC_ID`, `CLOUDPAYMENTS_API_SECRET`,
+  `PAYMENT_WEBHOOK_URL`
 - `FREE_T0_COOLDOWN_HOURS`
 - `DATABASE_URL`, `PDF_STORAGE_BUCKET`, `PDF_STORAGE_KEY`
 - `PDF_FONT_PATH` (путь к TTF-шрифту для PDF, например DejaVuSans)
