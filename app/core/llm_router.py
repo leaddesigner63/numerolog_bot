@@ -40,6 +40,7 @@ class LLMUnavailableError(RuntimeError):
 class LLMRouter:
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
+        self._fallback_statuses = {401, 403, 429}
 
     def generate(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
         try:
@@ -101,6 +102,7 @@ class LLMRouter:
             json_payload=payload,
             max_retries=2,
             retry_statuses={500, 502, 503, 504},
+            fallback_statuses=self._fallback_statuses,
         )
 
         text = self._extract_gemini_text(data)
@@ -131,6 +133,7 @@ class LLMRouter:
             json_payload=payload,
             max_retries=1,
             retry_statuses={500, 502, 503, 504},
+            fallback_statuses=self._fallback_statuses,
         )
 
         text = self._extract_openai_text(data)
@@ -145,6 +148,7 @@ class LLMRouter:
         json_payload: dict[str, Any],
         max_retries: int,
         retry_statuses: set[int],
+        fallback_statuses: set[int],
         headers: dict[str, str] | None = None,
         params: dict[str, str] | None = None,
     ) -> dict[str, Any]:
@@ -179,7 +183,7 @@ class LLMRouter:
                     self._sleep_backoff(attempts)
                     continue
                 retryable = status in retry_statuses or status >= 500
-                fallback = status in {401, 403, 429} or status >= 500
+                fallback = status in fallback_statuses or status >= 500
                 if fallback:
                     raise LLMProviderError(
                         f"LLM provider returned status {status}",
@@ -193,6 +197,10 @@ class LLMRouter:
                     retryable=False,
                 ) from exc
             except httpx.RequestError as exc:
+                attempts += 1
+                if attempts <= max_retries:
+                    self._sleep_backoff(attempts)
+                    continue
                 raise LLMProviderError(
                     "LLM request failed",
                     retryable=True,

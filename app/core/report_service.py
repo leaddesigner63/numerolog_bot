@@ -32,7 +32,7 @@ SYSTEM_PROMPT = """
 class ReportService:
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
-        forbidden_terms = [*FORBIDDEN_WORDS, "натальный", "натальные", "натальной", "натальных"]
+        forbidden_terms = sorted(set(FORBIDDEN_WORDS))
         self._facts_forbidden_regexes = [
             re.compile(rf"\b{re.escape(term)}\b", re.IGNORECASE)
             for term in forbidden_terms
@@ -81,6 +81,10 @@ class ReportService:
             return last_response
 
         if last_response:
+            self._logger.warning(
+                "report_safety_failed",
+                extra={"user_id": user_id, "attempts": attempts},
+            )
             safety_flags = report_safety.build_flags(
                 attempts=attempts,
                 history=safety_history,
