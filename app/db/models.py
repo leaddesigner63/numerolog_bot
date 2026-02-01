@@ -17,6 +17,12 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
+if not hasattr(enum, "StrEnum"):
+    class StrEnum(str, enum.Enum):
+        pass
+
+    enum.StrEnum = StrEnum
+
 
 class Tariff(enum.StrEnum):
     T0 = "T0"
