@@ -158,22 +158,22 @@ def screen_s0(_: dict[str, Any]) -> ScreenContent:
 def screen_s1(_: dict[str, Any]) -> ScreenContent:
     text = _with_screen_prefix(
         "S1",
-        "Выберите тариф. После выбора платного тарифа вы увидите описание и сможете перейти к оплате."
+        "В бесплатном превью-отчёте ты увидишь, на что он обратил внимание в первую очередь: ключевые сильные стороны, возможные зоны роста и формат полного анализа. Коротко и по делу. Начни с малого — дальше решать тебе. Краткий мини отчёт (~30 % полного): несколько сильных сторон, возможные зоны роста и аккуратная ретроспектива, чтобы оценить подход. Кстати, это честный бесплатный доступ, поэтому можно всего раз в месяц."
     )
     rows = [
         [
             InlineKeyboardButton(
-                text="T0 — Бесплатно (превью)", callback_data="tariff:T0"
+                text="Твое новое начало (Бесплатно)", callback_data="tariff:T0"
             ),
         ],
         [
-            InlineKeyboardButton(text="T1 — 560 ₽ (краткий отчёт)", callback_data="tariff:T1"),
+            InlineKeyboardButton(text="В чем твоя сила?", callback_data="tariff:T1"),
         ],
         [
-            InlineKeyboardButton(text="T2 — 2190 ₽ (фокус на деньги)", callback_data="tariff:T2"),
+            InlineKeyboardButton(text="Где твои деньги?", callback_data="tariff:T2"),
         ],
         [
-            InlineKeyboardButton(text="T3 — 5930 ₽ (план действий)", callback_data="tariff:T3"),
+            InlineKeyboardButton(text="Твой путь к себе!", callback_data="tariff:T3"),
         ],
     ]
     keyboard = _build_keyboard(rows)
