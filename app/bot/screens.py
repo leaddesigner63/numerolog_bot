@@ -145,15 +145,11 @@ def _format_price(state: dict[str, Any], tariff: str) -> str:
 def screen_s0(_: dict[str, Any]) -> ScreenContent:
     text = _with_screen_prefix(
         "S0",
-        "Бот помогает собрать аналитический отчёт на основе ваших данных в нейтральной лексике: "
-        "сильные стороны, зоны роста, рабочие гипотезы и варианты сценариев без обещаний результата. "
-        "Можно начать с бесплатного превью или выбрать платный тариф для более подробного отчёта. "
-        "Готовый текст можно сохранить в PDF."
+        "Бот уже готов разобрать твои данные и показать, в чём твоя сила. В бесплатном превью ты увидишь несколько своих сильных сторон, возможные зоны роста и структуру полного отчёта. Без мистики и обещаний — только факты и гипотезы. Хочешь больше конкретики? Жми «Далее»  и получи подробный анализ, сценарии и план. Отчёт можно сохранить в PDF. Хочешь начать с малого или сразу перейди к глубине — решать тебе."
     )
     rows = [
-        [InlineKeyboardButton(text="Тарифы", callback_data="screen:S1")],
-        [InlineKeyboardButton(text="Оферта", callback_data="screen:S2")],
-        [InlineKeyboardButton(text="Обратная связь", callback_data="screen:S8")],
+        [InlineKeyboardButton(text="Далее", callback_data="screen:S1")],
+        
     ]
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
