@@ -129,6 +129,22 @@ tmux attach -t numerolog_bot
 - webhook-валидация провайдеров,
 - повторная выдача PDF.
 
+## Оплата и вебхуки
+
+1. Выберите провайдера через `PAYMENT_PROVIDER` (`prodamus` или `cloudpayments`).
+2. Для генерации платёжной ссылки нужны:
+   - Prodamus: `PRODAMUS_FORM_URL`
+   - CloudPayments: `CLOUDPAYMENTS_PUBLIC_ID`
+3. Для проверки статуса оплаты (кнопка «Я оплатил(а)») нужны:
+   - Prodamus: `PRODAMUS_STATUS_URL`, `PRODAMUS_SECRET`
+   - CloudPayments: `CLOUDPAYMENTS_PUBLIC_ID`, `CLOUDPAYMENTS_API_SECRET`
+4. Для webhooks обязательно задайте секрет:
+   - Prodamus: `PRODAMUS_WEBHOOK_SECRET`
+   - CloudPayments: `CLOUDPAYMENTS_API_SECRET`
+5. Укажите `PAYMENT_WEBHOOK_URL` внешним HTTPS-адресом вида
+   `https://api.example.com/webhooks/payments` и настройте его в личном кабинете провайдера.
+6. Webhook обновляет `orders.status` до `paid`, сохраняет `provider_payment_id` и `paid_at`.
+
 ## Запуск через systemd
 
 `systemd` обеспечивает запуск **ровно одного экземпляра** сервиса (API и бота) и автоматический рестарт при сбоях.
@@ -238,6 +254,11 @@ sudo systemctl restart numerolog.target
 - После успешной генерации отчёт сохраняется в таблице `reports`, а при повторном просмотре экрана S7 текст подтягивается из БД.
 - После генерации отчёта выполняется фильтрация: запрещённые слова/паттерны “гарантий/предсказаний” вызывают регенерацию (до 2 попыток), а при невозможности получить безопасный текст показывается экран S10.
 - Информация о фильтрации записывается в `reports.safety_flags`.
+
+## Автодеплой
+
+Пошаговая инструкция по настройке автодеплоя через GitHub Actions и SSH находится в
+[`AUTODEPLOY_INSTRUCTIONS.md`](AUTODEPLOY_INSTRUCTIONS.md).
 - Запросы к LLM идут в Gemini как к основному провайдеру, при ошибках 401/403/429/5xx/timeout выполняется fallback на ChatGPT с ограниченными ретраями (до 2 на Gemini и до 1 на ChatGPT).
 - Кнопка “Выгрузить PDF” генерирует PDF один раз и сохраняет ключ в `reports.pdf_storage_key`. Повторные скачивания используют сохранённый файл.
 - Telegram ID пользователя хранится в `users.telegram_user_id` и `screen_states.telegram_user_id` как `BIGINT`, чтобы корректно обрабатывать большие значения.

@@ -139,7 +139,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
     order_status = state.get("order_status")
     order_amount = state.get("order_amount")
     order_currency = state.get("order_currency", "RUB")
-    payment_url = state.get("payment_url") or settings.prodamus_form_url
+    payment_url = state.get("payment_url")
     order_block = ""
     if order_id and order_status:
         order_block = (
