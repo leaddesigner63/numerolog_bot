@@ -79,14 +79,15 @@ def screen_s1(_: dict[str, Any]) -> ScreenContent:
     )
     rows = [
         [
-            InlineKeyboardButton(text="Получить Т0", callback_data="tariff:T0"),
+            InlineKeyboardButton(
+                text="Твое новое начало(Бесплатно)", callback_data="tariff:T0"
+            ),
         ],
         [
-            InlineKeyboardButton(text="Выбрать T1", callback_data="tariff:T1"),
-            InlineKeyboardButton(text="Выбрать T2", callback_data="tariff:T2"),
-            InlineKeyboardButton(text="Выбрать T3", callback_data="tariff:T3"),
+            InlineKeyboardButton(text="В чем твоя сила?", callback_data="tariff:T1"),
+            InlineKeyboardButton(text="Где твои деньги?", callback_data="tariff:T2"),
+            InlineKeyboardButton(text="Твой путь к себе!", callback_data="tariff:T3"),
         ],
-        *_global_menu(),
     ]
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
