@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.bot.router import setup_bot_router
 from app.core.config import settings
@@ -12,7 +13,7 @@ async def main() -> None:
     setup_logging(settings.log_level)
     logger = logging.getLogger(__name__)
     bot = Bot(token=settings.bot_token)
-    dispatcher = Dispatcher()
+    dispatcher = Dispatcher(storage=MemoryStorage())
     setup_bot_router(dispatcher)
 
     logger.info("Starting bot polling")

@@ -9,7 +9,15 @@ from sqlalchemy import select
 from app.bot.screen_manager import screen_manager
 from app.core.config import settings
 from app.core.report_service import report_service
-from app.db.models import FreeLimit, Order, OrderStatus, PaymentProvider as PaymentProviderEnum, Tariff, User
+from app.db.models import (
+    FreeLimit,
+    Order,
+    OrderStatus,
+    PaymentProvider as PaymentProviderEnum,
+    Tariff,
+    User,
+    UserProfile,
+)
 from app.db.session import get_session
 from app.payments import get_payment_provider
 
@@ -48,6 +56,33 @@ def _get_or_create_user(session, telegram_user_id: int) -> User:
     return user
 
 
+def _profile_payload(profile: UserProfile | None) -> dict[str, dict[str, str | None] | None]:
+    if not profile:
+        return {"profile": None}
+    return {
+        "profile": {
+            "name": profile.name,
+            "birth_date": profile.birth_date.isoformat(),
+            "birth_time": profile.birth_time,
+            "birth_place": {
+                "city": profile.birth_place_city,
+                "region": profile.birth_place_region,
+                "country": profile.birth_place_country,
+            },
+        }
+    }
+
+
+def _refresh_profile_state(session, telegram_user_id: int) -> None:
+    user = _get_or_create_user(session, telegram_user_id)
+    screen_manager.update_state(telegram_user_id, **_profile_payload(user.profile))
+
+
+def _ensure_profile_state(telegram_user_id: int) -> None:
+    with get_session() as session:
+        _refresh_profile_state(session, telegram_user_id)
+
+
 def _create_order(session, user: User, tariff: Tariff) -> Order:
     order = Order(
         user_id=user.id,
@@ -79,6 +114,9 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
 
     if callback.data.startswith("screen:"):
         screen_id = callback.data.split("screen:")[-1]
+        if screen_id == "S4":
+            with get_session() as session:
+                _refresh_profile_state(session, callback.from_user.id)
         await screen_manager.show_screen(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
@@ -111,6 +149,7 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
                     )
                     await callback.answer()
                     return
+                _refresh_profile_state(session, callback.from_user.id)
         else:
             with get_session() as session:
                 user = _get_or_create_user(session, callback.from_user.id)
@@ -124,7 +163,11 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
                     **_refresh_order_state(order),
                 )
 
-        screen_manager.update_state(callback.from_user.id, selected_tariff=tariff)
+        screen_manager.update_state(
+            callback.from_user.id,
+            selected_tariff=tariff,
+            profile_flow="report" if tariff == Tariff.T0.value else None,
+        )
         next_screen = "S4" if tariff == Tariff.T0.value else "S2"
         await screen_manager.show_screen(
             bot=callback.bot,
@@ -161,6 +204,8 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
                 await callback.answer()
                 return
             screen_manager.update_state(callback.from_user.id, **_refresh_order_state(order))
+            _refresh_profile_state(session, callback.from_user.id)
+            screen_manager.update_state(callback.from_user.id, profile_flow="report")
         await screen_manager.show_screen(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
@@ -171,7 +216,12 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
         return
 
     if callback.data == "profile:save":
+        _ensure_profile_state(callback.from_user.id)
         state = screen_manager.update_state(callback.from_user.id)
+        if not state.data.get("profile"):
+            await callback.message.answer("Сначала заполните «Мои данные».")
+            await callback.answer()
+            return
         tariff = state.data.get("selected_tariff")
         if tariff in {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}:
             order_id = state.data.get("order_id")
@@ -202,6 +252,7 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
                 user = _get_or_create_user(session, callback.from_user.id)
                 if user.free_limit:
                     user.free_limit.last_t0_at = datetime.utcnow()
+        screen_manager.update_state(callback.from_user.id, profile_flow=None)
         next_screen = "S5" if tariff in {Tariff.T2.value, Tariff.T3.value} else "S6"
         if next_screen == "S6":
             await screen_manager.show_screen(
