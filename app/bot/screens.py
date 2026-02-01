@@ -66,7 +66,9 @@ def screen_s0(_: dict[str, Any]) -> ScreenContent:
         "Отчёт можно сохранить в PDF. Хочешь начать с малого или сразу перейди к глубине — "
         "решать тебе."
     )
-    keyboard = _build_keyboard(_global_menu())
+    keyboard = _build_keyboard(
+        [[InlineKeyboardButton(text="Тарифы", callback_data="screen:S1")]],
+    )
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
