@@ -371,8 +371,7 @@ def screen_s9(state: dict[str, Any]) -> ScreenContent:
             f"Следующий доступен: {next_available}."
         ),
     )
-    rows = _global_menu()
-    keyboard = _build_keyboard(rows)
+    keyboard = screen_s4(state).keyboard
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
