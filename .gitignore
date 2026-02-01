@@ -1,0 +1,14 @@
+.DS_Store
+.env
+.env.*
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.db
+*.sqlite3
+storage/
+logs/
+app/assets/fonts/*.ttf

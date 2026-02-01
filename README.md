@@ -15,6 +15,7 @@ app/
     questionnaire/    # конфиг и вспомогательные модули анкеты
   core/               # конфигурация и общие утилиты
     llm_router.py     # LLM-маршрутизатор (Gemini -> ChatGPT)
+    pdf_service.py    # генерация PDF и слой хранения (bucket/local)
     report_safety.py  # фильтрация запрещённых слов и паттернов
     report_service.py # сервис генерации отчёта
   db/                 # модели и подключение к БД
@@ -205,6 +206,14 @@ sudo systemctl restart numerolog.target
 - После успешной генерации отчёт сохраняется в таблице `reports`, а при повторном просмотре экрана S7 текст подтягивается из БД.
 - После генерации отчёта выполняется фильтрация: запрещённые слова/паттерны “гарантий/предсказаний” вызывают регенерацию (до 2 попыток), а при невозможности получить безопасный текст показывается экран S10.
 - Информация о фильтрации записывается в `reports.safety_flags`.
+- Кнопка “Выгрузить PDF” генерирует PDF один раз и сохраняет ключ в `reports.pdf_storage_key`. Повторные скачивания используют сохранённый файл.
+
+## PDF-хранение
+
+- По умолчанию PDF сохраняются локально в каталог `storage/pdfs` (или другой путь, заданный через `PDF_STORAGE_KEY`).
+- Если указать `PDF_STORAGE_BUCKET`, файлы сохраняются в S3-совместимом бакете. `PDF_STORAGE_KEY` используется как префикс ключа.
+- Для bucket-хранилища задайте переменные `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` и при необходимости `AWS_ENDPOINT_URL`.
+- Для корректной кириллицы задайте `PDF_FONT_PATH` (например, `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`).
 
 ## Анкета T2/T3
 
@@ -240,6 +249,8 @@ sudo systemctl restart numerolog.target
   `CLOUDPAYMENTS_PUBLIC_ID`, `CLOUDPAYMENTS_API_SECRET`, `PAYMENT_WEBHOOK_URL`
 - `FREE_T0_COOLDOWN_HOURS`
 - `DATABASE_URL`, `PDF_STORAGE_BUCKET`, `PDF_STORAGE_KEY`
+- `PDF_FONT_PATH` (путь к TTF-шрифту для PDF, например DejaVuSans)
+- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_ENDPOINT_URL` (если используете bucket)
 - `ENV`, `LOG_LEVEL`
 
 ## Автодеплой

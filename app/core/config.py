@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     database_url: str | None = None
     pdf_storage_bucket: str | None = None
     pdf_storage_key: str | None = None
+    pdf_font_path: str | None = None
 
     env: str = "dev"
     log_level: str = "info"
