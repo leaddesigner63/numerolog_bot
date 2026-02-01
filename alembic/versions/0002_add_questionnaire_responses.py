@@ -17,7 +17,7 @@ depends_on = None
 
 def upgrade() -> None:
     questionnaire_status = sa.Enum(
-        "in_progress", "completed", name="questionnairestatus"
+        "in_progress", "completed", name="questionnairestatus", create_type=False
     )
     questionnaire_status.create(op.get_bind(), checkfirst=True)
 
@@ -28,7 +28,7 @@ def upgrade() -> None:
         sa.Column("questionnaire_version", sa.String(length=32), nullable=False),
         sa.Column(
             "status",
-            sa.Enum("in_progress", "completed", name="questionnairestatus"),
+            questionnaire_status,
             nullable=False,
         ),
         sa.Column("answers", sa.JSON(), nullable=True),
