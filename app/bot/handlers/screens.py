@@ -6,6 +6,7 @@ from aiogram import Router
 from aiogram.types import CallbackQuery
 from sqlalchemy import select
 
+from app.bot.questionnaire.config import load_questionnaire_config
 from app.bot.screen_manager import screen_manager
 from app.core.config import settings
 from app.core.report_service import report_service
@@ -14,6 +15,8 @@ from app.db.models import (
     Order,
     OrderStatus,
     PaymentProvider as PaymentProviderEnum,
+    QuestionnaireResponse,
+    QuestionnaireStatus,
     Tariff,
     User,
     UserProfile,
@@ -78,6 +81,29 @@ def _refresh_profile_state(session, telegram_user_id: int) -> None:
     screen_manager.update_state(telegram_user_id, **_profile_payload(user.profile))
 
 
+def _refresh_questionnaire_state(session, telegram_user_id: int) -> None:
+    config = load_questionnaire_config()
+    response = session.execute(
+        select(QuestionnaireResponse).where(
+            QuestionnaireResponse.user_id == _get_or_create_user(session, telegram_user_id).id,
+            QuestionnaireResponse.questionnaire_version == config.version,
+        )
+    ).scalar_one_or_none()
+    answers = response.answers if response and response.answers else {}
+    screen_manager.update_state(
+        telegram_user_id,
+        questionnaire={
+            "version": config.version,
+            "status": response.status.value if response else "empty",
+            "answers": answers,
+            "current_question_id": response.current_question_id if response else None,
+            "answered_count": len(answers),
+            "total_questions": len(config.questions),
+            "completed_at": response.completed_at.isoformat() if response and response.completed_at else None,
+        },
+    )
+
+
 def _ensure_profile_state(telegram_user_id: int) -> None:
     with get_session() as session:
         _refresh_profile_state(session, telegram_user_id)
@@ -117,6 +143,9 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
         if screen_id == "S4":
             with get_session() as session:
                 _refresh_profile_state(session, callback.from_user.id)
+        if screen_id == "S5":
+            with get_session() as session:
+                _refresh_questionnaire_state(session, callback.from_user.id)
         await screen_manager.show_screen(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
@@ -286,6 +315,8 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
                     screen_id="S10",
                 )
         else:
+            with get_session() as session:
+                _refresh_questionnaire_state(session, callback.from_user.id)
             await screen_manager.show_screen(
                 bot=callback.bot,
                 chat_id=callback.message.chat.id,
@@ -322,6 +353,11 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
                     )
                     await callback.answer()
                     return
+            questionnaire = state.data.get("questionnaire") or {}
+            if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
+                await callback.message.answer("Анкета ещё не заполнена. Нажмите «Заполнить анкету».")
+                await callback.answer()
+                return
         await screen_manager.show_screen(
             bot=callback.bot,
             chat_id=callback.message.chat.id,

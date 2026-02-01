@@ -48,6 +48,11 @@ class FeedbackStatus(enum.StrEnum):
     FAILED = "failed"
 
 
+class QuestionnaireStatus(enum.StrEnum):
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -65,6 +70,9 @@ class User(Base):
     reports: Mapped[list["Report"]] = relationship(back_populates="user")
     free_limit: Mapped["FreeLimit"] = relationship(back_populates="user", uselist=False)
     feedback_messages: Mapped[list["FeedbackMessage"]] = relationship(
+        back_populates="user"
+    )
+    questionnaire_responses: Mapped[list["QuestionnaireResponse"]] = relationship(
         back_populates="user"
     )
 
@@ -156,3 +164,27 @@ class FeedbackMessage(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="feedback_messages")
+
+
+class QuestionnaireResponse(Base):
+    __tablename__ = "questionnaire_responses"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    questionnaire_version: Mapped[str] = mapped_column(String(32), index=True)
+    status: Mapped[QuestionnaireStatus] = mapped_column(
+        Enum(QuestionnaireStatus), index=True
+    )
+    answers: Mapped[dict | None] = mapped_column(JSON)
+    current_question_id: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    user: Mapped[User] = relationship(back_populates="questionnaire_responses")
