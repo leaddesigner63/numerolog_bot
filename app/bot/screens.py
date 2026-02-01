@@ -136,22 +136,51 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
+def _format_birth_place(place: dict[str, Any] | None) -> str:
+    if not place:
+        return "не указано"
+    parts = [place.get("city"), place.get("region"), place.get("country")]
+    return ", ".join(part for part in parts if part)
+
+
 def screen_s4(state: dict[str, Any]) -> ScreenContent:
     selected_tariff = _format_tariff_label(state.get("selected_tariff", "T0"))
-    text = (
-        f"Мои данные для тарифа {selected_tariff}.\n\n"
-        "Шаг 1: Имя\n"
-        "Шаг 2: Дата рождения (YYYY-MM-DD)\n"
-        "Шаг 3: Время рождения (HH:MM)\n"
-        "Шаг 4: Место рождения (город, регион, страна)\n\n"
-        "После ввода данных нажмите «Сохранить»."
-    )
-    rows = [
-        [
-            InlineKeyboardButton(text="Сохранить", callback_data="profile:save"),
-            InlineKeyboardButton(text="Отмена", callback_data="screen:S1"),
-        ],
-    ]
+    profile = state.get("profile") or {}
+    birth_place = _format_birth_place(profile.get("birth_place"))
+    birth_time = profile.get("birth_time") or "не указано"
+    profile_flow = state.get("profile_flow")
+    if profile:
+        text = (
+            f"Мои данные для тарифа {selected_tariff}:\n\n"
+            f"Имя: {profile.get('name')}\n"
+            f"Дата рождения: {profile.get('birth_date')}\n"
+            f"Время рождения: {birth_time}\n"
+            f"Место рождения: {birth_place}\n\n"
+            "Это режим просмотра. Для изменения данных нажмите «Перезаполнить»."
+        )
+    else:
+        text = (
+            f"Мои данные для тарифа {selected_tariff}.\n\n"
+            "Данные ещё не заполнены. Нажмите «Заполнить данные» и следуйте шагам:\n"
+            "1) Имя\n"
+            "2) Дата рождения (YYYY-MM-DD)\n"
+            "3) Время рождения (HH)\n"
+            "4) Место рождения (город, регион, страна)."
+        )
+    rows: list[list[InlineKeyboardButton]] = []
+    if profile:
+        rows.append(
+            [InlineKeyboardButton(text="Перезаполнить", callback_data="profile:start")]
+        )
+    else:
+        rows.append(
+            [InlineKeyboardButton(text="Заполнить данные", callback_data="profile:start")]
+        )
+    if profile_flow and profile:
+        rows.append(
+            [InlineKeyboardButton(text="Продолжить", callback_data="profile:save")]
+        )
+    rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
