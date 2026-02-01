@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from aiogram import F, Router
@@ -275,7 +275,7 @@ async def _handle_answer(
     status = QuestionnaireStatus.IN_PROGRESS
     if next_question_id is None:
         status = QuestionnaireStatus.COMPLETED
-        completed_at = datetime.utcnow()
+        completed_at = datetime.now(timezone.utc)
 
     with get_session() as session:
         user = _get_or_create_user(session, message.from_user.id)

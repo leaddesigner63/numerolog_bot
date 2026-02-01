@@ -1,5 +1,5 @@
 import enum
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Date,
@@ -64,10 +64,12 @@ class User(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     telegram_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     profile: Mapped["UserProfile"] = relationship(back_populates="user", uselist=False)
@@ -95,7 +97,9 @@ class UserProfile(Base):
     birth_place_region: Mapped[str | None] = mapped_column(String(255), nullable=True)
     birth_place_country: Mapped[str] = mapped_column(String(255))
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
     user: Mapped[User] = relationship(back_populates="profile")
@@ -121,7 +125,7 @@ class Order(Base):
         Enum(OrderStatus, values_callable=_enum_values, name="orderstatus"), index=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -144,7 +148,7 @@ class Report(Base):
     )
     report_text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     pdf_storage_key: Mapped[str | None] = mapped_column(String(255))
     model_used: Mapped[ReportModel | None] = mapped_column(
@@ -202,10 +206,12 @@ class QuestionnaireResponse(Base):
     answers: Mapped[dict | None] = mapped_column(JSON)
     current_question_id: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -220,5 +226,7 @@ class ScreenStateRecord(Base):
     message_ids: Mapped[list[int] | None] = mapped_column(JSON)
     data: Mapped[dict | None] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
