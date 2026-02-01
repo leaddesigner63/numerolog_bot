@@ -41,6 +41,13 @@ class ScreenStateStore:
         self._persist_state(user_id, state)
         return state
 
+    def clear_message_ids(self, user_id: int) -> None:
+        state = self.get_state(user_id)
+        if not state.message_ids:
+            return
+        state.message_ids = []
+        self._persist_state(user_id, state)
+
     def _load_state(self, user_id: int) -> ScreenState:
         with get_session() as session:
             record = session.get(ScreenStateRecord, user_id)
@@ -85,8 +92,9 @@ class ScreenManager:
         state = self._store.get_state(user_id)
         content = self.render_screen(screen_id, user_id, state.data)
 
+        previous_message_ids = list(state.message_ids)
         delete_failed = False
-        for message_id in list(state.message_ids):
+        for message_id in previous_message_ids:
             try:
                 await bot.delete_message(chat_id=chat_id, message_id=message_id)
             except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
@@ -101,8 +109,11 @@ class ScreenManager:
                     },
                 )
 
-        if delete_failed and state.message_ids:
-            first_message_id = state.message_ids[0]
+        if previous_message_ids:
+            self._store.clear_message_ids(user_id)
+
+        if delete_failed and previous_message_ids:
+            first_message_id = previous_message_ids[0]
             if await self._try_edit_screen(bot, chat_id, first_message_id, content, user_id, screen_id):
                 return
 

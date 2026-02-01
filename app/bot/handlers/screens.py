@@ -296,6 +296,25 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     )
                     await callback.answer()
                     return
+                if selected_tariff in PAID_TARIFFS and not profile:
+                    order_id = _safe_int(state_snapshot.data.get("order_id"))
+                    order = session.get(Order, order_id) if order_id else None
+                    if order:
+                        screen_manager.update_state(
+                            callback.from_user.id, **_refresh_order_state(order)
+                        )
+                    if not order or order.status != OrderStatus.PAID:
+                        await callback.message.answer(
+                            "Сначала подтвердите оплату, чтобы заполнить «Мои данные»."
+                        )
+                        await screen_manager.show_screen(
+                            bot=callback.bot,
+                            chat_id=callback.message.chat.id,
+                            user_id=callback.from_user.id,
+                            screen_id="S3",
+                        )
+                        await callback.answer()
+                        return
                 if selected_tariff == Tariff.T0.value and not profile:
                     t0_allowed, next_available = _t0_cooldown_status(
                         session, callback.from_user.id
@@ -331,6 +350,16 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     chat_id=callback.message.chat.id,
                     user_id=callback.from_user.id,
                     screen_id="S1",
+                )
+                await callback.answer()
+                return
+            if not state_snapshot.data.get("offer_seen"):
+                await callback.message.answer("Сначала ознакомьтесь с офертой.")
+                await screen_manager.show_screen(
+                    bot=callback.bot,
+                    chat_id=callback.message.chat.id,
+                    user_id=callback.from_user.id,
+                    screen_id="S2",
                 )
                 await callback.answer()
                 return
@@ -421,6 +450,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             screen_id=screen_id,
         )
         if screen_id == "S2":
+            screen_manager.update_state(callback.from_user.id, offer_seen=True)
             await _notify_missing_offer_url(callback)
         await callback.answer()
         return
@@ -495,6 +525,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             callback.from_user.id,
             selected_tariff=tariff,
             profile_flow="report" if tariff == Tariff.T0.value else None,
+            offer_seen=False if tariff in PAID_TARIFFS else True,
         )
         next_screen = "S4" if tariff == Tariff.T0.value else "S2"
         await screen_manager.show_screen(
@@ -504,6 +535,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             screen_id=next_screen,
         )
         if next_screen == "S2":
+            screen_manager.update_state(callback.from_user.id, offer_seen=True)
             await _notify_missing_offer_url(callback)
         if tariff == Tariff.T0.value:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
