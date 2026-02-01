@@ -17,7 +17,7 @@ from app.db.session import get_session
 
 router = Router()
 
-TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3])$")
+TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
 
 
 class ProfileStates(StatesGroup):
@@ -96,11 +96,15 @@ async def _show_profile_screen(message: Message, user_id: int) -> None:
     )
 
 
-@router.callback_query(F.data == "profile:start")
-async def start_profile_flow(callback: CallbackQuery, state: FSMContext) -> None:
+async def start_profile_wizard(message: Message, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(ProfileStates.name)
-    await callback.message.answer("Введите имя (как к вам обращаться).")
+    await message.answer("Введите имя (как к вам обращаться).")
+
+
+@router.callback_query(F.data == "profile:start")
+async def start_profile_flow(callback: CallbackQuery, state: FSMContext) -> None:
+    await start_profile_wizard(callback.message, state)
     await callback.answer()
 
 
@@ -133,14 +137,14 @@ async def handle_profile_birth_date(message: Message, state: FSMContext) -> None
         return
     await state.update_data(birth_date=birth_date)
     await state.set_state(ProfileStates.birth_time)
-    await message.answer("Введите час рождения в формате HH (00-23).")
+    await message.answer("Введите время рождения в формате HH:MM (00:00-23:59).")
 
 
 @router.message(ProfileStates.birth_time)
 async def handle_profile_birth_time(message: Message, state: FSMContext) -> None:
     birth_time = _parse_birth_time(message.text or "")
     if not birth_time:
-        await message.answer("Неверный формат времени. Используйте HH (00-23).")
+        await message.answer("Неверный формат времени. Используйте HH:MM (00:00-23:59).")
         return
     await state.update_data(birth_time=birth_time)
     await state.set_state(ProfileStates.birth_place)

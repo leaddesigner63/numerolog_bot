@@ -4,10 +4,12 @@ from datetime import datetime, timedelta, timezone
 import logging
 
 from aiogram import Router
+from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery
 from sqlalchemy import select
 
 from app.bot.questionnaire.config import load_questionnaire_config
+from app.bot.handlers.profile import start_profile_wizard
 from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
 from app.core.pdf_service import pdf_service
@@ -190,7 +192,7 @@ def _refresh_order_state(order: Order) -> dict[str, str]:
 
 
 @router.callback_query()
-async def handle_callbacks(callback: CallbackQuery) -> None:
+async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data:
         await callback.answer()
         return
@@ -270,6 +272,10 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
             user_id=callback.from_user.id,
             screen_id=next_screen,
         )
+        if tariff == Tariff.T0.value:
+            state_snapshot = screen_manager.update_state(callback.from_user.id)
+            if not state_snapshot.data.get("profile"):
+                await start_profile_wizard(callback.message, state)
         await callback.answer()
         return
 
@@ -320,6 +326,9 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
             user_id=callback.from_user.id,
             screen_id="S4",
         )
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        if not state_snapshot.data.get("profile"):
+            await start_profile_wizard(callback.message, state)
         await callback.answer()
         return
 
