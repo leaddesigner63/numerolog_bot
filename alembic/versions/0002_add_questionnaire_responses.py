@@ -7,6 +7,7 @@ Create Date: 2024-04-08 00:00:00.000000
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision = "0002_add_questionnaire_responses"
@@ -16,8 +17,11 @@ depends_on = None
 
 
 def upgrade() -> None:
-    questionnaire_status = sa.Enum(
-        "in_progress", "completed", name="questionnairestatus", create_type=False
+    questionnaire_status = postgresql.ENUM(
+        "in_progress",
+        "completed",
+        name="questionnairestatus",
+        create_type=False,
     )
     questionnaire_status.create(op.get_bind(), checkfirst=True)
 
