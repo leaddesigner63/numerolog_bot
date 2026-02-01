@@ -57,8 +57,13 @@ def _refunds_button() -> InlineKeyboardButton:
     return InlineKeyboardButton(text="Возвратов нет", callback_data="noop:refunds")
 
 
+def _with_screen_prefix(screen_id: str, text: str) -> str:
+    return f"{screen_id}: {text.lstrip()}"
+
+
 def screen_s0(_: dict[str, Any]) -> ScreenContent:
-    text = (
+    text = _with_screen_prefix(
+        "S0",
         "Бот уже готов разобрать твои данные и показать, в чём твоя сила. "
         "В бесплатном превью ты увидишь несколько своих сильных сторон, возможные зоны роста "
         "и структуру полного отчёта. Без мистики и обещаний — только факты и гипотезы. "
@@ -73,7 +78,8 @@ def screen_s0(_: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s1(_: dict[str, Any]) -> ScreenContent:
-    text = (
+    text = _with_screen_prefix(
+        "S1",
         "ИИ горит весь от нетерпения начать работу. Мы не гадаем по звёздам, а "
         "анализируем твои данные.  Выбери свой путь с чего начнём!"
     )
@@ -99,13 +105,16 @@ def screen_s1(_: dict[str, Any]) -> ScreenContent:
 
 def screen_s2(state: dict[str, Any]) -> ScreenContent:
     selected_tariff = _format_tariff_label(state.get("selected_tariff", "T1–T3"))
-    text = (
-        f"Оферта и правила перед оплатой ({selected_tariff}).\n\n"
-        "Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
-        "Все выводы носят аналитический и описательный характер.\n"
-        "Ответственность за решения остаётся за пользователем.\n"
-        "Сервис не гарантирует финансовых или иных результатов.\n\n"
-        "Возвратов нет."
+    text = _with_screen_prefix(
+        "S2",
+        (
+            f"Оферта и правила перед оплатой ({selected_tariff}).\n\n"
+            "Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
+            "Все выводы носят аналитический и описательный характер.\n"
+            "Ответственность за решения остаётся за пользователем.\n"
+            "Сервис не гарантирует финансовых или иных результатов.\n\n"
+            "Возвратов нет."
+        ),
     )
     offer_button = _offer_button()
     if not offer_button:
@@ -138,10 +147,13 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             f"Статус: {order_status}. "
             f"Сумма: {order_amount} {order_currency}."
         )
-    text = (
-        f"Оплата тарифа {selected_tariff}.\n\n"
-        "Оплачивая, вы подтверждаете согласие с офертой. Возвратов нет."
-        f"{order_block}"
+    text = _with_screen_prefix(
+        "S3",
+        (
+            f"Оплата тарифа {selected_tariff}.\n\n"
+            "Оплачивая, вы подтверждаете согласие с офертой. Возвратов нет."
+            f"{order_block}"
+        ),
     )
     offer_button = _offer_button()
     if not offer_button:
@@ -185,31 +197,40 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     profile_flow = state.get("profile_flow")
     is_t0 = selected_tariff == "Т0"
     if profile:
-        text = (
-            f"Мои данные для тарифа {selected_tariff}:\n\n"
-            f"Имя: {profile.get('name')}\n"
-            f"Дата рождения: {profile.get('birth_date')}\n"
-            f"Время рождения: {birth_time}\n"
-            f"Место рождения: {birth_place}\n\n"
-            "Это режим просмотра. Для изменения данных нажмите «Перезаполнить»."
+        text = _with_screen_prefix(
+            "S4",
+            (
+                f"Мои данные для тарифа {selected_tariff}:\n\n"
+                f"Имя: {profile.get('name')}\n"
+                f"Дата рождения: {profile.get('birth_date')}\n"
+                f"Время рождения: {birth_time}\n"
+                f"Место рождения: {birth_place}\n\n"
+                "Это режим просмотра. Для изменения данных нажмите «Перезаполнить»."
+            ),
         )
     elif is_t0:
-        text = (
-            "В бесплатном превью-отчёте ты увидишь, на что он обратил внимание в первую "
-            "очередь: ключевые сильные стороны, возможные зоны роста и формат полного "
-            "анализа. Коротко и по делу. Начни с малого — дальше решать тебе. Краткий мини "
-            "отчёт (~30 % полного): несколько сильных сторон, возможные зоны роста и "
-            "аккуратная ретроспектива, чтобы оценить подход. Кстати, это честный бесплатный "
-            "доступ, поэтому можно всего раз в месяц."
+        text = _with_screen_prefix(
+            "S4",
+            (
+                "В бесплатном превью-отчёте ты увидишь, на что он обратил внимание в первую "
+                "очередь: ключевые сильные стороны, возможные зоны роста и формат полного "
+                "анализа. Коротко и по делу. Начни с малого — дальше решать тебе. Краткий мини "
+                "отчёт (~30 % полного): несколько сильных сторон, возможные зоны роста и "
+                "аккуратная ретроспектива, чтобы оценить подход. Кстати, это честный бесплатный "
+                "доступ, поэтому можно всего раз в месяц."
+            ),
         )
     else:
-        text = (
-            f"Мои данные для тарифа {selected_tariff}.\n\n"
-            "Данные ещё не заполнены. Нажмите «Заполнить данные» и следуйте шагам:\n"
-            "1) Имя\n"
-            "2) Дата рождения (YYYY-MM-DD)\n"
-            "3) Время рождения (HH:MM)\n"
-            "4) Место рождения (город, регион, страна)."
+        text = _with_screen_prefix(
+            "S4",
+            (
+                f"Мои данные для тарифа {selected_tariff}.\n\n"
+                "Данные ещё не заполнены. Нажмите «Заполнить данные» и следуйте шагам:\n"
+                "1) Имя\n"
+                "2) Дата рождения (YYYY-MM-DD)\n"
+                "3) Время рождения (HH:MM)\n"
+                "4) Место рождения (город, регион, страна)."
+            ),
         )
     rows: list[list[InlineKeyboardButton]] = []
     if profile:
@@ -246,7 +267,8 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
     if total_questions:
         progress_line = f"Прогресс: {answered_count}/{total_questions}."
 
-    text = (
+    text = _with_screen_prefix(
+        "S5",
         f"Лайтовая анкета для {selected_tariff}.\n\n"
         "1) Опыт и проекты\n"
         "2) Навыки (шкала 1–5)\n"
@@ -271,7 +293,7 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s6(_: dict[str, Any]) -> ScreenContent:
-    text = "Генерируем отчёт… Пожалуйста, подождите."
+    text = _with_screen_prefix("S6", "Генерируем отчёт… Пожалуйста, подождите.")
     rows = [
         [InlineKeyboardButton(text="Назад в тарифы", callback_data="screen:S1")],
         *_global_menu(),
@@ -290,15 +312,18 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
         "Возвратов нет."
     )
     if report_text:
-        text = f"{report_text}\n\n{disclaimer}"
+        text = _with_screen_prefix("S7", f"{report_text}\n\n{disclaimer}")
     else:
-        text = (
-            "Ваш отчёт готов.\n\n"
-            "• Резюме\n"
-            "• Сильные стороны\n"
-            "• Зоны потенциального роста\n"
-            "• Ориентиры по сферам\n\n"
-            f"{disclaimer}"
+        text = _with_screen_prefix(
+            "S7",
+            (
+                "Ваш отчёт готов.\n\n"
+                "• Резюме\n"
+                "• Сильные стороны\n"
+                "• Зоны потенциального роста\n"
+                "• Ориентиры по сферам\n\n"
+                f"{disclaimer}"
+            ),
         )
     rows = [
         [
@@ -311,9 +336,12 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s8(_: dict[str, Any]) -> ScreenContent:
-    text = (
-        "Напишите сообщение. Нажмите «Отправить», чтобы опубликовать его в группе, "
-        "или «Перейти в группу»."
+    text = _with_screen_prefix(
+        "S8",
+        (
+            "Напишите сообщение. Нажмите «Отправить», чтобы опубликовать его в группе, "
+            "или «Перейти в группу»."
+        ),
     )
     rows = [
         [
@@ -336,9 +364,12 @@ def screen_s8(_: dict[str, Any]) -> ScreenContent:
 
 def screen_s9(state: dict[str, Any]) -> ScreenContent:
     next_available = state.get("t0_next_available", "неизвестно")
-    text = (
-        "Бесплатный отчёт доступен раз в месяц.\n\n"
-        f"Следующий доступен: {next_available}."
+    text = _with_screen_prefix(
+        "S9",
+        (
+            "Бесплатный отчёт доступен раз в месяц.\n\n"
+            f"Следующий доступен: {next_available}."
+        ),
     )
     rows = [
         [InlineKeyboardButton(text="Тарифы", callback_data="screen:S1")],
@@ -349,7 +380,7 @@ def screen_s9(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s10(_: dict[str, Any]) -> ScreenContent:
-    text = "Сервис временно недоступен. Попробуйте позже."
+    text = _with_screen_prefix("S10", "Сервис временно недоступен. Попробуйте позже.")
     rows = [
         [InlineKeyboardButton(text="Тарифы", callback_data="screen:S1")],
         *(_global_menu()),
