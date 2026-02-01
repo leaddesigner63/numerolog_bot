@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import logging
 
 from aiogram import Router
-from aiogram.types import CallbackQuery
+from aiogram.types import BufferedInputFile, CallbackQuery
 from sqlalchemy import select
 
 from app.bot.questionnaire.config import load_questionnaire_config
 from app.bot.screen_manager import screen_manager
 from app.core.config import settings
+from app.core.pdf_service import pdf_service
 from app.core.report_service import report_service
 from app.db.models import (
     FreeLimit,
@@ -27,6 +29,7 @@ from app.payments import get_payment_provider
 
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 TARIFF_PRICES = {
     Tariff.T1: 560,
@@ -125,6 +128,25 @@ def _refresh_report_state(
             report_text=report.report_text,
             report_model=report.model_used.value if report.model_used else None,
         )
+
+
+def _get_latest_report(
+    session,
+    telegram_user_id: int,
+    *,
+    tariff_value: str | None,
+) -> Report | None:
+    user = _get_or_create_user(session, telegram_user_id)
+    query = select(Report).where(Report.user_id == user.id)
+    if tariff_value:
+        try:
+            query = query.where(Report.tariff == Tariff(tariff_value))
+        except ValueError:
+            logger.warning(
+                "report_tariff_invalid",
+                extra={"user_id": telegram_user_id, "tariff": tariff_value},
+            )
+    return session.execute(query.order_by(Report.created_at.desc())).scalar_one_or_none()
 
 
 def _ensure_profile_state(telegram_user_id: int) -> None:
@@ -423,7 +445,27 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
         return
 
     if callback.data == "report:pdf":
-        await callback.message.answer("PDF будет доступен после генерации отчёта.")
+        state = screen_manager.update_state(callback.from_user.id)
+        with get_session() as session:
+            report = _get_latest_report(
+                session,
+                callback.from_user.id,
+                tariff_value=state.data.get("selected_tariff"),
+            )
+            if not report:
+                await callback.message.answer("PDF будет доступен после генерации отчёта.")
+                await callback.answer()
+                return
+            if report.pdf_storage_key:
+                pdf_bytes = pdf_service.load_pdf(report.pdf_storage_key)
+            else:
+                pdf_bytes = pdf_service.generate_pdf(report.report_text)
+                report.pdf_storage_key = pdf_service.store_pdf(report.id, pdf_bytes)
+                session.add(report)
+        filename = f"report_{report.id}.pdf"
+        await callback.message.answer_document(
+            BufferedInputFile(pdf_bytes, filename=filename)
+        )
         await callback.answer()
         return
 
