@@ -55,13 +55,23 @@ def _get_or_create_user(session, telegram_user_id: int) -> User:
     ).scalar_one_or_none()
     if user:
         if not user.free_limit:
-            session.add(FreeLimit(user_id=user.id))
+            free_limit = session.execute(
+                select(FreeLimit).where(FreeLimit.user_id == user.id)
+            ).scalar_one_or_none()
+            if free_limit:
+                user.free_limit = free_limit
+            else:
+                free_limit = FreeLimit(user_id=user.id)
+                session.add(free_limit)
+                user.free_limit = free_limit
         return user
 
     user = User(telegram_user_id=telegram_user_id)
     session.add(user)
     session.flush()
-    session.add(FreeLimit(user_id=user.id))
+    free_limit = FreeLimit(user_id=user.id)
+    session.add(free_limit)
+    user.free_limit = free_limit
     return user
 
 
