@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any, Mapping
 from urllib.parse import urlencode
@@ -27,9 +28,14 @@ class CloudPaymentsProvider(PaymentProvider):
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._logger = logging.getLogger(__name__)
 
     def create_payment_link(self, order: Order, user: User | None = None) -> PaymentLink | None:
         if not self._settings.cloudpayments_public_id:
+            self._logger.warning(
+                "cloudpayments_public_id_missing",
+                extra={"order_id": order.id, "user_id": getattr(user, "id", None)},
+            )
             return None
         params = {
             "publicId": self._settings.cloudpayments_public_id,
@@ -46,6 +52,7 @@ class CloudPaymentsProvider(PaymentProvider):
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str]) -> WebhookResult:
         secret = self._settings.cloudpayments_api_secret
         if not secret:
+            self._logger.warning("cloudpayments_api_secret_missing")
             raise ValueError("CLOUDPAYMENTS_API_SECRET is not configured")
         signature = _find_signature(headers)
         expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).digest()
@@ -68,6 +75,14 @@ class CloudPaymentsProvider(PaymentProvider):
         public_id = self._settings.cloudpayments_public_id
         api_secret = self._settings.cloudpayments_api_secret
         if not public_id or not api_secret:
+            self._logger.warning(
+                "cloudpayments_status_config_missing",
+                extra={
+                    "order_id": order.id,
+                    "public_id_set": bool(public_id),
+                    "api_secret_set": bool(api_secret),
+                },
+            )
             return None
         try:
             with httpx.Client(timeout=10.0) as client:

@@ -72,6 +72,7 @@ class LLMRouter:
 
     def _call_gemini(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
         if not settings.gemini_api_key:
+            self._logger.warning("gemini_api_key_missing")
             raise LLMProviderError(
                 "Gemini API key is missing",
                 retryable=False,
@@ -112,6 +113,7 @@ class LLMRouter:
 
     def _call_openai(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
         if not settings.openai_api_key:
+            self._logger.warning("openai_api_key_missing")
             raise LLMProviderError("OpenAI API key is missing", retryable=False)
 
         endpoint = "https://api.openai.com/v1/chat/completions"

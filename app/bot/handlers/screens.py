@@ -53,6 +53,58 @@ def _safe_int(value: str | int | None) -> int | None:
         return None
 
 
+def _missing_offer_url() -> bool:
+    return not (settings.offer_url or "").strip()
+
+
+def _missing_payment_link_config(provider: PaymentProviderEnum) -> list[str]:
+    missing: list[str] = []
+    if provider == PaymentProviderEnum.PRODAMUS:
+        if not settings.prodamus_form_url:
+            missing.append("PRODAMUS_FORM_URL")
+    elif provider == PaymentProviderEnum.CLOUDPAYMENTS:
+        if not settings.cloudpayments_public_id:
+            missing.append("CLOUDPAYMENTS_PUBLIC_ID")
+    return missing
+
+
+def _missing_payment_status_config(provider: PaymentProviderEnum) -> list[str]:
+    missing: list[str] = []
+    if provider == PaymentProviderEnum.PRODAMUS:
+        if not settings.prodamus_status_url:
+            missing.append("PRODAMUS_STATUS_URL")
+        if not settings.prodamus_secret:
+            missing.append("PRODAMUS_SECRET")
+    elif provider == PaymentProviderEnum.CLOUDPAYMENTS:
+        if not settings.cloudpayments_public_id:
+            missing.append("CLOUDPAYMENTS_PUBLIC_ID")
+        if not settings.cloudpayments_api_secret:
+            missing.append("CLOUDPAYMENTS_API_SECRET")
+    return missing
+
+
+async def _notify_missing_offer_url(callback: CallbackQuery) -> None:
+    if _missing_offer_url():
+        logger.warning("offer_url_missing", extra={"user_id": callback.from_user.id})
+        await callback.message.answer(
+            "Ссылка на оферту не настроена. Добавьте OFFER_URL, чтобы пользователь мог открыть оферту."
+        )
+
+
+async def _notify_llm_unavailable(callback: CallbackQuery) -> bool:
+    if settings.gemini_api_key or settings.openai_api_key:
+        return True
+    logger.warning(
+        "llm_keys_missing",
+        extra={"user_id": callback.from_user.id, "keys": ["GEMINI_API_KEY", "OPENAI_API_KEY"]},
+    )
+    await callback.message.answer(
+        "Генерация отчёта недоступна: не настроены ключи LLM. "
+        "Добавьте GEMINI_API_KEY или OPENAI_API_KEY."
+    )
+    return False
+
+
 def _get_payment_provider() -> PaymentProviderEnum:
     provider = settings.payment_provider.lower()
     if provider == PaymentProviderEnum.PRODAMUS.value:
@@ -366,6 +418,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             user_id=callback.from_user.id,
             screen_id=screen_id,
         )
+        if screen_id == "S2":
+            await _notify_missing_offer_url(callback)
         await callback.answer()
         return
 
@@ -406,6 +460,28 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         order.provider = PaymentProviderEnum.CLOUDPAYMENTS
                         provider = fallback_provider
                         session.add(order)
+                if not payment_link:
+                    missing_primary = _missing_payment_link_config(order.provider)
+                    fallback_provider_enum = (
+                        PaymentProviderEnum.CLOUDPAYMENTS
+                        if order.provider == PaymentProviderEnum.PRODAMUS
+                        else PaymentProviderEnum.PRODAMUS
+                    )
+                    missing_fallback = _missing_payment_link_config(fallback_provider_enum)
+                    logger.warning(
+                        "payment_link_unavailable",
+                        extra={
+                            "order_id": order.id,
+                            "primary_provider": order.provider.value,
+                            "missing_primary": missing_primary,
+                            "missing_fallback": missing_fallback,
+                        },
+                    )
+                    missing_vars = ", ".join(missing_primary + missing_fallback) or "секреты провайдера"
+                    await callback.message.answer(
+                        "Платёжная ссылка недоступна: не настроены ключи оплаты. "
+                        f"Проверьте переменные {missing_vars}."
+                    )
                 screen_manager.update_state(
                     callback.from_user.id,
                     selected_tariff=tariff,
@@ -425,6 +501,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             user_id=callback.from_user.id,
             screen_id=next_screen,
         )
+        if next_screen == "S2":
+            await _notify_missing_offer_url(callback)
         if tariff == Tariff.T0.value:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             if not state_snapshot.data.get("profile"):
@@ -446,6 +524,28 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await callback.answer()
                 return
             if order.status != OrderStatus.PAID:
+                missing_status = _missing_payment_status_config(order.provider)
+                if missing_status:
+                    logger.warning(
+                        "payment_status_config_missing",
+                        extra={
+                            "order_id": order.id,
+                            "provider": order.provider.value,
+                            "missing": missing_status,
+                        },
+                    )
+                    await callback.message.answer(
+                        "Проверка оплаты недоступна: не настроены ключи платёжного провайдера. "
+                        f"Добавьте {', '.join(missing_status)}."
+                    )
+                    await screen_manager.show_screen(
+                        bot=callback.bot,
+                        chat_id=callback.message.chat.id,
+                        user_id=callback.from_user.id,
+                        screen_id="S3",
+                    )
+                    await callback.answer()
+                    return
                 provider = get_payment_provider(order.provider.value)
                 result = provider.check_payment_status(order)
                 if result and result.is_paid:
@@ -548,6 +648,15 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 user_id=callback.from_user.id,
                 screen_id="S6",
             )
+            if not await _notify_llm_unavailable(callback):
+                await screen_manager.show_screen(
+                    bot=callback.bot,
+                    chat_id=callback.message.chat.id,
+                    user_id=callback.from_user.id,
+                    screen_id="S10",
+                )
+                await callback.answer()
+                return
             report = await report_service.generate_report(
                 user_id=callback.from_user.id,
                 state=screen_manager.update_state(callback.from_user.id).data,
@@ -622,6 +731,15 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             user_id=callback.from_user.id,
             screen_id="S6",
         )
+        if not await _notify_llm_unavailable(callback):
+            await screen_manager.show_screen(
+                bot=callback.bot,
+                chat_id=callback.message.chat.id,
+                user_id=callback.from_user.id,
+                screen_id="S10",
+            )
+            await callback.answer()
+            return
         report = await report_service.generate_report(
             user_id=callback.from_user.id,
             state=screen_manager.update_state(callback.from_user.id).data,
