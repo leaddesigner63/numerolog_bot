@@ -187,6 +187,14 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
 
 def screen_s5(state: dict[str, Any]) -> ScreenContent:
     selected_tariff = _format_tariff_label(state.get("selected_tariff", "T2/T3"))
+    questionnaire = state.get("questionnaire") or {}
+    answered_count = questionnaire.get("answered_count", 0)
+    total_questions = questionnaire.get("total_questions", 0)
+    status = questionnaire.get("status", "empty")
+    progress_line = ""
+    if total_questions:
+        progress_line = f"Прогресс: {answered_count}/{total_questions}."
+
     text = (
         f"Лайтовая анкета для {selected_tariff}.\n\n"
         "1) Опыт и проекты\n"
@@ -194,14 +202,18 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
         "3) Интересы и мотивация\n"
         "4) Ограничения (время/ресурсы)\n"
         "5) Цели\n\n"
-        "Заполните ответы и нажмите «Готово»."
-    )
-    rows = [
-        [
-            InlineKeyboardButton(text="Готово", callback_data="questionnaire:done"),
-            InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1"),
-        ],
-    ]
+        f"{progress_line}"
+    ).strip()
+    rows: list[list[InlineKeyboardButton]] = []
+    if status == "completed":
+        rows.append([InlineKeyboardButton(text="Пройти заново", callback_data="questionnaire:restart")])
+        rows.append([InlineKeyboardButton(text="Готово", callback_data="questionnaire:done")])
+    else:
+        button_text = "Продолжить анкету" if answered_count else "Заполнить анкету"
+        rows.append(
+            [InlineKeyboardButton(text=button_text, callback_data="questionnaire:start")]
+        )
+    rows.append([InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1")])
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 

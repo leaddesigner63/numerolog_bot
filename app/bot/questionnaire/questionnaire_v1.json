@@ -1,0 +1,58 @@
+{
+  "version": "v1",
+  "start_question_id": "experience",
+  "questions": [
+    {
+      "id": "experience",
+      "type": "text",
+      "text": "Опишите ваш опыт: проекты, роли или задачи, которые давались лучше всего.",
+      "required": true,
+      "next": "skills"
+    },
+    {
+      "id": "skills",
+      "type": "scale",
+      "text": "Оцените уверенность в ключевых навыках (1 — минимальная, 5 — максимальная).",
+      "required": true,
+      "scale": {
+        "min": 1,
+        "max": 5,
+        "labels": {
+          "1": "начальный уровень",
+          "3": "уверенный",
+          "5": "экспертный"
+        }
+      },
+      "next": "interests"
+    },
+    {
+      "id": "interests",
+      "type": "choice",
+      "text": "Что из мотивации для вас сейчас важнее?",
+      "required": true,
+      "options": [
+        {"value": "income", "label": "Рост дохода"},
+        {"value": "stability", "label": "Стабильность"},
+        {"value": "freedom", "label": "Свобода и гибкий график"}
+      ],
+      "transitions": {
+        "freedom": "goals"
+      },
+      "next": "constraints"
+    },
+    {
+      "id": "constraints",
+      "type": "text",
+      "text": "Какие ограничения по времени или ресурсам для вас сейчас ключевые?",
+      "required": false,
+      "next": "goals"
+    },
+    {
+      "id": "goals",
+      "type": "text",
+      "text": "Сформулируйте ваши цели на ближайшие 6–12 месяцев.",
+      "required": true,
+      "next": null
+    }
+  ]
+}
