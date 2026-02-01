@@ -371,7 +371,8 @@ def screen_s9(state: dict[str, Any]) -> ScreenContent:
             f"Следующий доступен: {next_available}."
         ),
     )
-    keyboard = screen_s4(state).keyboard
+    rows = [[InlineKeyboardButton(text="Назад", callback_data="screen:S1")]]
+    keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
