@@ -15,7 +15,7 @@ from app.bot.questionnaire.config import (
     resolve_next_question_id,
 )
 from app.bot.handlers.screen_manager import screen_manager
-from app.db.models import QuestionnaireResponse, QuestionnaireStatus, User
+from app.db.models import Order, OrderStatus, QuestionnaireResponse, QuestionnaireStatus, Tariff, User
 from app.db.session import get_session
 
 router = Router()
@@ -23,6 +23,15 @@ router = Router()
 
 class QuestionnaireStates(StatesGroup):
     answering = State()
+
+
+def _safe_int(value: str | int | None) -> int | None:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
 
 
 def _get_or_create_user(session, telegram_user_id: int) -> User:
@@ -103,6 +112,54 @@ def _update_screen_state(user_id: int, response: QuestionnaireResponse | None) -
     screen_manager.update_state(user_id, **payload)
 
 
+async def _ensure_paid_access(callback: CallbackQuery) -> bool:
+    state_snapshot = screen_manager.update_state(callback.from_user.id)
+    selected_tariff = state_snapshot.data.get("selected_tariff")
+    if selected_tariff not in {Tariff.T2.value, Tariff.T3.value}:
+        await callback.message.answer("Анкета доступна только для тарифов T2 и T3.")
+        await screen_manager.show_screen(
+            bot=callback.bot,
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+            screen_id="S1",
+        )
+        return False
+
+    order_id = _safe_int(state_snapshot.data.get("order_id"))
+    if not order_id:
+        await callback.message.answer("Сначала выберите тариф и завершите оплату.")
+        await screen_manager.show_screen(
+            bot=callback.bot,
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+            screen_id="S3",
+        )
+        return False
+
+    with get_session() as session:
+        order = session.get(Order, order_id)
+        if order:
+            screen_manager.update_state(
+                callback.from_user.id,
+                order_id=str(order.id),
+                order_status=order.status.value,
+                order_amount=str(order.amount),
+                order_currency=order.currency,
+            )
+        if not order or order.status != OrderStatus.PAID:
+            await callback.message.answer(
+                "Оплата ещё не подтверждена. Доступ к анкете откроется после статуса paid."
+            )
+            await screen_manager.show_screen(
+                bot=callback.bot,
+                chat_id=callback.message.chat.id,
+                user_id=callback.from_user.id,
+                screen_id="S3",
+            )
+            return False
+    return True
+
+
 def _upsert_progress(
     session,
     *,
@@ -151,6 +208,9 @@ async def _send_question(
 
 @router.callback_query(F.data == "questionnaire:start")
 async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await _ensure_paid_access(callback):
+        await callback.answer()
+        return
     config = load_questionnaire_config()
     with get_session() as session:
         user = _get_or_create_user(session, callback.from_user.id)
@@ -197,6 +257,9 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
 
 @router.callback_query(F.data == "questionnaire:restart")
 async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await _ensure_paid_access(callback):
+        await callback.answer()
+        return
     config = load_questionnaire_config()
     with get_session() as session:
         user = _get_or_create_user(session, callback.from_user.id)

@@ -71,34 +71,12 @@ def screen_s0(_: dict[str, Any]) -> ScreenContent:
         "Отчёт можно сохранить в PDF. Хочешь начать с малого или сразу перейди к глубине — "
         "решать тебе."
     )
-    navigation_rows = [
-        [
-            InlineKeyboardButton(text="S0 Старт", callback_data="screen:S0"),
-            InlineKeyboardButton(text="S1 Тарифы", callback_data="screen:S1"),
-        ],
-        [
-            InlineKeyboardButton(text="S2 Оферта", callback_data="screen:S2"),
-            InlineKeyboardButton(text="S3 Оплата", callback_data="screen:S3"),
-        ],
-        [
-            InlineKeyboardButton(text="S4 Мои данные", callback_data="screen:S4"),
-            InlineKeyboardButton(text="S5 Анкета", callback_data="screen:S5"),
-        ],
-        [
-            InlineKeyboardButton(text="S6 Генерация", callback_data="screen:S6"),
-            InlineKeyboardButton(text="S7 Результат", callback_data="screen:S7"),
-        ],
-        [
-            InlineKeyboardButton(text="S8 Обратная связь", callback_data="screen:S8"),
-            InlineKeyboardButton(text="S9 Лимит T0", callback_data="screen:S9"),
-        ],
-        [
-            InlineKeyboardButton(
-                text="S10 Недоступен", callback_data="screen:S10"
-            ),
-        ],
+    rows = [
+        [InlineKeyboardButton(text="Тарифы", callback_data="screen:S1")],
+        [InlineKeyboardButton(text="Оферта", callback_data="screen:S2")],
+        [InlineKeyboardButton(text="Обратная связь", callback_data="screen:S8")],
     ]
-    keyboard = _build_keyboard(navigation_rows)
+    keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
