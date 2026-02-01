@@ -26,11 +26,13 @@ class LLMProviderError(RuntimeError):
         status_code: int | None = None,
         retryable: bool = False,
         fallback: bool = False,
+        category: str = "unknown",
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.retryable = retryable
         self.fallback = fallback
+        self.category = category
 
 
 class LLMUnavailableError(RuntimeError):
@@ -52,8 +54,19 @@ class LLMRouter:
                     "status_code": exc.status_code,
                     "retryable": exc.retryable,
                     "fallback": exc.fallback,
+                    "category": exc.category,
                 },
             )
+            if exc.fallback:
+                self._logger.warning(
+                    "llm_fallback",
+                    extra={
+                        "provider": "gemini",
+                        "fallback_provider": "openai",
+                        "category": exc.category,
+                        "status_code": exc.status_code,
+                    },
+                )
             if not exc.fallback:
                 raise LLMUnavailableError("Gemini provider failed without fallback") from exc
 
@@ -66,6 +79,7 @@ class LLMRouter:
                     "status_code": exc.status_code,
                     "retryable": exc.retryable,
                     "fallback": exc.fallback,
+                    "category": exc.category,
                 },
             )
         raise LLMUnavailableError("Both Gemini and OpenAI providers are unavailable")
@@ -77,6 +91,7 @@ class LLMRouter:
                 "Gemini API key is missing",
                 retryable=False,
                 fallback=True,
+                category="missing_api_key",
             )
 
         endpoint = (
@@ -108,13 +123,21 @@ class LLMRouter:
 
         text = self._extract_gemini_text(data)
         if not text:
-            raise LLMProviderError("Gemini response is empty", retryable=False)
+            raise LLMProviderError(
+                "Gemini response is empty",
+                retryable=False,
+                category="empty_response",
+            )
         return LLMResponse(text=text, provider="gemini", model=settings.gemini_model)
 
     def _call_openai(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
         if not settings.openai_api_key:
             self._logger.warning("openai_api_key_missing")
-            raise LLMProviderError("OpenAI API key is missing", retryable=False)
+            raise LLMProviderError(
+                "OpenAI API key is missing",
+                retryable=False,
+                category="missing_api_key",
+            )
 
         endpoint = "https://api.openai.com/v1/chat/completions"
         headers = {"Authorization": f"Bearer {settings.openai_api_key}"}
@@ -140,7 +163,11 @@ class LLMRouter:
 
         text = self._extract_openai_text(data)
         if not text:
-            raise LLMProviderError("OpenAI response is empty", retryable=False)
+            raise LLMProviderError(
+                "OpenAI response is empty",
+                retryable=False,
+                category="empty_response",
+            )
         return LLMResponse(text=text, provider="openai", model=settings.openai_model)
 
     def _post_with_retries(
@@ -177,6 +204,7 @@ class LLMRouter:
                     "LLM request timed out",
                     retryable=True,
                     fallback=True,
+                    category="timeout",
                 ) from exc
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
@@ -186,17 +214,20 @@ class LLMRouter:
                     continue
                 retryable = status in retry_statuses or status >= 500
                 fallback = status in fallback_statuses or status >= 500
+                category = self._status_category(status)
                 if fallback:
                     raise LLMProviderError(
                         f"LLM provider returned status {status}",
                         status_code=status,
                         retryable=retryable,
                         fallback=True,
+                        category=category,
                     ) from exc
                 raise LLMProviderError(
                     f"LLM provider returned status {status}",
                     status_code=status,
                     retryable=False,
+                    category=category,
                 ) from exc
             except httpx.RequestError as exc:
                 attempts += 1
@@ -207,6 +238,7 @@ class LLMRouter:
                     "LLM request failed",
                     retryable=True,
                     fallback=True,
+                    category="request_error",
                 ) from exc
 
     @staticmethod
@@ -217,6 +249,16 @@ class LLMRouter:
     def _build_prompt(system_prompt: str, facts_pack: dict[str, Any]) -> str:
         payload = json.dumps(facts_pack, ensure_ascii=False, indent=2)
         return f"{system_prompt}\n\nДанные (facts-pack):\n{payload}"
+
+    @staticmethod
+    def _status_category(status: int) -> str:
+        if status in {401, 403}:
+            return "auth_error"
+        if status == 429:
+            return "rate_limited"
+        if status >= 500:
+            return "server_error"
+        return "http_error"
 
     @staticmethod
     def _extract_gemini_text(data: dict[str, Any]) -> str | None:

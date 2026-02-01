@@ -98,10 +98,6 @@ async def _notify_llm_unavailable(callback: CallbackQuery) -> bool:
         "llm_keys_missing",
         extra={"user_id": callback.from_user.id, "keys": ["GEMINI_API_KEY", "OPENAI_API_KEY"]},
     )
-    await callback.message.answer(
-        "Генерация отчёта недоступна: не настроены ключи LLM. "
-        "Добавьте GEMINI_API_KEY или OPENAI_API_KEY."
-    )
     return False
 
 
