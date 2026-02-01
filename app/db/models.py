@@ -188,3 +188,15 @@ class QuestionnaireResponse(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="questionnaire_responses")
+
+
+class ScreenStateRecord(Base):
+    __tablename__ = "screen_states"
+
+    telegram_user_id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    screen_id: Mapped[str | None] = mapped_column(String(16))
+    message_ids: Mapped[list[int] | None] = mapped_column(JSON)
+    data: Mapped[dict | None] = mapped_column(JSON)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=datetime.utcnow, onupdate=datetime.utcnow
+    )

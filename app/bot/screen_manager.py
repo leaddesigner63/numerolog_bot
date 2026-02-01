@@ -8,6 +8,8 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 
 from app.bot.screens import SCREEN_REGISTRY, ScreenContent
+from app.db.models import ScreenStateRecord
+from app.db.session import get_session
 
 
 @dataclass
@@ -23,13 +25,49 @@ class ScreenStateStore:
 
     def get_state(self, user_id: int) -> ScreenState:
         if user_id not in self._states:
-            self._states[user_id] = ScreenState()
+            self._states[user_id] = self._load_state(user_id)
         return self._states[user_id]
 
     def update_data(self, user_id: int, **kwargs: Any) -> ScreenState:
         state = self.get_state(user_id)
         state.data.update(kwargs)
+        self._persist_state(user_id, state)
         return state
+
+    def update_screen(self, user_id: int, screen_id: str, message_ids: list[int]) -> ScreenState:
+        state = self.get_state(user_id)
+        state.screen_id = screen_id
+        state.message_ids = message_ids
+        self._persist_state(user_id, state)
+        return state
+
+    def _load_state(self, user_id: int) -> ScreenState:
+        with get_session() as session:
+            record = session.get(ScreenStateRecord, user_id)
+            if not record:
+                return ScreenState()
+            return ScreenState(
+                screen_id=record.screen_id,
+                message_ids=list(record.message_ids or []),
+                data=dict(record.data or {}),
+            )
+
+    def _persist_state(self, user_id: int, state: ScreenState) -> None:
+        with get_session() as session:
+            record = session.get(ScreenStateRecord, user_id)
+            if record:
+                record.screen_id = state.screen_id
+                record.message_ids = state.message_ids
+                record.data = state.data
+            else:
+                record = ScreenStateRecord(
+                    telegram_user_id=user_id,
+                    screen_id=state.screen_id,
+                    message_ids=state.message_ids,
+                    data=state.data,
+                )
+                session.add(record)
+            session.flush()
 
 
 class ScreenManager:
@@ -74,8 +112,7 @@ class ScreenManager:
             sent = await bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup)
             message_ids.append(sent.message_id)
 
-        state.screen_id = screen_id
-        state.message_ids = message_ids
+        self._store.update_screen(user_id, screen_id, message_ids)
 
     async def _try_edit_screen(
         self,
@@ -107,9 +144,7 @@ class ScreenManager:
             )
             return False
 
-        state = self._store.get_state(user_id)
-        state.screen_id = screen_id
-        state.message_ids = [message_id]
+        self._store.update_screen(user_id, screen_id, [message_id])
         return True
 
     def update_state(self, user_id: int, **kwargs: Any) -> ScreenState:
