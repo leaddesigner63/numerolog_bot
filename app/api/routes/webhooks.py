@@ -22,7 +22,23 @@ async def handle_payment_webhook(request: Request) -> dict[str, str]:
     try:
         result = provider.verify_webhook(raw_body, request.headers)
     except ValueError as exc:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)) from exc
+        if provider_name:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
+            ) from exc
+        fallback_provider_name = (
+            PaymentProviderEnum.CLOUDPAYMENTS.value
+            if provider.provider == PaymentProviderEnum.PRODAMUS
+            else PaymentProviderEnum.PRODAMUS.value
+        )
+        fallback_provider = get_payment_provider(fallback_provider_name)
+        try:
+            result = fallback_provider.verify_webhook(raw_body, request.headers)
+            provider = fallback_provider
+        except ValueError as fallback_exc:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, detail=str(fallback_exc)
+            ) from fallback_exc
 
     with get_session() as session:
         order = session.get(Order, result.order_id)

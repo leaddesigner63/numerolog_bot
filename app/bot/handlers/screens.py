@@ -44,10 +44,14 @@ TARIFF_PRICES = {
 
 def _get_payment_provider() -> PaymentProviderEnum:
     provider = settings.payment_provider.lower()
-    if provider == PaymentProviderEnum.CLOUDPAYMENTS.value:
-        return PaymentProviderEnum.CLOUDPAYMENTS
     if provider == PaymentProviderEnum.PRODAMUS.value:
+        if not settings.prodamus_form_url and settings.cloudpayments_public_id:
+            return PaymentProviderEnum.CLOUDPAYMENTS
         return PaymentProviderEnum.PRODAMUS
+    if provider == PaymentProviderEnum.CLOUDPAYMENTS.value:
+        if not settings.cloudpayments_public_id and settings.prodamus_form_url:
+            return PaymentProviderEnum.PRODAMUS
+        return PaymentProviderEnum.CLOUDPAYMENTS
     return PaymentProviderEnum.PRODAMUS
 
 
@@ -253,6 +257,15 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 order = _create_order(session, user, Tariff(tariff))
                 provider = get_payment_provider(order.provider.value)
                 payment_link = provider.create_payment_link(order, user=user)
+                if not payment_link and order.provider == PaymentProviderEnum.PRODAMUS:
+                    fallback_provider = get_payment_provider(
+                        PaymentProviderEnum.CLOUDPAYMENTS.value
+                    )
+                    payment_link = fallback_provider.create_payment_link(order, user=user)
+                    if payment_link:
+                        order.provider = PaymentProviderEnum.CLOUDPAYMENTS
+                        provider = fallback_provider
+                        session.add(order)
                 screen_manager.update_state(
                     callback.from_user.id,
                     selected_tariff=tariff,
