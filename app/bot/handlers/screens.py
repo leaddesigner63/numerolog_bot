@@ -817,7 +817,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             return
 
         feedback_mode = (settings.feedback_mode or "native").lower()
+        status = FeedbackStatus.SENT
+        sent_at = datetime.now(timezone.utc)
         if feedback_mode != "native":
+            status = FeedbackStatus.FAILED
+            sent_at = None
             if settings.feedback_group_url:
                 await callback.message.answer(
                     "Обратная связь настроена через livegram. "
@@ -827,31 +831,26 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await callback.message.answer(
                     "Обратная связь настроена через livegram, но ссылка на группу не указана."
                 )
-            await callback.answer()
-            return
-
-        if not settings.feedback_group_chat_id:
+        elif not settings.feedback_group_chat_id:
+            status = FeedbackStatus.FAILED
+            sent_at = None
             await callback.message.answer(
                 "Чат для обратной связи не настроен. "
                 "Добавьте FEEDBACK_GROUP_CHAT_ID или используйте livegram."
             )
-            await callback.answer()
-            return
-
-        status = FeedbackStatus.SENT
-        sent_at = datetime.now(timezone.utc)
-        try:
-            await callback.bot.send_message(
-                chat_id=settings.feedback_group_chat_id,
-                text=f"Сообщение от пользователя {callback.from_user.id}:\n{feedback_text}",
-            )
-        except Exception as exc:
-            status = FeedbackStatus.FAILED
-            sent_at = None
-            logger.warning(
-                "feedback_send_failed",
-                extra={"user_id": callback.from_user.id, "error": str(exc)},
-            )
+        else:
+            try:
+                await callback.bot.send_message(
+                    chat_id=settings.feedback_group_chat_id,
+                    text=f"Сообщение от пользователя {callback.from_user.id}:\n{feedback_text}",
+                )
+            except Exception as exc:
+                status = FeedbackStatus.FAILED
+                sent_at = None
+                logger.warning(
+                    "feedback_send_failed",
+                    extra={"user_id": callback.from_user.id, "error": str(exc)},
+                )
 
         try:
             with get_session() as session:

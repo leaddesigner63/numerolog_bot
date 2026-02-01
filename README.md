@@ -248,9 +248,12 @@ sudo systemctl restart numerolog.target
 Поведение зависит от режима в `.env`:
 
 - `FEEDBACK_MODE=native` — бот отправляет сообщение в `FEEDBACK_GROUP_CHAT_ID` через Bot API и
-  сохраняет результат в `feedback_messages`.
+  сохраняет результат в `feedback_messages` со статусом `sent`/`failed`.
 - `FEEDBACK_MODE=livegram` — бот не отправляет сообщение напрямую, а просит перейти в группу
-  по `FEEDBACK_GROUP_URL` (fallback-сценарий).
+  по `FEEDBACK_GROUP_URL` (fallback-сценарий). Нажатие «Отправить» фиксирует попытку
+  как `failed` в `feedback_messages`, чтобы видеть неуспешные отправки.
+- Если `FEEDBACK_GROUP_CHAT_ID` отсутствует в режиме `native`, бот не падает и сообщает,
+  что настройка не задана; попытка также логируется со статусом `failed`.
 
 ## PDF-хранение
 
