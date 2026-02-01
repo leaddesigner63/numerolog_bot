@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from app.core.llm_router import LLMResponse, LLMUnavailableError, llm_router
@@ -35,7 +35,7 @@ class ReportService:
     async def generate_report(self, *, user_id: int, state: dict[str, Any]) -> LLMResponse | None:
         facts_pack = {
             "user_id": user_id,
-            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": datetime.now(timezone.utc).isoformat(),
             "tariff": state.get("selected_tariff"),
             "profile": state.get("profile"),
             "questionnaire": state.get("questionnaire"),

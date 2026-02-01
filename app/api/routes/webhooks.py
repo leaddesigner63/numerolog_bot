@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request, status
 
@@ -31,7 +31,7 @@ async def handle_payment_webhook(request: Request) -> dict[str, str]:
         if result.is_paid:
             order.status = OrderStatus.PAID
             order.provider_payment_id = result.provider_payment_id
-            order.paid_at = datetime.utcnow()
+            order.paid_at = datetime.now(timezone.utc)
             order.provider = PaymentProviderEnum(provider.provider.value)
         else:
             order.status = OrderStatus.PENDING
