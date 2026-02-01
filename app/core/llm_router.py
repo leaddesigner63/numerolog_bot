@@ -19,10 +19,18 @@ class LLMResponse:
 
 
 class LLMProviderError(RuntimeError):
-    def __init__(self, message: str, *, status_code: int | None = None, retryable: bool = False) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        retryable: bool = False,
+        fallback: bool = False,
+    ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.retryable = retryable
+        self.fallback = fallback
 
 
 class LLMUnavailableError(RuntimeError):
@@ -42,8 +50,11 @@ class LLMRouter:
                 extra={
                     "status_code": exc.status_code,
                     "retryable": exc.retryable,
+                    "fallback": exc.fallback,
                 },
             )
+            if not exc.fallback:
+                raise LLMUnavailableError("Gemini provider failed without fallback") from exc
 
         try:
             return self._call_openai(facts_pack, system_prompt)
@@ -53,14 +64,18 @@ class LLMRouter:
                 extra={
                     "status_code": exc.status_code,
                     "retryable": exc.retryable,
+                    "fallback": exc.fallback,
                 },
             )
-
         raise LLMUnavailableError("Both Gemini and OpenAI providers are unavailable")
 
     def _call_gemini(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
         if not settings.gemini_api_key:
-            raise LLMProviderError("Gemini API key is missing", retryable=False)
+            raise LLMProviderError(
+                "Gemini API key is missing",
+                retryable=False,
+                fallback=True,
+            )
 
         endpoint = (
             "https://generativelanguage.googleapis.com/v1beta/models/"
@@ -152,19 +167,25 @@ class LLMRouter:
                 if attempts <= max_retries:
                     self._sleep_backoff(attempts)
                     continue
-                raise LLMProviderError("LLM request timed out", retryable=True) from exc
+                raise LLMProviderError(
+                    "LLM request timed out",
+                    retryable=True,
+                    fallback=True,
+                ) from exc
             except httpx.HTTPStatusError as exc:
                 status = exc.response.status_code
                 if status in retry_statuses and attempts < max_retries:
                     attempts += 1
                     self._sleep_backoff(attempts)
                     continue
-                retryable = status in retry_statuses
-                if status in {401, 403, 429} or retryable or status >= 500:
+                retryable = status in retry_statuses or status >= 500
+                fallback = status in {401, 403, 429} or status >= 500
+                if fallback:
                     raise LLMProviderError(
                         f"LLM provider returned status {status}",
                         status_code=status,
                         retryable=retryable,
+                        fallback=True,
                     ) from exc
                 raise LLMProviderError(
                     f"LLM provider returned status {status}",
@@ -172,7 +193,11 @@ class LLMRouter:
                     retryable=False,
                 ) from exc
             except httpx.RequestError as exc:
-                raise LLMProviderError("LLM request failed", retryable=True) from exc
+                raise LLMProviderError(
+                    "LLM request failed",
+                    retryable=True,
+                    fallback=True,
+                ) from exc
 
     @staticmethod
     def _sleep_backoff(attempt: int) -> None:
