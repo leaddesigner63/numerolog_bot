@@ -23,6 +23,8 @@ from app.db.models import (
     Tariff,
     User,
     UserProfile,
+    FeedbackMessage,
+    FeedbackStatus,
 )
 from app.db.session import get_session
 from app.payments import get_payment_provider
@@ -483,7 +485,74 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
         return
 
     if callback.data == "feedback:send":
-        await callback.message.answer("Сообщение будет отправлено в группу после запуска потока обратной связи.")
+        state = screen_manager.update_state(callback.from_user.id)
+        feedback_text = (state.data.get("feedback_text") or "").strip()
+        if not feedback_text:
+            await callback.message.answer("Сначала напишите сообщение для обратной связи.")
+            await callback.answer()
+            return
+
+        feedback_mode = (settings.feedback_mode or "native").lower()
+        if feedback_mode != "native":
+            if settings.feedback_group_url:
+                await callback.message.answer(
+                    "Обратная связь настроена через livegram. "
+                    "Нажмите «Перейти в группу», чтобы отправить сообщение."
+                )
+            else:
+                await callback.message.answer(
+                    "Обратная связь настроена через livegram, но ссылка на группу не указана."
+                )
+            await callback.answer()
+            return
+
+        if not settings.feedback_group_chat_id:
+            await callback.message.answer(
+                "Чат для обратной связи не настроен. "
+                "Добавьте FEEDBACK_GROUP_CHAT_ID или используйте livegram."
+            )
+            await callback.answer()
+            return
+
+        status = FeedbackStatus.SENT
+        sent_at = datetime.utcnow()
+        try:
+            await callback.bot.send_message(
+                chat_id=settings.feedback_group_chat_id,
+                text=f"Сообщение от пользователя {callback.from_user.id}:\n{feedback_text}",
+            )
+        except Exception as exc:
+            status = FeedbackStatus.FAILED
+            sent_at = None
+            logger.warning(
+                "feedback_send_failed",
+                extra={"user_id": callback.from_user.id, "error": str(exc)},
+            )
+
+        try:
+            with get_session() as session:
+                user = _get_or_create_user(session, callback.from_user.id)
+                session.add(
+                    FeedbackMessage(
+                        user_id=user.id,
+                        text=feedback_text,
+                        status=status,
+                        sent_at=sent_at,
+                    )
+                )
+        except Exception as exc:
+            logger.warning(
+                "feedback_store_failed",
+                extra={"user_id": callback.from_user.id, "error": str(exc)},
+            )
+
+        if status == FeedbackStatus.SENT:
+            await callback.message.answer("Сообщение отправлено. Спасибо за обратную связь!")
+            screen_manager.update_state(callback.from_user.id, feedback_text=None)
+        else:
+            await callback.message.answer(
+                "Не удалось отправить сообщение. Попробуйте позже или используйте «Перейти в группу»."
+            )
         await callback.answer()
         return
 
