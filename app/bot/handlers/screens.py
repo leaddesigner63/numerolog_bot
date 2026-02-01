@@ -17,6 +17,7 @@ from app.db.models import (
     PaymentProvider as PaymentProviderEnum,
     QuestionnaireResponse,
     QuestionnaireStatus,
+    Report,
     Tariff,
     User,
     UserProfile,
@@ -104,6 +105,28 @@ def _refresh_questionnaire_state(session, telegram_user_id: int) -> None:
     )
 
 
+def _refresh_report_state(
+    session,
+    telegram_user_id: int,
+    *,
+    tariff_value: str | None,
+) -> None:
+    user = _get_or_create_user(session, telegram_user_id)
+    query = select(Report).where(Report.user_id == user.id)
+    if tariff_value:
+        try:
+            query = query.where(Report.tariff == Tariff(tariff_value))
+        except ValueError:
+            pass
+    report = session.execute(query.order_by(Report.created_at.desc())).scalar_one_or_none()
+    if report:
+        screen_manager.update_state(
+            telegram_user_id,
+            report_text=report.report_text,
+            report_model=report.model_used.value if report.model_used else None,
+        )
+
+
 def _ensure_profile_state(telegram_user_id: int) -> None:
     with get_session() as session:
         _refresh_profile_state(session, telegram_user_id)
@@ -146,6 +169,14 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
         if screen_id == "S5":
             with get_session() as session:
                 _refresh_questionnaire_state(session, callback.from_user.id)
+        if screen_id == "S7":
+            state = screen_manager.update_state(callback.from_user.id)
+            with get_session() as session:
+                _refresh_report_state(
+                    session,
+                    callback.from_user.id,
+                    tariff_value=state.data.get("selected_tariff"),
+                )
         await screen_manager.show_screen(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
