@@ -338,6 +338,19 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     )
                     await callback.answer()
                     return
+                _refresh_profile_state(session, callback.from_user.id)
+                state_snapshot = screen_manager.update_state(callback.from_user.id)
+                if not state_snapshot.data.get("profile"):
+                    await callback.message.answer("Сначала заполните «Мои данные».")
+                    await screen_manager.show_screen(
+                        bot=callback.bot,
+                        chat_id=callback.message.chat.id,
+                        user_id=callback.from_user.id,
+                        screen_id="S4",
+                    )
+                    await start_profile_wizard(callback.message, state)
+                    await callback.answer()
+                    return
                 _refresh_questionnaire_state(session, callback.from_user.id)
         if screen_id == "S7":
             state = screen_manager.update_state(callback.from_user.id)

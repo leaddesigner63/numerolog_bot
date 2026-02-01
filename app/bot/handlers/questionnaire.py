@@ -14,8 +14,17 @@ from app.bot.questionnaire.config import (
     load_questionnaire_config,
     resolve_next_question_id,
 )
+from app.bot.handlers.profile import start_profile_wizard
 from app.bot.handlers.screen_manager import screen_manager
-from app.db.models import Order, OrderStatus, QuestionnaireResponse, QuestionnaireStatus, Tariff, User
+from app.db.models import (
+    Order,
+    OrderStatus,
+    QuestionnaireResponse,
+    QuestionnaireStatus,
+    Tariff,
+    User,
+    UserProfile,
+)
 from app.db.session import get_session
 
 router = Router()
@@ -160,6 +169,27 @@ async def _ensure_paid_access(callback: CallbackQuery) -> bool:
     return True
 
 
+async def _ensure_profile_ready(callback: CallbackQuery, state: FSMContext) -> bool:
+    with get_session() as session:
+        user = _get_or_create_user(session, callback.from_user.id)
+        profile = session.execute(
+            select(UserProfile).where(UserProfile.user_id == user.id)
+        ).scalar_one_or_none()
+
+    if profile:
+        return True
+
+    await callback.message.answer("Сначала заполните «Мои данные».")
+    await screen_manager.show_screen(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+        screen_id="S4",
+    )
+    await start_profile_wizard(callback.message, state)
+    return False
+
+
 def _upsert_progress(
     session,
     *,
@@ -211,6 +241,9 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
     if not await _ensure_paid_access(callback):
         await callback.answer()
         return
+    if not await _ensure_profile_ready(callback, state):
+        await callback.answer()
+        return
     config = load_questionnaire_config()
     with get_session() as session:
         user = _get_or_create_user(session, callback.from_user.id)
@@ -258,6 +291,9 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
 @router.callback_query(F.data == "questionnaire:restart")
 async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> None:
     if not await _ensure_paid_access(callback):
+        await callback.answer()
+        return
+    if not await _ensure_profile_ready(callback, state):
         await callback.answer()
         return
     config = load_questionnaire_config()
