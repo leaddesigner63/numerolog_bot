@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import logging
 
 from aiogram import Router
@@ -228,7 +228,8 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
                 free_limit = user.free_limit
                 last_t0_at = free_limit.last_t0_at if free_limit else None
                 cooldown = timedelta(hours=settings.free_t0_cooldown_hours)
-                if last_t0_at and datetime.utcnow() < last_t0_at + cooldown:
+                now = datetime.now(timezone.utc)
+                if last_t0_at and now < last_t0_at + cooldown:
                     next_available = last_t0_at + cooldown
                     screen_manager.update_state(
                         callback.from_user.id,
@@ -290,7 +291,7 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
                 result = provider.check_payment_status(order)
                 if result and result.is_paid:
                     order.status = OrderStatus.PAID
-                    order.paid_at = datetime.utcnow()
+                    order.paid_at = datetime.now(timezone.utc)
                     if result.provider_payment_id:
                         order.provider_payment_id = result.provider_payment_id
                     order.provider = PaymentProviderEnum(provider.provider.value)
@@ -358,7 +359,7 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
             with get_session() as session:
                 user = _get_or_create_user(session, callback.from_user.id)
                 if user.free_limit:
-                    user.free_limit.last_t0_at = datetime.utcnow()
+                    user.free_limit.last_t0_at = datetime.now(timezone.utc)
         screen_manager.update_state(callback.from_user.id, profile_flow=None)
         next_screen = "S5" if tariff in {Tariff.T2.value, Tariff.T3.value} else "S6"
         if next_screen == "S6":
@@ -525,7 +526,7 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
             return
 
         status = FeedbackStatus.SENT
-        sent_at = datetime.utcnow()
+        sent_at = datetime.now(timezone.utc)
         try:
             await callback.bot.send_message(
                 chat_id=settings.feedback_group_chat_id,
