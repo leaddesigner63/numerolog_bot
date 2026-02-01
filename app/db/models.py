@@ -54,6 +54,10 @@ class QuestionnaireStatus(enum.StrEnum):
     COMPLETED = "completed"
 
 
+def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
+    return [member.value for member in enum_cls]
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -104,12 +108,18 @@ class Order(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
-    tariff: Mapped[Tariff] = mapped_column(Enum(Tariff), index=True)
+    tariff: Mapped[Tariff] = mapped_column(
+        Enum(Tariff, values_callable=_enum_values, name="tariff"), index=True
+    )
     amount: Mapped[float] = mapped_column(Numeric(10, 2))
     currency: Mapped[str] = mapped_column(String(3), default="RUB")
-    provider: Mapped[PaymentProvider] = mapped_column(Enum(PaymentProvider))
+    provider: Mapped[PaymentProvider] = mapped_column(
+        Enum(PaymentProvider, values_callable=_enum_values, name="paymentprovider")
+    )
     provider_payment_id: Mapped[str | None] = mapped_column(String(255), index=True)
-    status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), index=True)
+    status: Mapped[OrderStatus] = mapped_column(
+        Enum(OrderStatus, values_callable=_enum_values, name="orderstatus"), index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow
     )
@@ -129,13 +139,17 @@ class Report(Base):
     order_id: Mapped[int | None] = mapped_column(
         ForeignKey("orders.id", ondelete="SET NULL"), index=True
     )
-    tariff: Mapped[Tariff] = mapped_column(Enum(Tariff), index=True)
+    tariff: Mapped[Tariff] = mapped_column(
+        Enum(Tariff, values_callable=_enum_values, name="tariff"), index=True
+    )
     report_text: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=datetime.utcnow
     )
     pdf_storage_key: Mapped[str | None] = mapped_column(String(255))
-    model_used: Mapped[ReportModel | None] = mapped_column(Enum(ReportModel))
+    model_used: Mapped[ReportModel | None] = mapped_column(
+        Enum(ReportModel, values_callable=_enum_values, name="reportmodel")
+    )
     safety_flags: Mapped[dict | None] = mapped_column(JSON)
 
     user: Mapped[User] = relationship(back_populates="reports")
@@ -161,7 +175,9 @@ class FeedbackMessage(Base):
         ForeignKey("users.id", ondelete="CASCADE"), index=True
     )
     text: Mapped[str] = mapped_column(Text)
-    status: Mapped[FeedbackStatus] = mapped_column(Enum(FeedbackStatus))
+    status: Mapped[FeedbackStatus] = mapped_column(
+        Enum(FeedbackStatus, values_callable=_enum_values, name="feedbackstatus")
+    )
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="feedback_messages")
@@ -176,7 +192,12 @@ class QuestionnaireResponse(Base):
     )
     questionnaire_version: Mapped[str] = mapped_column(String(32), index=True)
     status: Mapped[QuestionnaireStatus] = mapped_column(
-        Enum(QuestionnaireStatus), index=True
+        Enum(
+            QuestionnaireStatus,
+            values_callable=_enum_values,
+            name="questionnairestatus",
+        ),
+        index=True,
     )
     answers: Mapped[dict | None] = mapped_column(JSON)
     current_question_id: Mapped[str | None] = mapped_column(String(64))
