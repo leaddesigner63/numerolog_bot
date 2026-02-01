@@ -45,11 +45,12 @@ async def handle_payment_webhook(request: Request) -> dict[str, str]:
         if not order:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
         if result.is_paid:
-            order.status = OrderStatus.PAID
+            if order.status != OrderStatus.PAID:
+                order.status = OrderStatus.PAID
+                order.paid_at = datetime.now(timezone.utc)
             order.provider_payment_id = result.provider_payment_id
-            order.paid_at = datetime.now(timezone.utc)
             order.provider = PaymentProviderEnum(provider.provider.value)
-        else:
+        elif order.status != OrderStatus.PAID:
             order.status = OrderStatus.PENDING
     return {"status": "ok"}
 

@@ -209,6 +209,46 @@ def _create_order(session, user: User, tariff: Tariff) -> Order:
     return order
 
 
+def _create_payment_link(
+    order: Order,
+    user: User,
+) -> tuple[str | None, PaymentProviderEnum]:
+    provider = get_payment_provider(order.provider.value)
+    payment_link = None
+    try:
+        payment_link = provider.create_payment_link(order, user=user)
+    except Exception as exc:
+        logger.warning(
+            "payment_link_create_failed",
+            extra={
+                "order_id": order.id,
+                "provider": order.provider.value,
+                "error": str(exc),
+            },
+        )
+    if payment_link:
+        return payment_link.url, provider.provider
+    if order.provider == PaymentProviderEnum.PRODAMUS:
+        fallback_provider = get_payment_provider(
+            PaymentProviderEnum.CLOUDPAYMENTS.value
+        )
+        try:
+            payment_link = fallback_provider.create_payment_link(order, user=user)
+        except Exception as exc:
+            logger.warning(
+                "payment_link_fallback_failed",
+                extra={
+                    "order_id": order.id,
+                    "provider": PaymentProviderEnum.CLOUDPAYMENTS.value,
+                    "error": str(exc),
+                },
+            )
+            payment_link = None
+        if payment_link:
+            return payment_link.url, fallback_provider.provider
+    return None, provider.provider
+
+
 def _refresh_order_state(order: Order) -> dict[str, str]:
     return {
         "order_id": str(order.id),
@@ -382,21 +422,14 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             with get_session() as session:
                 user = _get_or_create_user(session, callback.from_user.id)
                 order = _create_order(session, user, Tariff(tariff))
-                provider = get_payment_provider(order.provider.value)
-                payment_link = provider.create_payment_link(order, user=user)
-                if not payment_link and order.provider == PaymentProviderEnum.PRODAMUS:
-                    fallback_provider = get_payment_provider(
-                        PaymentProviderEnum.CLOUDPAYMENTS.value
-                    )
-                    payment_link = fallback_provider.create_payment_link(order, user=user)
-                    if payment_link:
-                        order.provider = PaymentProviderEnum.CLOUDPAYMENTS
-                        provider = fallback_provider
-                        session.add(order)
+                payment_url, provider_name = _create_payment_link(order, user)
+                if provider_name != order.provider:
+                    order.provider = provider_name
+                    session.add(order)
                 screen_manager.update_state(
                     callback.from_user.id,
                     selected_tariff=tariff,
-                    payment_url=payment_link.url if payment_link else None,
+                    payment_url=payment_url,
                     **_refresh_order_state(order),
                 )
 
@@ -434,29 +467,42 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 return
             if order.status != OrderStatus.PAID:
                 provider = get_payment_provider(order.provider.value)
-                result = provider.check_payment_status(order)
+                result = None
+                try:
+                    result = provider.check_payment_status(order)
+                except Exception as exc:
+                    logger.warning(
+                        "payment_status_check_failed",
+                        extra={
+                            "order_id": order.id,
+                            "provider": order.provider.value,
+                            "error": str(exc),
+                        },
+                    )
                 if result and result.is_paid:
-                    order.status = OrderStatus.PAID
-                    order.paid_at = datetime.now(timezone.utc)
                     if result.provider_payment_id:
                         order.provider_payment_id = result.provider_payment_id
-                    order.provider = PaymentProviderEnum(provider.provider.value)
+                    order.status = OrderStatus.PENDING
                     session.add(order)
-                else:
-                    screen_manager.update_state(
-                        callback.from_user.id, **_refresh_order_state(order)
+                    await callback.message.answer(
+                        "Оплата найдена. Ожидаем подтверждение webhook, "
+                        "после чего откроется доступ."
                     )
+                else:
                     await callback.message.answer(
                         "Оплата ещё не подтверждена. Мы проверим статус и сообщим, когда всё будет готово."
                     )
-                    await screen_manager.show_screen(
-                        bot=callback.bot,
-                        chat_id=callback.message.chat.id,
-                        user_id=callback.from_user.id,
-                        screen_id="S3",
-                    )
-                    await callback.answer()
-                    return
+                screen_manager.update_state(
+                    callback.from_user.id, **_refresh_order_state(order)
+                )
+                await screen_manager.show_screen(
+                    bot=callback.bot,
+                    chat_id=callback.message.chat.id,
+                    user_id=callback.from_user.id,
+                    screen_id="S3",
+                )
+                await callback.answer()
+                return
             screen_manager.update_state(callback.from_user.id, **_refresh_order_state(order))
             _refresh_profile_state(session, callback.from_user.id)
             screen_manager.update_state(callback.from_user.id, profile_flow="report")

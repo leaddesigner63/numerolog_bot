@@ -139,7 +139,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
     order_status = state.get("order_status")
     order_amount = state.get("order_amount")
     order_currency = state.get("order_currency", "RUB")
-    payment_url = state.get("payment_url") or settings.prodamus_form_url
+    payment_url = state.get("payment_url")
     order_block = ""
     if order_id and order_status:
         order_block = (
@@ -149,7 +149,9 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
         )
     text_parts = [
         f"Оплата тарифа {selected_tariff}.\n\n"
-        "Оплачивая, вы подтверждаете согласие с офертой. Возвратов нет."
+        "Оплачивая, вы подтверждаете согласие с офертой. Возвратов нет.\n"
+        "Кнопка «Я оплатил(а)» проверяет статус заказа и не запускает генерацию "
+        "без подтверждения оплаты webhook."
         f"{order_block}"
     ]
     if not payment_url:

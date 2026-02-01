@@ -120,6 +120,8 @@ def _extract_webhook(payload: Mapping[str, Any]) -> CloudPaymentsWebhook:
         raise ValueError("InvoiceId is missing in CloudPayments payload")
     transaction_id = payload.get("TransactionId") or payload.get("transactionId")
     status = payload.get("Status") or payload.get("status")
+    if not status:
+        raise ValueError("Status is missing in CloudPayments payload")
     return CloudPaymentsWebhook(
         order_id=int(order_id), transaction_id=transaction_id, status=status
     )

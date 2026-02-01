@@ -5,7 +5,7 @@ import hmac
 import json
 from dataclasses import dataclass
 from typing import Any, Mapping
-from urllib.parse import urlencode
+from urllib.parse import parse_qs, urlencode
 
 import httpx
 
@@ -102,8 +102,8 @@ def _parse_payload(raw_body: bytes) -> dict[str, Any]:
         pass
     try:
         decoded = raw_body.decode("utf-8")
-        pairs = [chunk.split("=", 1) for chunk in decoded.split("&") if chunk]
-        return {key: value for key, value in pairs if len(key) > 0}
+        parsed = parse_qs(decoded, keep_blank_values=True)
+        return {key: value[0] for key, value in parsed.items() if value}
     except Exception:
         return {}
 
@@ -114,6 +114,8 @@ def _extract_webhook(payload: Mapping[str, Any]) -> ProdamusWebhook:
         raise ValueError("order_id is missing in Prodamus payload")
     payment_id = payload.get("payment_id") or payload.get("transaction_id")
     status = payload.get("status") or payload.get("payment_status")
+    if not status:
+        raise ValueError("status is missing in Prodamus payload")
     return ProdamusWebhook(order_id=int(order_id), payment_id=payment_id, status=status)
 
 
