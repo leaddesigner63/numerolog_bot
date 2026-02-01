@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     bot_token: str
     webhook_url: str | None = None
 
-    offer_url: str
+    offer_url: str | None = None
     feedback_group_chat_id: int | None = None
     feedback_group_url: str | None = None
     feedback_mode: str = "native"

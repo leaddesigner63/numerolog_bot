@@ -41,9 +41,26 @@ def _format_tariff_label(tariff: str) -> str:
     return tariff
 
 
+def _offer_url() -> str | None:
+    url = (settings.offer_url or "").strip()
+    return url or None
+
+
+def _offer_button() -> InlineKeyboardButton | None:
+    url = _offer_url()
+    if not url:
+        return None
+    return InlineKeyboardButton(text="Открыть оферту", url=url)
+
+
+def _refunds_button() -> InlineKeyboardButton:
+    return InlineKeyboardButton(text="Возвратов нет", callback_data="noop:refunds")
+
+
 def screen_s0(_: dict[str, Any]) -> ScreenContent:
     text = (
-        "ИИ-аналитик личных данных помогает структурировать опыт и увидеть рабочие гипотезы.\n\n"
+        "ИИ-аналитик личных данных помогает структурировать опыт, навыки и мотивацию.\n"
+        "Здесь вы получаете аналитический отчёт без обещаний и гарантий.\n\n"
         "Сервис не является консультацией, прогнозом или рекомендацией к действию."
     )
     keyboard = _build_keyboard(_global_menu())
@@ -84,15 +101,19 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
         "Сервис не гарантирует финансовых или иных результатов.\n\n"
         "Возвратов нет."
     )
-    rows = [
-        [
-            InlineKeyboardButton(text="Открыть оферту", url=settings.offer_url),
-        ],
+    offer_button = _offer_button()
+    if not offer_button:
+        text += "\n\nСсылка на оферту пока не настроена."
+    rows = [[_refunds_button()]]
+    if offer_button:
+        rows.append([offer_button])
+    rows.append(
         [
             InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1"),
             InlineKeyboardButton(text="К оплате", callback_data="screen:S3"),
         ],
-    ]
+    )
+    rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
@@ -116,7 +137,13 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
         "Оплачивая, вы подтверждаете согласие с офертой. Возвратов нет."
         f"{order_block}"
     )
+    offer_button = _offer_button()
+    if not offer_button:
+        text += "\n\nСсылка на оферту пока не настроена."
     rows: list[list[InlineKeyboardButton]] = []
+    rows.append([_refunds_button()])
+    if offer_button:
+        rows.append([offer_button])
     if payment_url:
         rows.append(
             [
@@ -132,6 +159,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1"),
         ]
     )
+    rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
@@ -164,7 +192,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             "Данные ещё не заполнены. Нажмите «Заполнить данные» и следуйте шагам:\n"
             "1) Имя\n"
             "2) Дата рождения (YYYY-MM-DD)\n"
-            "3) Время рождения (HH)\n"
+            "3) Время рождения (HH:MM)\n"
             "4) Место рождения (город, регион, страна)."
         )
     rows: list[list[InlineKeyboardButton]] = []
@@ -214,21 +242,32 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
             [InlineKeyboardButton(text=button_text, callback_data="questionnaire:start")]
         )
     rows.append([InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1")])
+    rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
 def screen_s6(_: dict[str, Any]) -> ScreenContent:
     text = "Генерируем отчёт… Пожалуйста, подождите."
-    rows = [[InlineKeyboardButton(text="Назад в тарифы", callback_data="screen:S1")]]
+    rows = [
+        [InlineKeyboardButton(text="Назад в тарифы", callback_data="screen:S1")],
+        *_global_menu(),
+    ]
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
 def screen_s7(state: dict[str, Any]) -> ScreenContent:
-    report_text = state.get("report_text")
+    report_text = (state.get("report_text") or "").strip()
+    disclaimer = (
+        "Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
+        "Все выводы носят аналитический и описательный характер.\n"
+        "Ответственность за решения остаётся за пользователем.\n"
+        "Сервис не гарантирует финансовых или иных результатов.\n"
+        "Возвратов нет."
+    )
     if report_text:
-        text = report_text
+        text = f"{report_text}\n\n{disclaimer}"
     else:
         text = (
             "Ваш отчёт готов.\n\n"
@@ -236,20 +275,13 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
             "• Сильные стороны\n"
             "• Зоны потенциального роста\n"
             "• Ориентиры по сферам\n\n"
-            "Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
-            "Все выводы носят аналитический и описательный характер.\n"
-            "Ответственность за решения остаётся за пользователем.\n"
-            "Сервис не гарантирует финансовых или иных результатов.\n"
-            "Возвратов нет."
+            f"{disclaimer}"
         )
     rows = [
         [
             InlineKeyboardButton(text="Выгрузить PDF", callback_data="report:pdf"),
         ],
-        [
-            InlineKeyboardButton(text="Тарифы", callback_data="screen:S1"),
-            InlineKeyboardButton(text="Обратная связь", callback_data="screen:S8"),
-        ],
+        *_global_menu(),
     ]
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
