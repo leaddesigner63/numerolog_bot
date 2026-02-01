@@ -269,22 +269,35 @@ async def handle_callbacks(callback: CallbackQuery) -> None:
             return
         with get_session() as session:
             order = session.get(Order, int(order_id))
-            if not order or order.status != OrderStatus.PAID:
-                if order:
+            if not order:
+                await callback.message.answer("Заказ не найден. Попробуйте выбрать тариф заново.")
+                await callback.answer()
+                return
+            if order.status != OrderStatus.PAID:
+                provider = get_payment_provider(order.provider.value)
+                result = provider.check_payment_status(order)
+                if result and result.is_paid:
+                    order.status = OrderStatus.PAID
+                    order.paid_at = datetime.utcnow()
+                    if result.provider_payment_id:
+                        order.provider_payment_id = result.provider_payment_id
+                    order.provider = PaymentProviderEnum(provider.provider.value)
+                    session.add(order)
+                else:
                     screen_manager.update_state(
                         callback.from_user.id, **_refresh_order_state(order)
                     )
-                await callback.message.answer(
-                    "Оплата ещё не подтверждена. Мы проверим статус и сообщим, когда всё будет готово."
-                )
-                await screen_manager.show_screen(
-                    bot=callback.bot,
-                    chat_id=callback.message.chat.id,
-                    user_id=callback.from_user.id,
-                    screen_id="S3",
-                )
-                await callback.answer()
-                return
+                    await callback.message.answer(
+                        "Оплата ещё не подтверждена. Мы проверим статус и сообщим, когда всё будет готово."
+                    )
+                    await screen_manager.show_screen(
+                        bot=callback.bot,
+                        chat_id=callback.message.chat.id,
+                        user_id=callback.from_user.id,
+                        screen_id="S3",
+                    )
+                    await callback.answer()
+                    return
             screen_manager.update_state(callback.from_user.id, **_refresh_order_state(order))
             _refresh_profile_state(session, callback.from_user.id)
             screen_manager.update_state(callback.from_user.id, profile_flow="report")

@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 from urllib.parse import urlencode
 
+import httpx
+
 from app.core.config import Settings
 from app.db.models import Order, PaymentProvider as PaymentProviderEnum, User
 from app.payments.base import PaymentLink, PaymentProvider, WebhookResult
@@ -62,6 +64,40 @@ class CloudPaymentsProvider(PaymentProvider):
             is_paid=_is_paid_status(webhook.status),
         )
 
+    def check_payment_status(self, order: Order) -> WebhookResult | None:
+        public_id = self._settings.cloudpayments_public_id
+        api_secret = self._settings.cloudpayments_api_secret
+        if not public_id or not api_secret:
+            return None
+        try:
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(
+                    "https://api.cloudpayments.ru/payments/find",
+                    json={"InvoiceId": str(order.id)},
+                    auth=(public_id, api_secret),
+                )
+                response.raise_for_status()
+        except httpx.RequestError:
+            return None
+        except httpx.HTTPStatusError:
+            return None
+        data = _safe_json(response)
+        model = data.get("Model") if isinstance(data, dict) else None
+        status_value = None
+        transaction_id = None
+        if isinstance(model, dict):
+            status_value = model.get("Status")
+            transaction_id = model.get("TransactionId")
+        if isinstance(status_value, str):
+            status_str = status_value
+        else:
+            status_str = None
+        return WebhookResult(
+            order_id=order.id,
+            provider_payment_id=str(transaction_id) if transaction_id else None,
+            is_paid=_is_paid_status(status_str),
+        )
+
 
 def _find_signature(headers: Mapping[str, str]) -> str | None:
     lowered = {key.lower(): value for key, value in headers.items()}
@@ -93,3 +129,13 @@ def _is_paid_status(status: str | None) -> bool:
     if not status:
         return False
     return status.lower() in {"completed", "authorized", "paid", "success", "succeeded"}
+
+
+def _safe_json(response: httpx.Response) -> dict[str, Any]:
+    try:
+        data = response.json()
+    except json.JSONDecodeError:
+        return {}
+    if isinstance(data, dict):
+        return data
+    return {}
