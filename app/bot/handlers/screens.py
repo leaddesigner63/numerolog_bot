@@ -648,12 +648,26 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await callback.message.answer("PDF будет доступен после генерации отчёта.")
                 await callback.answer()
                 return
+            pdf_bytes = None
             if report.pdf_storage_key:
                 pdf_bytes = pdf_service.load_pdf(report.pdf_storage_key)
-            else:
-                pdf_bytes = pdf_service.generate_pdf(report.report_text)
-                report.pdf_storage_key = pdf_service.store_pdf(report.id, pdf_bytes)
-                session.add(report)
+            if pdf_bytes is None:
+                try:
+                    pdf_bytes = pdf_service.generate_pdf(report.report_text)
+                except Exception as exc:
+                    logger.warning(
+                        "pdf_generate_failed",
+                        extra={"report_id": report.id, "error": str(exc)},
+                    )
+                    await callback.message.answer(
+                        "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
+                    )
+                    await callback.answer()
+                    return
+                storage_key = pdf_service.store_pdf(report.id, pdf_bytes)
+                if storage_key:
+                    report.pdf_storage_key = storage_key
+                    session.add(report)
         filename = f"report_{report.id}.pdf"
         await callback.message.answer_document(
             BufferedInputFile(pdf_bytes, filename=filename)
