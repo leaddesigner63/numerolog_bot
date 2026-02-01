@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any
 
 from app.core.llm_router import LLMResponse, LLMUnavailableError, llm_router
+from app.core.report_safety import report_safety
 from app.db.models import Order, OrderStatus, Report, ReportModel, Tariff
 from app.db.session import get_session
 
@@ -39,16 +40,71 @@ class ReportService:
             "profile": state.get("profile"),
             "questionnaire": state.get("questionnaire"),
         }
+        prompt = SYSTEM_PROMPT
+        attempts = 0
+        safety_history: list[dict[str, Any]] = []
+        last_response: LLMResponse | None = None
 
-        try:
-            response = await asyncio.to_thread(llm_router.generate, facts_pack, SYSTEM_PROMPT)
-        except LLMUnavailableError:
-            self._logger.warning("llm_unavailable", extra={"user_id": user_id})
-            return None
-        self._persist_report(user_id=user_id, state=state, response=response)
-        return response
+        while True:
+            try:
+                response = await asyncio.to_thread(llm_router.generate, facts_pack, prompt)
+            except LLMUnavailableError:
+                self._logger.warning("llm_unavailable", extra={"user_id": user_id})
+                return None
 
-    def _persist_report(self, *, user_id: int, state: dict[str, Any], response: LLMResponse) -> None:
+            evaluation = report_safety.evaluate(response.text)
+            safety_history.append(report_safety.evaluation_payload(evaluation))
+            last_response = response
+
+            if evaluation.is_safe:
+                break
+
+            if attempts >= 2:
+                break
+
+            attempts += 1
+            prompt = report_safety.build_retry_prompt(SYSTEM_PROMPT, evaluation)
+
+        if last_response and evaluation.is_safe:
+            safety_flags = report_safety.build_flags(
+                attempts=attempts,
+                history=safety_history,
+                provider=last_response.provider,
+                model=last_response.model,
+            )
+            self._persist_report(
+                user_id=user_id,
+                state=state,
+                response=last_response,
+                safety_flags=safety_flags,
+            )
+            return last_response
+
+        if last_response:
+            safety_flags = report_safety.build_flags(
+                attempts=attempts,
+                history=safety_history,
+                provider=last_response.provider,
+                model=last_response.model,
+            )
+            self._persist_report(
+                user_id=user_id,
+                state=state,
+                response=last_response,
+                safety_flags=safety_flags,
+                force_store=True,
+            )
+        return None
+
+    def _persist_report(
+        self,
+        *,
+        user_id: int,
+        state: dict[str, Any],
+        response: LLMResponse,
+        safety_flags: dict[str, Any],
+        force_store: bool = False,
+    ) -> None:
         tariff_value = state.get("selected_tariff")
         if not tariff_value:
             self._logger.warning("report_tariff_missing", extra={"user_id": user_id})
@@ -67,13 +123,15 @@ class ReportService:
         with get_session() as session:
             if tariff in paid_tariffs:
                 order_id = self._resolve_paid_order_id(session, state, user_id)
+                if not order_id and not force_store:
+                    return
             report = Report(
                 user_id=user_id,
                 order_id=order_id,
                 tariff=tariff,
                 report_text=response.text,
                 model_used=self._map_model(response.provider),
-                safety_flags=self._build_safety_flags(response),
+                safety_flags=safety_flags,
             )
             session.add(report)
 
@@ -98,14 +156,5 @@ class ReportService:
         if provider == "openai":
             return ReportModel.CHATGPT
         return None
-
-    @staticmethod
-    def _build_safety_flags(response: LLMResponse) -> dict[str, Any]:
-        return {
-            "provider": response.provider,
-            "model": response.model,
-            "filtered": False,
-        }
-
 
 report_service = ReportService()
