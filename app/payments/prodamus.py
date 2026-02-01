@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 from dataclasses import dataclass
 from typing import Any, Mapping
 from urllib.parse import urlencode
@@ -26,9 +27,14 @@ class ProdamusProvider(PaymentProvider):
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
+        self._logger = logging.getLogger(__name__)
 
     def create_payment_link(self, order: Order, user: User | None = None) -> PaymentLink | None:
         if not self._settings.prodamus_form_url:
+            self._logger.warning(
+                "prodamus_form_url_missing",
+                extra={"order_id": order.id, "user_id": getattr(user, "id", None)},
+            )
             return None
         description = f"Тариф {order.tariff.value}"
         params = {
@@ -45,6 +51,7 @@ class ProdamusProvider(PaymentProvider):
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str]) -> WebhookResult:
         secret = self._settings.prodamus_webhook_secret
         if not secret:
+            self._logger.warning("prodamus_webhook_secret_missing")
             raise ValueError("PRODAMUS_WEBHOOK_SECRET is not configured")
         signature = _find_signature(headers, raw_body)
         expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
@@ -62,6 +69,14 @@ class ProdamusProvider(PaymentProvider):
         status_url = self._settings.prodamus_status_url
         secret = self._settings.prodamus_secret
         if not status_url or not secret:
+            self._logger.warning(
+                "prodamus_status_config_missing",
+                extra={
+                    "order_id": order.id,
+                    "status_url_set": bool(status_url),
+                    "secret_set": bool(secret),
+                },
+            )
             return None
         payload = {"order_id": str(order.id), "secret": secret}
         try:

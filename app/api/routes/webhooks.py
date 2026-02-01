@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import logging
 
 from fastapi import APIRouter, HTTPException, Request, status
 
@@ -11,6 +12,7 @@ from app.payments import get_payment_provider
 
 
 router = APIRouter(tags=["payments"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/webhooks/payments")
@@ -22,6 +24,14 @@ async def handle_payment_webhook(request: Request) -> dict[str, str]:
     try:
         result = provider.verify_webhook(raw_body, request.headers)
     except ValueError as exc:
+        logger.warning(
+            "payment_webhook_verify_failed",
+            extra={
+                "provider": provider.provider.value,
+                "error": str(exc),
+                "fallback_attempt": not bool(provider_name),
+            },
+        )
         if provider_name:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
@@ -36,6 +46,10 @@ async def handle_payment_webhook(request: Request) -> dict[str, str]:
             result = fallback_provider.verify_webhook(raw_body, request.headers)
             provider = fallback_provider
         except ValueError as fallback_exc:
+            logger.warning(
+                "payment_webhook_fallback_failed",
+                extra={"provider": fallback_provider.provider.value, "error": str(fallback_exc)},
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, detail=str(fallback_exc)
             ) from fallback_exc
