@@ -6,7 +6,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Protocol
 
-import boto3
+from importlib.util import find_spec
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
@@ -17,6 +17,9 @@ from app.core.config import settings
 
 _FONT_NAME = "DejaVuSans"
 _FONT_REGISTERED = False
+_BOTO3_AVAILABLE = find_spec("boto3") is not None
+if _BOTO3_AVAILABLE:
+    import boto3
 
 
 def _register_font() -> str:
@@ -141,12 +144,26 @@ class PdfService:
         pdf.save()
         return buffer.getvalue()
 
-    def store_pdf(self, report_id: int, content: bytes) -> str:
+    def store_pdf(self, report_id: int, content: bytes) -> str | None:
         key = f"{report_id}.pdf"
-        return self._storage.save(key, content)
+        try:
+            return self._storage.save(key, content)
+        except Exception as exc:
+            self._logger.warning(
+                "pdf_store_failed",
+                extra={"report_id": report_id, "error": str(exc)},
+            )
+            return None
 
-    def load_pdf(self, storage_key: str) -> bytes:
-        return self._storage.load(storage_key)
+    def load_pdf(self, storage_key: str) -> bytes | None:
+        try:
+            return self._storage.load(storage_key)
+        except Exception as exc:
+            self._logger.warning(
+                "pdf_load_failed",
+                extra={"storage_key": storage_key, "error": str(exc)},
+            )
+            return None
 
     def storage_mode(self) -> str:
         if settings.pdf_storage_bucket:
@@ -155,8 +172,13 @@ class PdfService:
 
     def _build_storage(self) -> PdfStorage:
         if settings.pdf_storage_bucket:
-            return BucketPdfStorage(
-                settings.pdf_storage_bucket, settings.pdf_storage_key or "reports"
+            if _BOTO3_AVAILABLE:
+                return BucketPdfStorage(
+                    settings.pdf_storage_bucket, settings.pdf_storage_key or "reports"
+                )
+            self._logger.warning(
+                "pdf_bucket_unavailable_missing_boto3",
+                extra={"bucket": settings.pdf_storage_bucket},
             )
         root = Path(settings.pdf_storage_key or "storage/pdfs")
         return LocalPdfStorage(root)
