@@ -173,13 +173,24 @@ class PdfService:
     def _build_storage(self) -> PdfStorage:
         if settings.pdf_storage_bucket:
             if _BOTO3_AVAILABLE:
-                return BucketPdfStorage(
-                    settings.pdf_storage_bucket, settings.pdf_storage_key or "reports"
+                try:
+                    return BucketPdfStorage(
+                        settings.pdf_storage_bucket,
+                        settings.pdf_storage_key or "reports",
+                    )
+                except Exception as exc:
+                    self._logger.warning(
+                        "pdf_bucket_init_failed",
+                        extra={
+                            "bucket": settings.pdf_storage_bucket,
+                            "error": str(exc),
+                        },
+                    )
+            else:
+                self._logger.warning(
+                    "pdf_bucket_unavailable_missing_boto3",
+                    extra={"bucket": settings.pdf_storage_bucket},
                 )
-            self._logger.warning(
-                "pdf_bucket_unavailable_missing_boto3",
-                extra={"bucket": settings.pdf_storage_bucket},
-            )
         root = Path(settings.pdf_storage_key or "storage/pdfs")
         return LocalPdfStorage(root)
 

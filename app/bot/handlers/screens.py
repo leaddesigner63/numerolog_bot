@@ -786,7 +786,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 pdf_bytes = pdf_service.load_pdf(report.pdf_storage_key)
             if pdf_bytes is None:
                 try:
-                    pdf_bytes = pdf_service.generate_pdf(report.report_text)
+                    pdf_bytes = pdf_service.generate_pdf(report.report_text or "")
                 except Exception as exc:
                     logger.warning(
                         "pdf_generate_failed",
