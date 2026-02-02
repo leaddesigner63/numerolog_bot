@@ -8,26 +8,11 @@ from typing import Any
 
 from app.bot.questionnaire.config import load_questionnaire_config
 from app.core.llm_router import LLMResponse, LLMUnavailableError, llm_router
+from app.core.prompt_settings import resolve_tariff_prompt
 from app.core.report_safety import FORBIDDEN_WORDS, report_safety
 from app.db.models import Order, OrderStatus, Report, ReportModel, Tariff
 from app.db.session import get_session
 
-
-SYSTEM_PROMPT = """
-Ты — аналитический ассистент. Подготовь структурированный отчёт на русском языке.
-Соблюдай нейтральную лексику и используй только допустимые формулировки:
-«личные предрасположенности», «навыки и компетенции», «интересы и мотивация»,
-«жизненный и профессиональный опыт», «поведенческие паттерны», «ценности»,
-«рабочие гипотезы», «варианты сценариев», «зоны роста».
-Запрещено использовать слова: «нумерология», «предназначение», «судьба», «карма», «прогноз».
-Запрещены обещания результата, гарантии, проценты, «100%». Не давай медицинских, финансовых,
-правовых или иных советов из красных зон.
-В конце добавь дисклеймеры:
-- «Сервис не является консультацией, прогнозом или рекомендацией к действию»
-- «Все выводы носят аналитический и описательный характер»
-- «Ответственность за решения остаётся за пользователем»
-- «Сервис не гарантирует финансовых или иных результатов»
-""".strip()
 
 REPORT_FRAMEWORK_TEMPLATE = """
 Единый каркас отчёта (используй разделы строго по тарифу):
@@ -144,13 +129,14 @@ class ReportService:
         tariff_label = None
         if tariff_value:
             try:
-                tariff_label = Tariff(tariff_value).value
+                tariff_label = Tariff(tariff_value)
             except ValueError:
                 tariff_label = None
-        tariff_label = tariff_label or Tariff.T1.value
+        tariff_label = tariff_label or Tariff.T1
+        base_prompt = resolve_tariff_prompt(tariff_label)
         return (
-            f"{SYSTEM_PROMPT}\n\n"
-            f"Текущий тариф: {tariff_label}.\n"
+            f"{base_prompt}\n\n"
+            f"Текущий тариф: {tariff_label.value}.\n"
             f"{REPORT_FRAMEWORK_TEMPLATE}\n"
             "Сформируй отчёт только для указанного тарифа, "
             "используй чёткие заголовки и списки."
