@@ -106,10 +106,6 @@ def _offer_button() -> InlineKeyboardButton | None:
     return InlineKeyboardButton(text="Открыть оферту", url=url)
 
 
-def _refunds_button() -> InlineKeyboardButton:
-    return InlineKeyboardButton(text="Возвратов нет", callback_data="noop:refunds")
-
-
 def _with_screen_prefix(screen_id: str, text: str) -> str:
     return f"{screen_id}: {text.lstrip()}"
 
@@ -203,7 +199,6 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
         text = _with_screen_prefix("S2", offer_text)
 
         rows: list[list[InlineKeyboardButton]] = []
-        rows.append([_refunds_button()])
         offer_button = _offer_button()
         if offer_button:
             rows.append([offer_button])
@@ -236,7 +231,6 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
     )
 
     rows: list[list[InlineKeyboardButton]] = []
-    rows.append([_refunds_button()])
     offer_button = _offer_button()
     if offer_button:
         rows.append([offer_button])
@@ -284,7 +278,6 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
         text += "\n\nСсылка на оферту пока не настроена."
 
     rows: list[list[InlineKeyboardButton]] = []
-    rows.append([_refunds_button()])
     if offer_button:
         rows.append([offer_button])
     if payment_url:
