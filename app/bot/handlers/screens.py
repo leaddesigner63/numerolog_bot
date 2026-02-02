@@ -92,11 +92,24 @@ async def _notify_missing_offer_url(callback: CallbackQuery) -> None:
 
 
 async def _notify_llm_unavailable(callback: CallbackQuery) -> bool:
-    if settings.gemini_api_key or settings.openai_api_key:
+    if (
+        settings.gemini_api_key
+        or settings.openai_api_key
+        or settings.gemini_api_keys
+        or settings.openai_api_keys
+    ):
         return True
     logger.warning(
         "llm_keys_missing",
-        extra={"user_id": callback.from_user.id, "keys": ["GEMINI_API_KEY", "OPENAI_API_KEY"]},
+        extra={
+            "user_id": callback.from_user.id,
+            "keys": [
+                "GEMINI_API_KEY",
+                "GEMINI_API_KEYS",
+                "OPENAI_API_KEY",
+                "OPENAI_API_KEYS",
+            ],
+        },
     )
     return False
 
