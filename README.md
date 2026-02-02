@@ -293,7 +293,7 @@ sudo systemctl restart numerolog.target
 - По умолчанию PDF сохраняются локально в каталог `storage/pdfs` (или другой путь, заданный через `PDF_STORAGE_KEY`).
 - Если указать `PDF_STORAGE_BUCKET`, файлы сохраняются в S3-совместимом бакете. `PDF_STORAGE_KEY` используется как префикс ключа.
 - Для bucket-хранилища задайте переменные `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` и при необходимости `AWS_ENDPOINT_URL`.
-- Для корректной кириллицы задайте `PDF_FONT_PATH` (например, `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`).
+- Для корректной кириллицы задайте `PDF_FONT_PATH` (например, `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`): при генерации PDF используется этот пользовательский шрифт, а при отсутствии файла — встроенный резервный.
 - PDF генерируется **только** по нажатию кнопки «Выгрузить PDF» на экране отчёта, а повторные скачивания используют сохранённый `reports.pdf_storage_key` (если доступно хранилище).
 - Если `PDF_STORAGE_BUCKET` не задан или S3-хранилище не удалось инициализировать (например, отсутствует `boto3`), сервис автоматически использует локальный каталог и всё равно сохраняет `reports.pdf_storage_key`.
 
