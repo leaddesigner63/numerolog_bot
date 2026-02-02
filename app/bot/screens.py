@@ -199,11 +199,6 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
         text = _with_screen_prefix("S2", offer_text)
 
         rows: list[list[InlineKeyboardButton]] = []
-        offer_button = _offer_button()
-        if offer_button:
-            rows.append([offer_button])
-        else:
-            text += "\n\nСсылка на оферту пока не настроена."
         rows.append([InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1")])
         rows.extend(_global_menu())
         keyboard = _build_keyboard(rows)
@@ -231,11 +226,6 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
     )
 
     rows: list[list[InlineKeyboardButton]] = []
-    offer_button = _offer_button()
-    if offer_button:
-        rows.append([offer_button])
-    else:
-        text += "\n\nСсылка на оферту пока не настроена."
     rows.append(
         [
             InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1"),
