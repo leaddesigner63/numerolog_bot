@@ -709,8 +709,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 )
                 await callback.answer()
                 return
+            with get_session() as session:
+                user = _get_or_create_user(session, callback.from_user.id)
             report = await report_service.generate_report(
-                user_id=callback.from_user.id,
+                user_id=user.id,
                 state=screen_manager.update_state(callback.from_user.id).data,
             )
             if report:
@@ -792,8 +794,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             )
             await callback.answer()
             return
+        with get_session() as session:
+            user = _get_or_create_user(session, callback.from_user.id)
         report = await report_service.generate_report(
-            user_id=callback.from_user.id,
+            user_id=user.id,
             state=screen_manager.update_state(callback.from_user.id).data,
         )
         if report:
