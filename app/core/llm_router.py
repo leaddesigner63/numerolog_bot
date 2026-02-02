@@ -43,6 +43,7 @@ class LLMRouter:
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
         self._fallback_statuses = {401, 403, 429}
+        self._gemini_fallback_statuses = {400, 401, 403, 404, 429}
 
     def generate(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
         try:
@@ -122,7 +123,7 @@ class LLMRouter:
                     json_payload=payload,
                     max_retries=2,
                     retry_statuses={500, 502, 503, 504},
-                    fallback_statuses=self._fallback_statuses,
+                    fallback_statuses=self._gemini_fallback_statuses,
                 )
                 text = self._extract_gemini_text(data)
                 if not text:
@@ -145,6 +146,8 @@ class LLMRouter:
                         "keys_total": len(api_keys),
                     },
                 )
+                if exc.status_code in {400, 404}:
+                    raise
                 if not exc.fallback or index == len(api_keys):
                     raise
                 continue
@@ -308,8 +311,12 @@ class LLMRouter:
 
     @staticmethod
     def _status_category(status: int) -> str:
+        if status == 400:
+            return "invalid_request"
         if status in {401, 403}:
             return "auth_error"
+        if status == 404:
+            return "not_found"
         if status == 429:
             return "rate_limited"
         if status >= 500:
