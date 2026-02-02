@@ -67,6 +67,8 @@ TARIFF_META: dict[str, dict[str, Any]] = {
 
 
 def _global_menu() -> list[list[InlineKeyboardButton]]:
+    if not settings.global_menu_enabled:
+        return []
     return [
         [
             InlineKeyboardButton(text="Тарифы", callback_data="screen:S1"),

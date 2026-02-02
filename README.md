@@ -50,10 +50,14 @@ pip install -r requirements.txt
 cp .env.example .env
 ```
 
-3. Настройте подключение к БД в `.env`:
+3. Настройте ключевые параметры в `.env` (минимум для запуска):
 
 ```
+BOT_TOKEN=...
+OFFER_URL=https://example.com/offer
 DATABASE_URL=postgresql://user:password@localhost:5432/numerolog_bot
+# Отключение глобального меню в inline-клавиатуре:
+GLOBAL_MENU_ENABLED=false
 ```
 
 4. Выполните миграции:
