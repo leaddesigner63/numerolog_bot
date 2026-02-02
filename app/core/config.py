@@ -17,8 +17,10 @@ class Settings(BaseSettings):
     llm_fallback: str = "openai"
     llm_timeout_seconds: int = 35
     gemini_api_key: str | None = None
+    gemini_api_keys: str | None = None
     gemini_model: str = "gemini-1.5-flash"
     openai_api_key: str | None = None
+    openai_api_keys: str | None = None
     openai_model: str = "gpt-4o-mini"
 
     payment_enabled: bool = True

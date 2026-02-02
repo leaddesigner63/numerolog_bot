@@ -263,7 +263,7 @@ sudo systemctl restart numerolog.target
 - После успешной генерации отчёт сохраняется в таблице `reports`, а при повторном просмотре экрана S7 текст подтягивается из БД.
 - После генерации отчёта выполняется фильтрация: запрещённые слова/паттерны “гарантий/предсказаний” вызывают регенерацию (до 2 попыток), а при невозможности получить безопасный текст показывается экран S10.
 - Информация о фильтрации записывается в `reports.safety_flags`.
-- Запросы к LLM идут в Gemini как к основному провайдеру, при ошибках 401/403/429/5xx/timeout выполняется fallback на ChatGPT с ограниченными ретраями (до 2 на Gemini и до 1 на ChatGPT).
+- Запросы к LLM идут в Gemini как к основному провайдеру, при ошибках 401/403/429/5xx/timeout выполняется fallback на ChatGPT с ограниченными ретраями (до 2 на Gemini и до 1 на ChatGPT). При наличии нескольких API-ключей каждого провайдера выполняется автоматический перебор ключей до fallback.
 - Кнопка “Выгрузить PDF” генерирует PDF один раз и сохраняет ключ в `reports.pdf_storage_key`. Повторные скачивания используют сохранённый файл.
 - Telegram ID пользователя хранится в `users.telegram_user_id` и `screen_states.telegram_user_id` как `BIGINT`, чтобы корректно обрабатывать большие значения.
 
@@ -301,11 +301,12 @@ sudo systemctl restart numerolog.target
   только после подтверждения оплаты.
 - Генерация отчётов использует LLM-маршрутизатор: Gemini (основной) с 1–2 ретраями на 5xx/timeout,
   fallback на ChatGPT при ошибках 401/403/429/5xx/timeout (у ChatGPT — 1 retry на transient).
+  Если указаны несколько ключей для провайдера, они перебираются автоматически при ошибках/недоступности.
 - Перед отправкой в LLM формируется facts-pack (JSON) с нормализованными полями профиля и анкеты,
   причём запрещённая лексика удаляется из входных данных.
 - Если недоступны оба провайдера, бот показывает экран “Сервис временно недоступен”.
-- Если ключи LLM не настроены (нет `GEMINI_API_KEY` и `OPENAI_API_KEY`), бот сразу показывает экран
-  “Сервис временно недоступен” и не запускает генерацию.
+- Если ключи LLM не настроены (нет `GEMINI_API_KEY`/`GEMINI_API_KEYS` и `OPENAI_API_KEY`/`OPENAI_API_KEYS`),
+  бот сразу показывает экран “Сервис временно недоступен” и не запускает генерацию.
 
 ## Логика тарифов и оплат
 
@@ -326,16 +327,16 @@ sudo systemctl restart numerolog.target
 
 - `BOT_TOKEN` — токен Telegram-бота.
 - `OFFER_URL` — ссылка на оферту (если не указана, бот уведомит об отсутствии ссылки).
-- `GEMINI_API_KEY`/`OPENAI_API_KEY` — ключи LLM (если оба отсутствуют, генерация отчёта блокируется и
-  показывается экран “Сервис временно недоступен”).
+- `GEMINI_API_KEY`/`GEMINI_API_KEYS`, `OPENAI_API_KEY`/`OPENAI_API_KEYS` — ключи LLM (если оба провайдера не
+  настроены, генерация отчёта блокируется и показывается экран “Сервис временно недоступен”).
 - `PRODAMUS_FORM_URL`/`CLOUDPAYMENTS_PUBLIC_ID` — ключи для формирования платёжной ссылки (при отсутствии бот сообщает, что оплата недоступна).
 
 Дополнительные параметры (см. `.env.example`):
 
 - `FEEDBACK_GROUP_CHAT_ID`, `FEEDBACK_GROUP_URL`, `FEEDBACK_MODE`
 - `LLM_PRIMARY`, `LLM_FALLBACK`, `LLM_TIMEOUT_SECONDS`
-- `GEMINI_API_KEY`, `GEMINI_MODEL`
-- `OPENAI_API_KEY`, `OPENAI_MODEL`
+- `GEMINI_API_KEY`, `GEMINI_API_KEYS`, `GEMINI_MODEL`
+- `OPENAI_API_KEY`, `OPENAI_API_KEYS`, `OPENAI_MODEL`
 - `PAYMENT_PROVIDER`, `PRODAMUS_FORM_URL`, `PRODAMUS_SECRET`, `PRODAMUS_WEBHOOK_SECRET`,
   `PRODAMUS_STATUS_URL`, `CLOUDPAYMENTS_PUBLIC_ID`, `CLOUDPAYMENTS_API_SECRET`,
   `PAYMENT_WEBHOOK_URL`
