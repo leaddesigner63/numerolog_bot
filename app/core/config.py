@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_model: str = "gpt-4o-mini"
 
+    payment_enabled: bool = True
     payment_provider: str = "prodamus"
     prodamus_form_url: str | None = None
     prodamus_secret: str | None = None

@@ -58,6 +58,8 @@ OFFER_URL=https://example.com/offer
 DATABASE_URL=postgresql://user:password@localhost:5432/numerolog_bot
 # Отключение глобального меню в inline-клавиатуре:
 GLOBAL_MENU_ENABLED=false
+# Отключение проверки оплаты (тестовый режим):
+PAYMENT_ENABLED=true
 ```
 
 4. Выполните миграции:

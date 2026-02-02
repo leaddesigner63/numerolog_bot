@@ -477,39 +477,43 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             with get_session() as session:
                 user = _get_or_create_user(session, callback.from_user.id)
                 order = _create_order(session, user, Tariff(tariff))
-                provider = get_payment_provider(order.provider.value)
-                payment_link = provider.create_payment_link(order, user=user)
-                if not payment_link and order.provider == PaymentProviderEnum.PRODAMUS:
-                    fallback_provider = get_payment_provider(
-                        PaymentProviderEnum.CLOUDPAYMENTS.value
-                    )
-                    payment_link = fallback_provider.create_payment_link(order, user=user)
-                    if payment_link:
-                        order.provider = PaymentProviderEnum.CLOUDPAYMENTS
-                        provider = fallback_provider
-                        session.add(order)
-                if not payment_link:
-                    missing_primary = _missing_payment_link_config(order.provider)
-                    fallback_provider_enum = (
-                        PaymentProviderEnum.CLOUDPAYMENTS
-                        if order.provider == PaymentProviderEnum.PRODAMUS
-                        else PaymentProviderEnum.PRODAMUS
-                    )
-                    missing_fallback = _missing_payment_link_config(fallback_provider_enum)
-                    logger.warning(
-                        "payment_link_unavailable",
-                        extra={
-                            "order_id": order.id,
-                            "primary_provider": order.provider.value,
-                            "missing_primary": missing_primary,
-                            "missing_fallback": missing_fallback,
-                        },
-                    )
-                    missing_vars = ", ".join(missing_primary + missing_fallback) or "секреты провайдера"
-                    await callback.message.answer(
-                        "Платёжная ссылка недоступна: не настроены ключи оплаты. "
-                        f"Проверьте переменные {missing_vars}."
-                    )
+                payment_link = None
+                if settings.payment_enabled:
+                    provider = get_payment_provider(order.provider.value)
+                    payment_link = provider.create_payment_link(order, user=user)
+                    if not payment_link and order.provider == PaymentProviderEnum.PRODAMUS:
+                        fallback_provider = get_payment_provider(
+                            PaymentProviderEnum.CLOUDPAYMENTS.value
+                        )
+                        payment_link = fallback_provider.create_payment_link(order, user=user)
+                        if payment_link:
+                            order.provider = PaymentProviderEnum.CLOUDPAYMENTS
+                            provider = fallback_provider
+                            session.add(order)
+                    if not payment_link:
+                        missing_primary = _missing_payment_link_config(order.provider)
+                        fallback_provider_enum = (
+                            PaymentProviderEnum.CLOUDPAYMENTS
+                            if order.provider == PaymentProviderEnum.PRODAMUS
+                            else PaymentProviderEnum.PRODAMUS
+                        )
+                        missing_fallback = _missing_payment_link_config(fallback_provider_enum)
+                        logger.warning(
+                            "payment_link_unavailable",
+                            extra={
+                                "order_id": order.id,
+                                "primary_provider": order.provider.value,
+                                "missing_primary": missing_primary,
+                                "missing_fallback": missing_fallback,
+                            },
+                        )
+                        missing_vars = (
+                            ", ".join(missing_primary + missing_fallback) or "секреты провайдера"
+                        )
+                        await callback.message.answer(
+                            "Платёжная ссылка недоступна: не настроены ключи оплаты. "
+                            f"Проверьте переменные {missing_vars}."
+                        )
                 screen_manager.update_state(
                     callback.from_user.id,
                     selected_tariff=tariff,
@@ -553,7 +557,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await callback.message.answer("Заказ не найден. Попробуйте выбрать тариф заново.")
                 await callback.answer()
                 return
-            if order.status != OrderStatus.PAID:
+            if not settings.payment_enabled:
+                if order.status != OrderStatus.PAID:
+                    order.status = OrderStatus.PAID
+                    order.paid_at = datetime.now(timezone.utc)
+                    session.add(order)
+            elif order.status != OrderStatus.PAID:
                 missing_status = _missing_payment_status_config(order.provider)
                 if missing_status:
                     logger.warning(
