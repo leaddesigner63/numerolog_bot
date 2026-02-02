@@ -1,5 +1,3 @@
-fr:contentReference[oaicite:2]{index=2}annotations
-
 import json
 import logging
 import time
