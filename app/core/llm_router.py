@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import json
 import logging
 import time
@@ -38,20 +40,26 @@ class LLMUnavailableError(RuntimeError):
 
 
 class LLMRouter:
+    """
+    Требования:
+    - Ключи подхватываются из .env через settings.*.
+    - Ключи задаются одной строкой через запятую (порядок важен).
+    - Основной провайдер: Gemini. Резервный: OpenAI.
+    - При неудаче перебираем ключи по порядку.
+    """
+
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
 
-        # ВАЖНО:
-        # - 429 НЕ считаем "плохим ключом" (иначе начинается перебор ключей и ловим 401 на следующем)
-        # - 401/403/404 считаем фатальными/ключевыми и допускаем перебор ключей
-        self._fallback_statuses = {401, 403, 404}
-        # Gemini: 404 = модель не найдена / выключена; 429 = rate limit; 401/403 = ключ/доступ
-        self._gemini_fallback_statuses = {400, 401, 403, 404, 429}
+        # По каким статусам делаем retry на ТОМ ЖЕ ключе
+        self._retry_statuses = {429, 500, 502, 503, 504}
 
-        # Ретраи по статусам (сюда включаем 429)
-        self._retry_statuses_common = {429, 500, 502, 503, 504}
+        # Один клиент на всё
+        timeout_seconds = getattr(settings, "llm_timeout_seconds", 30)
+        self._client = httpx.Client(timeout=httpx.Timeout(timeout_seconds))
 
     def generate(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
+        # 1) Gemini (primary)
         try:
             return self._call_gemini(facts_pack, system_prompt)
         except LLMProviderError as exc:
@@ -62,22 +70,17 @@ class LLMRouter:
                     "retryable": exc.retryable,
                     "fallback": exc.fallback,
                     "category": exc.category,
-                    "error": str(exc),
                 },
             )
-            if exc.fallback:
-                self._logger.warning(
-                    "llm_fallback",
-                    extra={
-                        "provider": "gemini",
-                        "fallback_provider": "openai",
-                        "category": exc.category,
-                        "status_code": exc.status_code,
-                    },
-                )
             if not exc.fallback:
                 raise LLMUnavailableError("Gemini provider failed without fallback") from exc
 
+        self._logger.warning(
+            "llm_fallback",
+            extra={"provider": "gemini", "fallback_provider": "openai"},
+        )
+
+        # 2) OpenAI (fallback)
         try:
             return self._call_openai(facts_pack, system_prompt)
         except LLMProviderError as exc:
@@ -88,15 +91,13 @@ class LLMRouter:
                     "retryable": exc.retryable,
                     "fallback": exc.fallback,
                     "category": exc.category,
-                    "error": str(exc),
                 },
             )
-        raise LLMUnavailableError("Both Gemini and OpenAI providers are unavailable")
+            raise LLMUnavailableError("Both Gemini and OpenAI providers are unavailable") from exc
 
     def _call_gemini(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
-        api_keys = self._collect_api_keys(settings.gemini_api_key, settings.gemini_api_keys)
+        api_keys = self._parse_keys(settings.gemini_api_key, settings.gemini_api_keys)
         if not api_keys:
-            self._logger.warning("gemini_api_key_missing")
             raise LLMProviderError(
                 "Gemini API key is missing",
                 retryable=False,
@@ -108,23 +109,33 @@ class LLMRouter:
             "https://generativelanguage.googleapis.com/v1beta/models/"
             f"{settings.gemini_model}:generateContent"
         )
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": self._build_prompt(system_prompt, facts_pack)}],
+                }
+            ]
+        }
 
-        payload = self._build_gemini_payload(system_prompt, facts_pack)
+        # Если Gemini отвечает этими статусами — разумно фолбэкнуть на OpenAI
+        gemini_fallback_statuses = {400, 401, 403, 404, 429, 500, 502, 503, 504}
 
         last_error: LLMProviderError | None = None
-        for index, api_key in enumerate(api_keys, start=1):
-            # НЕ передаём ключ в URL (чтобы httpx-логи не светили ?key=...).
-            # Gemini API официально поддерживает заголовок x-goog-api-key.
-            headers = {"x-goog-api-key": api_key}
+        for idx, key in enumerate(api_keys, start=1):
+            headers = {
+                # НЕ передаём ключ в URL, чтобы он не попадал в httpx-логи
+                "x-goog-api-key": key,
+                "Content-Type": "application/json",
+            }
 
             try:
-                data = self._post_with_retries(
+                data = self._post_json(
                     endpoint,
                     headers=headers,
                     json_payload=payload,
                     max_retries=2,
-                    retry_statuses=self._retry_statuses_common,
-                    fallback_statuses=self._gemini_fallback_statuses,
+                    fallback_statuses=gemini_fallback_statuses,
                 )
                 text = self._extract_gemini_text(data)
                 if not text:
@@ -145,40 +156,37 @@ class LLMRouter:
                         "retryable": exc.retryable,
                         "fallback": exc.fallback,
                         "category": exc.category,
-                        "error": str(exc),
-                        "key_index": index,
+                        "key_index": idx,
                         "keys_total": len(api_keys),
                     },
                 )
 
-                # 400/404 обычно не лечатся сменой ключа (неверный запрос / модели нет)
-                if exc.status_code in {400, 404}:
+                # 404 (model not found/disabled) почти всегда не лечится сменой ключа -> сразу уходим в fallback
+                if exc.status_code == 404:
                     raise
 
-                # Перебираем ключи только при auth-ошибках (401/403).
-                if exc.status_code in {401, 403} and index < len(api_keys):
+                # На 401/403/429/5xx пробуем следующий ключ (если есть)
+                if self._should_try_next_key(exc.status_code) and idx < len(api_keys):
                     continue
 
-                # На 429 и прочее — пусть сработает fallback на OpenAI (через generate()).
                 raise
 
         if last_error:
             raise last_error
         raise LLMProviderError(
-            "Gemini provider failed without available keys",
+            "Gemini provider failed",
             retryable=False,
             fallback=True,
-            category="missing_api_key",
+            category="unknown",
         )
 
     def _call_openai(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
-        api_keys = self._collect_api_keys(settings.openai_api_key, settings.openai_api_keys)
+        api_keys = self._parse_keys(settings.openai_api_key, settings.openai_api_keys)
         if not api_keys:
-            self._logger.warning("openai_api_key_missing")
             raise LLMProviderError(
                 "OpenAI API key is missing",
                 retryable=False,
-                fallback=True,
+                fallback=False,
                 category="missing_api_key",
             )
 
@@ -191,25 +199,26 @@ class LLMRouter:
             ],
         }
 
+        openai_fallback_statuses = {401, 403, 404, 429, 500, 502, 503, 504}
+
         last_error: LLMProviderError | None = None
-        for index, api_key in enumerate(api_keys, start=1):
-            headers = {"Authorization": f"Bearer {api_key}"}
+        for idx, key in enumerate(api_keys, start=1):
+            headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
 
             try:
-                data = self._post_with_retries(
+                data = self._post_json(
                     endpoint,
                     headers=headers,
                     json_payload=payload,
                     max_retries=2,
-                    retry_statuses=self._retry_statuses_common,
-                    fallback_statuses=self._fallback_statuses,
+                    fallback_statuses=openai_fallback_statuses,
                 )
                 text = self._extract_openai_text(data)
                 if not text:
                     raise LLMProviderError(
                         "OpenAI response is empty",
                         retryable=False,
-                        fallback=True,
+                        fallback=False,
                         category="empty_response",
                     )
                 return LLMResponse(text=text, provider="openai", model=settings.openai_model)
@@ -223,115 +232,95 @@ class LLMRouter:
                         "retryable": exc.retryable,
                         "fallback": exc.fallback,
                         "category": exc.category,
-                        "error": str(exc),
-                        "key_index": index,
+                        "key_index": idx,
                         "keys_total": len(api_keys),
                     },
                 )
 
-                # Перебор ключей делаем ТОЛЬКО при auth-ошибках
-                if exc.status_code in {401, 403} and index < len(api_keys):
+                if self._should_try_next_key(exc.status_code) and idx < len(api_keys):
                     continue
-
-                # На 429 (rate limit / quota) НЕ надо переключать ключи автоматом.
-                # Иначе ты получаешь "429, потом 401" из-за случайно битого запасного ключа.
                 raise
 
         if last_error:
             raise last_error
         raise LLMProviderError(
-            "OpenAI provider failed without available keys",
+            "OpenAI provider failed",
             retryable=False,
-            fallback=True,
-            category="missing_api_key",
+            fallback=False,
+            category="unknown",
         )
 
-    def _post_with_retries(
+    def _post_json(
         self,
         url: str,
         *,
+        headers: dict[str, str] | None,
         json_payload: dict[str, Any],
         max_retries: int,
-        retry_statuses: set[int],
         fallback_statuses: set[int],
-        headers: dict[str, str] | None = None,
-        params: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         attempts = 0
-        timeout = httpx.Timeout(settings.llm_timeout_seconds)
 
-        with httpx.Client(timeout=timeout) as client:
-            while True:
-                try:
-                    response = client.post(
-                        url,
-                        json=json_payload,
-                        headers=headers,
-                        params=params,
-                    )
-                except httpx.TimeoutException as exc:
-                    attempts += 1
-                    if attempts <= max_retries:
-                        self._sleep_backoff(attempts)
-                        continue
-                    raise LLMProviderError(
-                        "LLM request timed out",
-                        retryable=True,
-                        fallback=True,
-                        category="timeout",
-                    ) from exc
-                except httpx.RequestError as exc:
-                    attempts += 1
-                    if attempts <= max_retries:
-                        self._sleep_backoff(attempts)
-                        continue
-                    raise LLMProviderError(
-                        "LLM request failed",
-                        retryable=True,
-                        fallback=True,
-                        category="request_error",
-                    ) from exc
-
-                status = response.status_code
-                if 200 <= status < 300:
-                    try:
-                        return response.json()
-                    except ValueError:
-                        # Успешный статус, но не JSON (редко, но лучше обработать)
-                        raise LLMProviderError(
-                            "LLM provider returned non-JSON response",
-                            status_code=status,
-                            retryable=False,
-                            fallback=True,
-                            category="bad_response",
-                        )
-
-                # Ошибочный статус
-                if status in retry_statuses and attempts < max_retries:
-                    attempts += 1
-                    retry_after = self._retry_after_seconds(response)
-                    if retry_after is None and status == 429:
-                        retry_after = self._default_rate_limit_backoff(attempts)
-                    self._sleep_backoff(attempts, retry_after=retry_after)
+        while True:
+            try:
+                resp = self._client.post(url, json=json_payload, headers=headers)
+            except httpx.TimeoutException as exc:
+                attempts += 1
+                if attempts <= max_retries:
+                    self._sleep_backoff(attempts)
                     continue
-
-                retryable = status in retry_statuses or status >= 500
-                fallback = status in fallback_statuses or status >= 500
-                category = self._status_category(status)
-                message = self._format_error_message(status, response)
-
                 raise LLMProviderError(
-                    message,
-                    status_code=status,
-                    retryable=retryable,
-                    fallback=fallback,
-                    category=category,
-                )
+                    "LLM request timed out",
+                    retryable=True,
+                    fallback=True,
+                    category="timeout",
+                ) from exc
+            except httpx.RequestError as exc:
+                attempts += 1
+                if attempts <= max_retries:
+                    self._sleep_backoff(attempts)
+                    continue
+                raise LLMProviderError(
+                    "LLM request failed",
+                    retryable=True,
+                    fallback=True,
+                    category="request_error",
+                ) from exc
+
+            status = resp.status_code
+
+            if 200 <= status < 300:
+                try:
+                    return resp.json()
+                except ValueError as exc:
+                    raise LLMProviderError(
+                        "LLM provider returned non-JSON response",
+                        status_code=status,
+                        retryable=False,
+                        fallback=True,
+                        category="bad_response",
+                    ) from exc
+
+            if status in self._retry_statuses and attempts < max_retries:
+                attempts += 1
+                self._sleep_backoff(attempts, retry_after=self._retry_after_seconds(resp))
+                continue
+
+            raise LLMProviderError(
+                self._format_error_message(status, resp),
+                status_code=status,
+                retryable=status in self._retry_statuses or status >= 500,
+                fallback=status in fallback_statuses or status >= 500,
+                category=self._status_category(status),
+            )
 
     @staticmethod
-    def _retry_after_seconds(response: httpx.Response) -> float | None:
-        # Поддерживаем стандартный Retry-After (обычно секунды).
-        val = response.headers.get("retry-after")
+    def _should_try_next_key(status_code: int | None) -> bool:
+        return status_code in {401, 403, 429, 500, 502, 503, 504}
+
+    @staticmethod
+    def _retry_after_seconds(resp: httpx.Response) -> float | None:
+        val = resp.headers.get("retry-after")
         if not val:
             return None
         try:
@@ -341,42 +330,15 @@ class LLMRouter:
 
     @staticmethod
     def _sleep_backoff(attempt: int, *, retry_after: float | None = None) -> None:
-        # Если сервер просит подождать конкретно — соблюдаем это.
         if retry_after is not None:
-            # минимальный "пол" чтобы не улетать в 0 при округлениях
             time.sleep(max(0.2, retry_after))
             return
-        # Иначе — простой экспоненциальный backoff
-        time.sleep(0.5 * (2 ** max(0, attempt - 1)))
-
-    @staticmethod
-    def _default_rate_limit_backoff(attempt: int) -> float:
-        # Для 429 стараемся подождать дольше, чтобы не усилить rate-limit.
-        return 1.0 + (attempt * 0.7)
+        time.sleep(0.3 * attempt)
 
     @staticmethod
     def _build_prompt(system_prompt: str, facts_pack: dict[str, Any]) -> str:
         payload = json.dumps(facts_pack, ensure_ascii=False, indent=2)
         return f"{system_prompt}\n\nДанные (facts-pack):\n{payload}"
-
-    @staticmethod
-    def _build_gemini_payload(system_prompt: str, facts_pack: dict[str, Any]) -> dict[str, Any]:
-        payload = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [{"text": LLMRouter._build_facts_text(facts_pack)}],
-                }
-            ]
-        }
-        if system_prompt.strip():
-            payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
-        return payload
-
-    @staticmethod
-    def _build_facts_text(facts_pack: dict[str, Any]) -> str:
-        payload = json.dumps(facts_pack, ensure_ascii=False, indent=2)
-        return f"Данные (facts-pack):\n{payload}"
 
     @staticmethod
     def _status_category(status: int) -> str:
@@ -393,18 +355,15 @@ class LLMRouter:
         return "http_error"
 
     @staticmethod
-    def _format_error_message(status: int, response: httpx.Response) -> str:
-        # Стараемся вытащить “человеческую” причину из JSON ошибки
-        text_snippet = ""
+    def _format_error_message(status: int, resp: httpx.Response) -> str:
         try:
-            data = response.json()
-            # OpenAI обычно: {"error": {"message": "...", "type": "...", "code": "..."}}
+            data = resp.json()
             if isinstance(data, dict):
                 err = data.get("error")
                 if isinstance(err, dict):
                     msg = err.get("message")
                     code = err.get("code")
-                    typ = err.get("type")
+                    typ = err.get("type") or err.get("status")
                     parts: list[str] = []
                     if msg:
                         parts.append(str(msg))
@@ -413,30 +372,13 @@ class LLMRouter:
                     if code:
                         parts.append(f"code={code}")
                     if parts:
-                        text_snippet = " | ".join(parts)
-                # Gemini/Google APIs часто: {"error": {"message": "...", "status": "..."}}
-                if not text_snippet and isinstance(data.get("error"), dict):
-                    msg = data["error"].get("message")
-                    stat = data["error"].get("status")
-                    if msg or stat:
-                        text_snippet = f"{msg or ''}".strip()
-                        if stat:
-                            text_snippet = f"{text_snippet} | status={stat}".strip(" |")
+                        return f"LLM provider returned status {status}: " + " | ".join(parts)
         except Exception:
-            # не JSON или неожиданная структура
             pass
 
-        if not text_snippet:
-            # fallback на обычный текст, но ограничиваем длину
-            try:
-                raw = response.text or ""
-                raw = raw.replace("\n", " ").strip()
-                text_snippet = raw[:300]
-            except Exception:
-                text_snippet = ""
-
-        if text_snippet:
-            return f"LLM provider returned status {status}: {text_snippet}"
+        raw = (resp.text or "").replace("\n", " ").strip()
+        if raw:
+            return f"LLM provider returned status {status}: {raw[:200]}"
         return f"LLM provider returned status {status}"
 
     @staticmethod
@@ -459,24 +401,16 @@ class LLMRouter:
         return message.get("content")
 
     @staticmethod
-    def _collect_api_keys(primary_key: str | None, extra_keys: str | None) -> list[str]:
+    def _parse_keys(primary_key: str | None, extra_keys: str | None) -> list[str]:
         keys: list[str] = []
-        for raw in (primary_key, extra_keys):
-            if not raw:
-                continue
-            for part in raw.replace(";", ",").split(","):
-                key = part.strip()
-                if key:
-                    keys.append(key)
-
-        seen: set[str] = set()
-        unique_keys: list[str] = []
-        for key in keys:
-            if key in seen:
-                continue
-            seen.add(key)
-            unique_keys.append(key)
-        return unique_keys
+        if primary_key and primary_key.strip():
+            keys.append(primary_key.strip())
+        if extra_keys and extra_keys.strip():
+            for part in extra_keys.split(","):
+                k = part.strip()
+                if k:
+                    keys.append(k)
+        return keys
 
 
 llm_router = LLMRouter()
