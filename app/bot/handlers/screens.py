@@ -59,8 +59,11 @@ def _missing_offer_url() -> bool:
 
 
 async def _safe_callback_answer(callback: CallbackQuery) -> None:
+    if getattr(callback, "answered", False) or getattr(callback, "_answered", False):
+        return
     try:
         await callback.answer()
+        setattr(callback, "_answered", True)
     except TelegramBadRequest as exc:
         message = str(exc)
         if "query is too old" in message or "query ID is invalid" in message:
@@ -68,6 +71,25 @@ async def _safe_callback_answer(callback: CallbackQuery) -> None:
                 "callback_answer_expired",
                 extra={"user_id": callback.from_user.id, "error": message},
             )
+            setattr(callback, "_answered", True)
+            return
+        raise
+
+
+async def _safe_callback_processing(callback: CallbackQuery) -> None:
+    if getattr(callback, "answered", False) or getattr(callback, "_answered", False):
+        return
+    try:
+        await callback.answer("Обрабатываю…")
+        setattr(callback, "_answered", True)
+    except TelegramBadRequest as exc:
+        message = str(exc)
+        if "query is too old" in message or "query ID is invalid" in message:
+            logger.warning(
+                "callback_answer_expired",
+                extra={"user_id": callback.from_user.id, "error": message},
+            )
+            setattr(callback, "_answered", True)
             return
         raise
 
@@ -301,6 +323,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data:
         await _safe_callback_answer(callback)
         return
+
+    await _safe_callback_processing(callback)
 
     if callback.data.startswith("screen:"):
         screen_id = callback.data.split("screen:")[-1]
@@ -715,6 +739,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 user_id=callback.from_user.id,
                 screen_id="S6",
             )
+            await _safe_callback_answer(callback)
             if not await _notify_llm_unavailable(callback):
                 await screen_manager.show_screen(
                     bot=callback.bot,
@@ -801,6 +826,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             user_id=callback.from_user.id,
             screen_id="S6",
         )
+        await _safe_callback_answer(callback)
         if not await _notify_llm_unavailable(callback):
             await screen_manager.show_screen(
                 bot=callback.bot,
