@@ -66,7 +66,7 @@ TARIFF_META: dict[str, dict[str, Any]] = {
 }
 
 
-###ОТКЛЮЧЕНОdef _global_menu() -> list[list[InlineKeyboardButton]]:
+def _global_menu() -> list[list[InlineKeyboardButton]]:
     return [
         [
             InlineKeyboardButton(text="Тарифы", callback_data="screen:S1"),
