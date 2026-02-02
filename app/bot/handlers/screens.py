@@ -876,6 +876,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
 
     if callback.data == "report:pdf":
         state = screen_manager.update_state(callback.from_user.id)
+        report_id = None
+        report_text = None
         with get_session() as session:
             report = _get_latest_report(
                 session,
@@ -886,27 +888,29 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await callback.message.answer("PDF будет доступен после генерации отчёта.")
                 await _safe_callback_answer(callback)
                 return
+            report_id = report.id
+            report_text = report.report_text
             pdf_bytes = None
             if report.pdf_storage_key:
                 pdf_bytes = pdf_service.load_pdf(report.pdf_storage_key)
             if pdf_bytes is None:
                 try:
-                    pdf_bytes = pdf_service.generate_pdf(report.report_text or "")
+                    pdf_bytes = pdf_service.generate_pdf(report_text or "")
                 except Exception as exc:
                     logger.warning(
                         "pdf_generate_failed",
-                        extra={"report_id": report.id, "error": str(exc)},
+                        extra={"report_id": report_id, "error": str(exc)},
                     )
                     await callback.message.answer(
                         "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
                     )
                     await _safe_callback_answer(callback)
                     return
-                storage_key = pdf_service.store_pdf(report.id, pdf_bytes)
+                storage_key = pdf_service.store_pdf(report_id, pdf_bytes)
                 if storage_key:
                     report.pdf_storage_key = storage_key
                     session.add(report)
-        filename = f"report_{report.id}.pdf"
+        filename = f"report_{report_id}.pdf"
         await callback.message.answer_document(
             BufferedInputFile(pdf_bytes, filename=filename)
         )
