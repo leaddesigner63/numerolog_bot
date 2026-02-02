@@ -262,7 +262,11 @@ def _refresh_report_state(
             query = query.where(Report.tariff == Tariff(tariff_value))
         except ValueError:
             pass
-    report = session.execute(query.order_by(Report.created_at.desc())).scalar_one_or_none()
+    report = (
+        session.execute(query.order_by(Report.created_at.desc()).limit(1))
+        .scalars()
+        .first()
+    )
     if report:
         screen_manager.update_state(
             telegram_user_id,
@@ -287,7 +291,11 @@ def _get_latest_report(
                 "report_tariff_invalid",
                 extra={"user_id": telegram_user_id, "tariff": tariff_value},
             )
-    return session.execute(query.order_by(Report.created_at.desc())).scalar_one_or_none()
+    return (
+        session.execute(query.order_by(Report.created_at.desc()).limit(1))
+        .scalars()
+        .first()
+    )
 
 
 def _ensure_profile_state(telegram_user_id: int) -> None:
