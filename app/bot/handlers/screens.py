@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 import logging
 
 from aiogram import Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery
 from sqlalchemy import select
@@ -55,6 +56,20 @@ def _safe_int(value: str | int | None) -> int | None:
 
 def _missing_offer_url() -> bool:
     return not (settings.offer_url or "").strip()
+
+
+async def _safe_callback_answer(callback: CallbackQuery) -> None:
+    try:
+        await callback.answer()
+    except TelegramBadRequest as exc:
+        message = str(exc)
+        if "query is too old" in message or "query ID is invalid" in message:
+            logger.warning(
+                "callback_answer_expired",
+                extra={"user_id": callback.from_user.id, "error": message},
+            )
+            return
+        raise
 
 
 def _missing_payment_link_config(provider: PaymentProviderEnum) -> list[str]:
@@ -284,7 +299,7 @@ def _refresh_order_state(order: Order) -> dict[str, str]:
 @router.callback_query()
 async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data:
-        await callback.answer()
+        await _safe_callback_answer(callback)
         return
 
     if callback.data.startswith("screen:"):
@@ -303,7 +318,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S1",
                     )
-                    await callback.answer()
+                    await _safe_callback_answer(callback)
                     return
                 if selected_tariff in PAID_TARIFFS and not profile:
                     order_id = _safe_int(state_snapshot.data.get("order_id"))
@@ -322,7 +337,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                             user_id=callback.from_user.id,
                             screen_id="S3",
                         )
-                        await callback.answer()
+                        await _safe_callback_answer(callback)
                         return
                 if selected_tariff == Tariff.T0.value and not profile:
                     t0_allowed, next_available = _t0_cooldown_status(
@@ -340,7 +355,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                             user_id=callback.from_user.id,
                             screen_id="S9",
                         )
-                        await callback.answer()
+                        await _safe_callback_answer(callback)
                         return
                 order_id = _safe_int(state_snapshot.data.get("order_id"))
                 if order_id:
@@ -360,7 +375,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     user_id=callback.from_user.id,
                     screen_id="S1",
                 )
-                await callback.answer()
+                await _safe_callback_answer(callback)
                 return
             if not state_snapshot.data.get("offer_seen"):
                 await callback.message.answer("Сначала ознакомьтесь с офертой.")
@@ -370,7 +385,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     user_id=callback.from_user.id,
                     screen_id="S2",
                 )
-                await callback.answer()
+                await _safe_callback_answer(callback)
                 return
             if not state_snapshot.data.get("order_id"):
                 await callback.message.answer(
@@ -382,7 +397,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     user_id=callback.from_user.id,
                     screen_id="S1",
                 )
-                await callback.answer()
+                await _safe_callback_answer(callback)
                 return
         if screen_id == "S5":
             state_snapshot = screen_manager.update_state(callback.from_user.id)
@@ -397,7 +412,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     user_id=callback.from_user.id,
                     screen_id="S1",
                 )
-                await callback.answer()
+                await _safe_callback_answer(callback)
                 return
             with get_session() as session:
                 order_id = _safe_int(state_snapshot.data.get("order_id"))
@@ -411,7 +426,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S3",
                     )
-                    await callback.answer()
+                    await _safe_callback_answer(callback)
                     return
                 order = session.get(Order, order_id)
                 if order:
@@ -428,7 +443,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S3",
                     )
-                    await callback.answer()
+                    await _safe_callback_answer(callback)
                     return
                 _refresh_profile_state(session, callback.from_user.id)
                 state_snapshot = screen_manager.update_state(callback.from_user.id)
@@ -441,7 +456,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         screen_id="S4",
                     )
                     await start_profile_wizard(callback.message, state)
-                    await callback.answer()
+                    await _safe_callback_answer(callback)
                     return
                 _refresh_questionnaire_state(session, callback.from_user.id)
         if screen_id == "S7":
@@ -461,7 +476,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         if screen_id == "S2":
             screen_manager.update_state(callback.from_user.id, offer_seen=True)
             await _notify_missing_offer_url(callback)
-        await callback.answer()
+        await _safe_callback_answer(callback)
         return
 
     if callback.data.startswith("tariff:"):
@@ -483,7 +498,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S9",
                     )
-                    await callback.answer()
+                    await _safe_callback_answer(callback)
                     return
                 _refresh_profile_state(session, callback.from_user.id)
         else:
@@ -554,7 +569,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             if not state_snapshot.data.get("profile"):
                 await start_profile_wizard(callback.message, state)
-        await callback.answer()
+        await _safe_callback_answer(callback)
         return
 
     if callback.data == "payment:paid":
@@ -562,13 +577,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         order_id = _safe_int(state.data.get("order_id"))
         if not order_id:
             await callback.message.answer("Сначала выберите тариф и создайте заказ.")
-            await callback.answer()
+            await _safe_callback_answer(callback)
             return
         with get_session() as session:
             order = session.get(Order, order_id)
             if not order:
                 await callback.message.answer("Заказ не найден. Попробуйте выбрать тариф заново.")
-                await callback.answer()
+                await _safe_callback_answer(callback)
                 return
             if not settings.payment_enabled:
                 if order.status != OrderStatus.PAID:
@@ -596,7 +611,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S3",
                     )
-                    await callback.answer()
+                    await _safe_callback_answer(callback)
                     return
                 provider = get_payment_provider(order.provider.value)
                 result = provider.check_payment_status(order)
@@ -620,7 +635,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S3",
                     )
-                    await callback.answer()
+                    await _safe_callback_answer(callback)
                     return
             screen_manager.update_state(callback.from_user.id, **_refresh_order_state(order))
             _refresh_profile_state(session, callback.from_user.id)
@@ -634,7 +649,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         state_snapshot = screen_manager.update_state(callback.from_user.id)
         if not state_snapshot.data.get("profile"):
             await start_profile_wizard(callback.message, state)
-        await callback.answer()
+        await _safe_callback_answer(callback)
         return
 
     if callback.data == "profile:save":
@@ -642,14 +657,14 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         state = screen_manager.update_state(callback.from_user.id)
         if not state.data.get("profile"):
             await callback.message.answer("Сначала заполните «Мои данные».")
-            await callback.answer()
+            await _safe_callback_answer(callback)
             return
         tariff = state.data.get("selected_tariff")
         if tariff in {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}:
             order_id = _safe_int(state.data.get("order_id"))
             if not order_id:
                 await callback.message.answer("Сначала выберите тариф и завершите оплату.")
-                await callback.answer()
+                await _safe_callback_answer(callback)
                 return
             with get_session() as session:
                 order = session.get(Order, order_id)
@@ -667,7 +682,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S3",
                     )
-                    await callback.answer()
+                    await _safe_callback_answer(callback)
                     return
         if tariff == Tariff.T0.value:
             with get_session() as session:
@@ -686,7 +701,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S9",
                     )
-                    await callback.answer()
+                    await _safe_callback_answer(callback)
                     return
                 user = _get_or_create_user(session, callback.from_user.id)
                 if user.free_limit:
@@ -707,7 +722,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     user_id=callback.from_user.id,
                     screen_id="S10",
                 )
-                await callback.answer()
+                await _safe_callback_answer(callback)
                 return
             with get_session() as session:
                 user = _get_or_create_user(session, callback.from_user.id)
@@ -745,7 +760,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 user_id=callback.from_user.id,
                 screen_id=next_screen,
             )
-        await callback.answer()
+        await _safe_callback_answer(callback)
         return
 
     if callback.data == "questionnaire:done":
@@ -755,7 +770,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             order_id = _safe_int(state.data.get("order_id"))
             if not order_id:
                 await callback.message.answer("Сначала выберите тариф и завершите оплату.")
-                await callback.answer()
+                await _safe_callback_answer(callback)
                 return
             with get_session() as session:
                 order = session.get(Order, order_id)
@@ -773,12 +788,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S3",
                     )
-                    await callback.answer()
+                    await _safe_callback_answer(callback)
                     return
             questionnaire = state.data.get("questionnaire") or {}
             if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
                 await callback.message.answer("Анкета ещё не заполнена. Нажмите «Заполнить анкету».")
-                await callback.answer()
+                await _safe_callback_answer(callback)
                 return
         await screen_manager.show_screen(
             bot=callback.bot,
@@ -793,7 +808,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 user_id=callback.from_user.id,
                 screen_id="S10",
             )
-            await callback.answer()
+            await _safe_callback_answer(callback)
             return
         with get_session() as session:
             user = _get_or_create_user(session, callback.from_user.id)
@@ -822,7 +837,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 user_id=callback.from_user.id,
                 screen_id="S10",
             )
-        await callback.answer()
+        await _safe_callback_answer(callback)
         return
 
     if callback.data == "report:pdf":
@@ -835,7 +850,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             )
             if not report:
                 await callback.message.answer("PDF будет доступен после генерации отчёта.")
-                await callback.answer()
+                await _safe_callback_answer(callback)
                 return
             pdf_bytes = None
             if report.pdf_storage_key:
@@ -851,7 +866,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     await callback.message.answer(
                         "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
                     )
-                    await callback.answer()
+                    await _safe_callback_answer(callback)
                     return
                 storage_key = pdf_service.store_pdf(report.id, pdf_bytes)
                 if storage_key:
@@ -861,7 +876,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.message.answer_document(
             BufferedInputFile(pdf_bytes, filename=filename)
         )
-        await callback.answer()
+        await _safe_callback_answer(callback)
         return
 
     if callback.data == "feedback:send":
@@ -869,7 +884,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         feedback_text = (state.data.get("feedback_text") or "").strip()
         if not feedback_text:
             await callback.message.answer("Сначала напишите сообщение для обратной связи.")
-            await callback.answer()
+            await _safe_callback_answer(callback)
             return
 
         feedback_mode = (settings.feedback_mode or "native").lower()
@@ -932,7 +947,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             await callback.message.answer(
                 "Не удалось отправить сообщение. Попробуйте позже или используйте «Перейти в группу»."
             )
-        await callback.answer()
+        await _safe_callback_answer(callback)
         return
 
-    await callback.answer()
+    await _safe_callback_answer(callback)
