@@ -26,18 +26,34 @@ def _register_font() -> str:
     global _FONT_REGISTERED
     if _FONT_REGISTERED:
         return _FONT_NAME
-    font_path = _resolve_font_path()
-    if font_path.exists():
-        pdfmetrics.registerFont(TTFont(_FONT_NAME, str(font_path)))
-        _FONT_REGISTERED = True
-        return _FONT_NAME
+    if settings.pdf_font_path:
+        custom_path = Path(settings.pdf_font_path)
+        if not custom_path.exists():
+            logging.getLogger(__name__).warning(
+                "pdf_font_custom_missing",
+                extra={"font_path": str(custom_path)},
+            )
+    for font_path in _resolve_font_paths():
+        if not font_path.exists():
+            continue
+        try:
+            pdfmetrics.registerFont(TTFont(_FONT_NAME, str(font_path)))
+            _FONT_REGISTERED = True
+            return _FONT_NAME
+        except Exception as exc:
+            logging.getLogger(__name__).warning(
+                "pdf_font_register_failed",
+                extra={"font_path": str(font_path), "error": str(exc)},
+            )
     return "Helvetica"
 
 
-def _resolve_font_path() -> Path:
+def _resolve_font_paths() -> list[Path]:
+    paths: list[Path] = []
     if settings.pdf_font_path:
-        return Path(settings.pdf_font_path)
-    return Path(__file__).resolve().parents[1] / "assets" / "fonts" / "DejaVuSans.ttf"
+        paths.append(Path(settings.pdf_font_path))
+    paths.append(Path(__file__).resolve().parents[1] / "assets" / "fonts" / "DejaVuSans.ttf")
+    return paths
 
 def _wrap_text(text: str, max_width: float, font_name: str, font_size: int) -> list[str]:
     lines: list[str] = []
@@ -118,9 +134,10 @@ class PdfService:
     def generate_pdf(self, text: str) -> bytes:
         font_name = _register_font()
         if font_name != _FONT_NAME:
+            custom_path = settings.pdf_font_path
             self._logger.warning(
                 "pdf_font_missing",
-                extra={"font_path": str(_resolve_font_path())},
+                extra={"font_path": custom_path or "bundled"},
             )
         buffer = BytesIO()
         page_width, page_height = A4
