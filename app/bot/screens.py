@@ -46,7 +46,7 @@ TARIFF_META: dict[str, dict[str, Any]] = {
         "price": 2190,
         "bullets": [
             "всё из T1",
-            "лайтовая анкета (опыт, навыки, мотивация, ограничения, цели)",
+            "Расширенная анкета (опыт, навыки, мотивация, ограничения, цели)",
             "2–4 сценария развития (логика, навыки, формат дохода без обещаний)",
             "риски/ограничения и способ проверки за 2–4 недели",
         ],
@@ -66,7 +66,7 @@ TARIFF_META: dict[str, dict[str, Any]] = {
 }
 
 
-def _global_menu() -> list[list[InlineKeyboardButton]]:
+###ОТКЛЮЧЕНОdef _global_menu() -> list[list[InlineKeyboardButton]]:
     return [
         [
             InlineKeyboardButton(text="Тарифы", callback_data="screen:S1"),
@@ -269,7 +269,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
 
     text_parts = [
         f"Оплата тарифа {selected_tariff}.\n\n"
-        "Оплачивая, вы подтверждаете согласие с офертой. Возвратов нет."
+        "Оплачивая, вы подтверждаете согласие с офертой."
         f"{order_block}"
     ]
     if not payment_url:
@@ -297,7 +297,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
     rows.append(
         [
             InlineKeyboardButton(text="Я оплатил(а)", callback_data="payment:paid"),
-            InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1"),
+            InlineKeyboardButton(text="Назад", callback_data="screen:S1"),
         ]
     )
     rows.extend(_global_menu())
