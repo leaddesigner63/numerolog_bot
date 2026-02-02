@@ -46,6 +46,7 @@ class LLMRouter:
     - Ключи задаются одной строкой через запятую (порядок важен).
     - Основной провайдер: Gemini. Резервный: OpenAI.
     - При неудаче перебираем ключи по порядку.
+    - Прокси используется СТРОГО для LLM (Gemini/OpenAI), если задан LLM_PROXY_URL.
     """
 
     def __init__(self) -> None:
@@ -54,9 +55,33 @@ class LLMRouter:
         # По каким статусам делаем retry на ТОМ ЖЕ ключе
         self._retry_statuses = {429, 500, 502, 503, 504}
 
-        # Один клиент на всё
         timeout_seconds = getattr(settings, "llm_timeout_seconds", 30)
-        self._client = httpx.Client(timeout=httpx.Timeout(timeout_seconds))
+
+        # Прокси применяется ТОЛЬКО тут (в LLMRouter), т.е. только LLM-трафик уйдет через прокси.
+        proxy_url = getattr(settings, "llm_proxy_url", None)
+
+        self._client = self._build_httpx_client(timeout_seconds=timeout_seconds, proxy_url=proxy_url)
+
+    def _build_httpx_client(self, *, timeout_seconds: int, proxy_url: str | None) -> httpx.Client:
+        timeout = httpx.Timeout(timeout_seconds)
+
+        if not proxy_url:
+            return httpx.Client(timeout=timeout)
+
+        # Совместимость с разными версиями httpx:
+        # - часть версий поддерживает proxies={...}
+        # - часть версий поддерживает proxy="..."
+        proxies = {"http://": proxy_url, "https://": proxy_url}
+
+        try:
+            return httpx.Client(timeout=timeout, proxies=proxies)  # type: ignore[arg-type]
+        except TypeError:
+            try:
+                return httpx.Client(timeout=timeout, proxy=proxy_url)  # type: ignore[call-arg]
+            except TypeError:
+                # Если вдруг версия совсем древняя/нестандартная — работаем без прокси, но логируем.
+                self._logger.warning("llm_proxy_not_supported_by_httpx")
+                return httpx.Client(timeout=timeout)
 
     def generate(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
         # 1) Gemini (primary)
