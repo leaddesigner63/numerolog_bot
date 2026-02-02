@@ -78,6 +78,8 @@ class ScreenStateStore:
 
 
 class ScreenManager:
+    _telegram_message_limit = 4096
+
     def __init__(self, store: ScreenStateStore | None = None) -> None:
         self._store = store or ScreenStateStore()
         self._logger = logging.getLogger(__name__)
@@ -117,13 +119,32 @@ class ScreenManager:
             if await self._try_edit_screen(bot, chat_id, first_message_id, content, user_id, screen_id):
                 return
 
-        message_ids: list[int] = []
-        for index, message in enumerate(content.messages):
-            reply_markup = content.keyboard if index == len(content.messages) - 1 else None
-            sent = await bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup)
-            message_ids.append(sent.message_id)
+        expanded_messages: list[str] = []
+        for message in content.messages:
+            expanded_messages.extend(self._split_message(message))
 
-        self._store.update_screen(user_id, screen_id, message_ids)
+        message_ids: list[int] = []
+        for index, message in enumerate(expanded_messages):
+            reply_markup = content.keyboard if index == len(expanded_messages) - 1 else None
+            try:
+                sent = await bot.send_message(
+                    chat_id=chat_id,
+                    text=message,
+                    reply_markup=reply_markup,
+                )
+                message_ids.append(sent.message_id)
+            except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
+                self._logger.info(
+                    "screen_send_failed",
+                    extra={
+                        "user_id": user_id,
+                        "screen_id": screen_id,
+                        "error": str(exc),
+                    },
+                )
+
+        if message_ids:
+            self._store.update_screen(user_id, screen_id, message_ids)
 
     async def _try_edit_screen(
         self,
@@ -136,11 +157,14 @@ class ScreenManager:
     ) -> bool:
         if len(content.messages) != 1:
             return False
+        message = content.messages[0]
+        if len(message) > self._telegram_message_limit:
+            return False
         try:
             await bot.edit_message_text(
                 chat_id=chat_id,
                 message_id=message_id,
-                text=content.messages[0],
+                text=message,
                 reply_markup=content.keyboard,
             )
         except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
@@ -160,6 +184,30 @@ class ScreenManager:
 
     def update_state(self, user_id: int, **kwargs: Any) -> ScreenState:
         return self._store.update_data(user_id, **kwargs)
+
+    def _split_message(self, message: str) -> list[str]:
+        if not message:
+            return [""]
+        limit = self._telegram_message_limit
+        if len(message) <= limit:
+            return [message]
+        chunks: list[str] = []
+        start = 0
+        length = len(message)
+        while start < length:
+            end = min(start + limit, length)
+            split_at = message.rfind("\n", start, end)
+            if split_at == -1 or split_at <= start:
+                split_at = message.rfind(" ", start, end)
+            if split_at == -1 or split_at <= start:
+                split_at = end
+            chunk = message[start:split_at].strip()
+            if chunk:
+                chunks.append(chunk)
+            start = split_at
+        if not chunks:
+            chunks.append(message[:limit])
+        return chunks
 
 
 screen_manager = ScreenManager()
