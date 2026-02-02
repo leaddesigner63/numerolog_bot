@@ -392,7 +392,7 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
 
     text = _with_screen_prefix(
         "S5",
-        f"Лайтовая анкета для {selected_tariff}.\n\n"
+        f"Расскажите о себе для получения максимального результата \n\n"
         "1) Опыт и проекты\n"
         "2) Навыки (шкала 1–5)\n"
         "3) Интересы и мотивация\n"
