@@ -109,18 +109,7 @@ class LLMRouter:
             f"{settings.gemini_model}:generateContent"
         )
 
-        payload = {
-            "contents": [
-                {
-                    "role": "user",
-                    "parts": [
-                        {
-                            "text": self._build_prompt(system_prompt, facts_pack),
-                        }
-                    ],
-                }
-            ]
-        }
+        payload = self._build_gemini_payload(system_prompt, facts_pack)
 
         last_error: LLMProviderError | None = None
         for index, api_key in enumerate(api_keys, start=1):
@@ -321,6 +310,8 @@ class LLMRouter:
                 if status in retry_statuses and attempts < max_retries:
                     attempts += 1
                     retry_after = self._retry_after_seconds(response)
+                    if retry_after is None and status == 429:
+                        retry_after = self._default_rate_limit_backoff(attempts)
                     self._sleep_backoff(attempts, retry_after=retry_after)
                     continue
 
@@ -355,13 +346,37 @@ class LLMRouter:
             # минимальный "пол" чтобы не улетать в 0 при округлениях
             time.sleep(max(0.2, retry_after))
             return
-        # Иначе — простой backoff
-        time.sleep(0.3 * attempt)
+        # Иначе — простой экспоненциальный backoff
+        time.sleep(0.5 * (2 ** max(0, attempt - 1)))
+
+    @staticmethod
+    def _default_rate_limit_backoff(attempt: int) -> float:
+        # Для 429 стараемся подождать дольше, чтобы не усилить rate-limit.
+        return 1.0 + (attempt * 0.7)
 
     @staticmethod
     def _build_prompt(system_prompt: str, facts_pack: dict[str, Any]) -> str:
         payload = json.dumps(facts_pack, ensure_ascii=False, indent=2)
         return f"{system_prompt}\n\nДанные (facts-pack):\n{payload}"
+
+    @staticmethod
+    def _build_gemini_payload(system_prompt: str, facts_pack: dict[str, Any]) -> dict[str, Any]:
+        payload = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": LLMRouter._build_facts_text(facts_pack)}],
+                }
+            ]
+        }
+        if system_prompt.strip():
+            payload["systemInstruction"] = {"parts": [{"text": system_prompt}]}
+        return payload
+
+    @staticmethod
+    def _build_facts_text(facts_pack: dict[str, Any]) -> str:
+        payload = json.dumps(facts_pack, ensure_ascii=False, indent=2)
+        return f"Данные (facts-pack):\n{payload}"
 
     @staticmethod
     def _status_category(status: int) -> str:
