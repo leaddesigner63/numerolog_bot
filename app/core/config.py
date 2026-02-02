@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     feedback_group_chat_id: int | None = None
     feedback_group_url: str | None = None
     feedback_mode: str = "native"
+    global_menu_enabled: bool = False
 
     llm_primary: str = "gemini"
     llm_fallback: str = "openai"
