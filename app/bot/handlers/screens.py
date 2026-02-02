@@ -196,7 +196,7 @@ def _profile_payload(profile: UserProfile | None) -> dict[str, dict[str, str | N
     return {
         "profile": {
             "name": profile.name,
-            "birth_date": profile.birth_date.isoformat(),
+            "birth_date": profile.birth_date,
             "birth_time": profile.birth_time,
             "birth_place": {
                 "city": profile.birth_place_city,

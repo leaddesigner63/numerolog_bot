@@ -2,7 +2,6 @@ import enum
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -97,7 +96,7 @@ class UserProfile(Base):
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     name: Mapped[str] = mapped_column(String(255))
-    birth_date: Mapped[datetime] = mapped_column(Date)
+    birth_date: Mapped[str] = mapped_column(String(10))
     birth_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
     birth_place_city: Mapped[str] = mapped_column(String(255))
     birth_place_region: Mapped[str | None] = mapped_column(String(255), nullable=True)

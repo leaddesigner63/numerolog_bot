@@ -19,6 +19,7 @@ from app.db.session import get_session
 router = Router()
 
 TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+DATE_PATTERN = re.compile(r"^(?:0[1-9]|[12]\d|3[01]):(?:0[1-9]|1[0-2]):\d{4}$")
 
 
 class ProfileStates(StatesGroup):
@@ -83,7 +84,7 @@ def _profile_payload(profile: UserProfile | None) -> dict[str, Any]:
     return {
         "profile": {
             "name": profile.name,
-            "birth_date": profile.birth_date.isoformat(),
+            "birth_date": profile.birth_date,
             "birth_time": profile.birth_time,
             "birth_place": {
                 "city": profile.birth_place_city,
@@ -94,11 +95,15 @@ def _profile_payload(profile: UserProfile | None) -> dict[str, Any]:
     }
 
 
-def _parse_birth_date(value: str) -> datetime.date | None:
+def _parse_birth_date(value: str) -> str | None:
+    normalized = value.strip()
+    if not DATE_PATTERN.match(normalized):
+        return None
     try:
-        return datetime.strptime(value, "%Y-%m-%d").date()
+        parsed = datetime.strptime(normalized, "%d:%m:%Y")
     except ValueError:
         return None
+    return parsed.strftime("%d:%m:%Y")
 
 
 def _parse_birth_time(value: str) -> str | None:
@@ -235,14 +240,14 @@ async def handle_profile_name(message: Message, state: FSMContext) -> None:
         return
     await state.update_data(name=name)
     await state.set_state(ProfileStates.birth_date)
-    await message.answer("Введите дату рождения в формате YYYY-MM-DD.")
+    await message.answer("Введите дату рождения в формате DD:MM:YYYY.")
 
 
 @router.message(ProfileStates.birth_date)
 async def handle_profile_birth_date(message: Message, state: FSMContext) -> None:
     birth_date = _parse_birth_date(message.text or "")
     if not birth_date:
-        await message.answer("Неверный формат даты. Используйте YYYY-MM-DD.")
+        await message.answer("Неверный формат даты. Используйте DD:MM:YYYY.")
         return
     await state.update_data(birth_date=birth_date)
     await state.set_state(ProfileStates.birth_time)
