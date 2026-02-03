@@ -237,15 +237,12 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
             f"{note_text}"
             "\n\n"
             "__________________________________\n"
-            
         ),
     )
     parse_mode = None
-    if selected_tariff_raw == "T3":
-        price_value = str(meta.get("price", ""))
-        if price_value and price_value in text:
-            text = _apply_spoiler_html(text, price_value)
-            parse_mode = "HTML"
+    if price and price in text:
+        text = _apply_spoiler_html(text, price)
+        parse_mode = "HTML"
 
     rows: list[list[InlineKeyboardButton]] = []
     rows.append(
