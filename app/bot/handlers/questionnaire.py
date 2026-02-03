@@ -459,7 +459,15 @@ async def _handle_answer(
 
     if status == QuestionnaireStatus.COMPLETED:
         await state.clear()
-        await message.answer("Анкета заполнена. Нажмите «Готово», чтобы продолжить.")
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="Готово", callback_data="questionnaire:done")]
+            ]
+        )
+        await message.answer(
+            "Анкета заполнена. Нажмите «Готово», чтобы продолжить.",
+            reply_markup=keyboard,
+        )
         return
 
     await _send_question(message=message, question=config.get_question(next_question_id))
