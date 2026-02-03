@@ -131,6 +131,7 @@ class ScreenManager:
                     chat_id=chat_id,
                     text=message,
                     reply_markup=reply_markup,
+                    parse_mode=content.parse_mode,
                 )
                 message_ids.append(sent.message_id)
             except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
@@ -166,6 +167,7 @@ class ScreenManager:
                 message_id=message_id,
                 text=message,
                 reply_markup=content.keyboard,
+                parse_mode=content.parse_mode,
             )
         except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
             self._logger.info(
