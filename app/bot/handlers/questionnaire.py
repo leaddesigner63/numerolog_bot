@@ -114,10 +114,7 @@ def _question_payload(
     }
 
 
-def _update_screen_state(user_id: int, response: QuestionnaireResponse | None) -> None:
-    config = load_questionnaire_config()
-    payload = _question_payload(response, config.version)
-    payload["questionnaire"]["total_questions"] = len(config.questions)
+def _update_screen_state(user_id: int, payload: dict[str, Any]) -> None:
     screen_manager.update_state(user_id, **payload)
 
 
@@ -295,7 +292,9 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
                 "Анкета уже заполнена. Нажмите «Сбросить», если хотите пройти её заново."
             )
             await callback.answer()
-            _update_screen_state(callback.from_user.id, response)
+            payload = _question_payload(response, config.version)
+            payload["questionnaire"]["total_questions"] = len(config.questions)
+            _update_screen_state(callback.from_user.id, payload)
             return
 
         answers = response.answers if response and response.answers else {}
@@ -312,6 +311,8 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
             status=QuestionnaireStatus.IN_PROGRESS,
             completed_at=None,
         )
+        payload = _question_payload(response, config.version)
+        payload["questionnaire"]["total_questions"] = len(config.questions)
 
     await state.set_state(QuestionnaireStates.answering)
     await state.update_data(
@@ -323,7 +324,7 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
         message=callback.message,
         question=config.get_question(current_question_id),
     )
-    _update_screen_state(callback.from_user.id, response)
+    _update_screen_state(callback.from_user.id, payload)
     await callback.answer()
 
 
@@ -347,6 +348,8 @@ async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> N
             status=QuestionnaireStatus.IN_PROGRESS,
             completed_at=None,
         )
+        payload = _question_payload(response, config.version)
+        payload["questionnaire"]["total_questions"] = len(config.questions)
 
     await state.set_state(QuestionnaireStates.answering)
     await state.update_data(
@@ -358,7 +361,7 @@ async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> N
         message=callback.message,
         question=config.get_question(config.start_question_id),
     )
-    _update_screen_state(callback.from_user.id, response)
+    _update_screen_state(callback.from_user.id, payload)
     await callback.answer()
 
 
@@ -445,12 +448,14 @@ async def _handle_answer(
             status=status,
             completed_at=completed_at,
         )
+        payload = _question_payload(response, config.version)
+        payload["questionnaire"]["total_questions"] = len(config.questions)
 
     await state.update_data(
         answers=answers,
         current_question_id=next_question_id,
     )
-    _update_screen_state(message.from_user.id, response)
+    _update_screen_state(message.from_user.id, payload)
 
     if status == QuestionnaireStatus.COMPLETED:
         await state.clear()
