@@ -54,10 +54,6 @@ def _safe_int(value: str | int | None) -> int | None:
         return None
 
 
-def _missing_offer_url() -> bool:
-    return not (settings.offer_url or "").strip()
-
-
 async def _safe_callback_answer(callback: CallbackQuery) -> None:
     if getattr(callback, "answered", False) or getattr(callback, "_answered", False):
         return
@@ -118,14 +114,6 @@ def _missing_payment_status_config(provider: PaymentProviderEnum) -> list[str]:
         if not settings.cloudpayments_api_secret:
             missing.append("CLOUDPAYMENTS_API_SECRET")
     return missing
-
-
-async def _notify_missing_offer_url(callback: CallbackQuery) -> None:
-    if _missing_offer_url():
-        logger.warning("offer_url_missing", extra={"user_id": callback.from_user.id})
-        await callback.message.answer(
-            "Ссылка на оферту не настроена. Добавьте OFFER_URL, чтобы пользователь мог открыть оферту."
-        )
 
 
 async def _notify_llm_unavailable(callback: CallbackQuery) -> bool:
@@ -548,7 +536,6 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         )
         if screen_id == "S2":
             screen_manager.update_state(callback.from_user.id, offer_seen=True)
-            await _notify_missing_offer_url(callback)
         await _safe_callback_answer(callback)
         return
 
@@ -637,7 +624,6 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         )
         if next_screen == "S2":
             screen_manager.update_state(callback.from_user.id, offer_seen=True)
-            await _notify_missing_offer_url(callback)
         if tariff == Tariff.T0.value:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             if not state_snapshot.data.get("profile"):

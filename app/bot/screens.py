@@ -98,18 +98,6 @@ def _format_tariff_label(tariff: str) -> str:
     return tariff
 
 
-def _offer_url() -> str | None:
-    url = (settings.offer_url or "").strip()
-    return url or None
-
-
-def _offer_button() -> InlineKeyboardButton | None:
-    url = _offer_url()
-    if not url:
-        return None
-    return InlineKeyboardButton(text="Открыть оферту", url=url)
-
-
 def _with_screen_prefix(screen_id: str, text: str) -> str:
     return f"{screen_id}: {text.lstrip()}"
 
@@ -282,13 +270,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
 
     text = _with_screen_prefix("S3", "".join(text_parts))
 
-    offer_button = _offer_button()
-    if not offer_button:
-        text += "\n\nСсылка на оферту пока не настроена."
-
     rows: list[list[InlineKeyboardButton]] = []
-    if offer_button:
-        rows.append([offer_button])
     if payment_url:
         rows.append(
             [
