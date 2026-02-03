@@ -234,7 +234,7 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
     rows.append(
         [
             InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1"),
-            InlineKeyboardButton(text="К оплате", callback_data="screen:S3"),
+            InlineKeyboardButton(text="Старт💥", callback_data="screen:S3"),
         ]
     )
     rows.extend(_global_menu())
@@ -322,7 +322,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 f"Дата рождения: {profile.get('birth_date')}\n"
                 f"Время рождения: {birth_time}\n"
                 f"Место рождения: {birth_place}\n\n"
-                "Это режим просмотра. Для изменения данных нажмите «Перезаполнить»."
+                "Для изменения данных нажмите «Перезаполнить»."
             ),
         )
     elif is_t0:
