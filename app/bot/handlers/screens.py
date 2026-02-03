@@ -298,6 +298,47 @@ def _get_latest_report(
     )
 
 
+def _get_report_pdf_bytes(session, report: Report) -> bytes | None:
+    pdf_bytes = None
+    if report.pdf_storage_key:
+        pdf_bytes = pdf_service.load_pdf(report.pdf_storage_key)
+    if pdf_bytes is None:
+        try:
+            pdf_bytes = pdf_service.generate_pdf(report.report_text or "")
+        except Exception as exc:
+            logger.warning(
+                "pdf_generate_failed",
+                extra={"report_id": report.id, "error": str(exc)},
+            )
+            return None
+        storage_key = pdf_service.store_pdf(report.id, pdf_bytes)
+        if storage_key:
+            report.pdf_storage_key = storage_key
+            session.add(report)
+    return pdf_bytes
+
+
+async def _send_report_pdf(
+    bot,
+    chat_id: int,
+    report: Report,
+    *,
+    pdf_bytes: bytes | None,
+) -> bool:
+    if not pdf_bytes:
+        return False
+    filename = f"report_{report.id}.pdf"
+    try:
+        await bot.send_document(chat_id, BufferedInputFile(pdf_bytes, filename=filename))
+    except Exception as exc:
+        logger.warning(
+            "pdf_send_failed",
+            extra={"report_id": report.id, "error": str(exc)},
+        )
+        return False
+    return True
+
+
 def _ensure_profile_state(telegram_user_id: int) -> None:
     with get_session() as session:
         _refresh_profile_state(session, telegram_user_id)
@@ -777,6 +818,27 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     user_id=callback.from_user.id,
                     screen_id="S7",
                 )
+                with get_session() as session:
+                    latest_report = _get_latest_report(
+                        session,
+                        callback.from_user.id,
+                        tariff_value=tariff,
+                    )
+                    pdf_bytes = (
+                        _get_report_pdf_bytes(session, latest_report)
+                        if latest_report
+                        else None
+                    )
+                if latest_report and not await _send_report_pdf(
+                    callback.bot,
+                    callback.message.chat.id,
+                    latest_report,
+                    pdf_bytes=pdf_bytes,
+                ):
+                    await callback.message.answer(
+                        "Не удалось сформировать PDF автоматически. "
+                        "Вы можете попробовать кнопку «Выгрузить PDF»."
+                    )
             else:
                 await screen_manager.show_screen(
                     bot=callback.bot,
@@ -864,6 +926,27 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 user_id=callback.from_user.id,
                 screen_id="S7",
             )
+            with get_session() as session:
+                latest_report = _get_latest_report(
+                    session,
+                    callback.from_user.id,
+                    tariff_value=tariff,
+                )
+                pdf_bytes = (
+                    _get_report_pdf_bytes(session, latest_report)
+                    if latest_report
+                    else None
+                )
+            if latest_report and not await _send_report_pdf(
+                callback.bot,
+                callback.message.chat.id,
+                latest_report,
+                pdf_bytes=pdf_bytes,
+            ):
+                await callback.message.answer(
+                    "Не удалось сформировать PDF автоматически. "
+                    "Вы можете попробовать кнопку «Выгрузить PDF»."
+                )
         else:
             await screen_manager.show_screen(
                 bot=callback.bot,
@@ -888,32 +971,16 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await callback.message.answer("PDF будет доступен после генерации отчёта.")
                 await _safe_callback_answer(callback)
                 return
-            report_id = report.id
-            report_text = report.report_text
-            pdf_bytes = None
-            if report.pdf_storage_key:
-                pdf_bytes = pdf_service.load_pdf(report.pdf_storage_key)
-            if pdf_bytes is None:
-                try:
-                    pdf_bytes = pdf_service.generate_pdf(report_text or "")
-                except Exception as exc:
-                    logger.warning(
-                        "pdf_generate_failed",
-                        extra={"report_id": report_id, "error": str(exc)},
-                    )
-                    await callback.message.answer(
-                        "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
-                    )
-                    await _safe_callback_answer(callback)
-                    return
-                storage_key = pdf_service.store_pdf(report_id, pdf_bytes)
-                if storage_key:
-                    report.pdf_storage_key = storage_key
-                    session.add(report)
-        filename = f"report_{report_id}.pdf"
-        await callback.message.answer_document(
-            BufferedInputFile(pdf_bytes, filename=filename)
-        )
+            pdf_bytes = _get_report_pdf_bytes(session, report)
+        if not await _send_report_pdf(
+            callback.bot,
+            callback.message.chat.id,
+            report,
+            pdf_bytes=pdf_bytes,
+        ):
+            await callback.message.answer(
+                "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
+            )
         await _safe_callback_answer(callback)
         return
 
