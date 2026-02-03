@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 revision = "0006_profile_text_fields"
-down_revision = "0005_change_birth_date_format"
+down_revision = "0005b_expand_alembic_version_num"
 branch_labels = None
 depends_on = None
 
