@@ -974,11 +974,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
 
     if callback.data == "feedback:send":
         state_snapshot = screen_manager.update_state(callback.from_user.id)
-        feedback_text = (state_snapshot.data.get("feedback_text") or "").strip()
-        if not feedback_text:
-            await callback.message.answer("Сначала напишите сообщение для обратной связи.")
-            await _safe_callback_answer(callback)
-            return
+        feedback_text = state_snapshot.data.get("feedback_text") or ""
 
         feedback_mode = (settings.feedback_mode or "native").lower()
         status = FeedbackStatus.SENT

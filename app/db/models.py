@@ -95,12 +95,12 @@ class UserProfile(Base):
     user_id: Mapped[int] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
-    name: Mapped[str] = mapped_column(String(255))
-    birth_date: Mapped[str] = mapped_column(String(10))
-    birth_time: Mapped[str | None] = mapped_column(String(5), nullable=True)
-    birth_place_city: Mapped[str] = mapped_column(String(255))
-    birth_place_region: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    birth_place_country: Mapped[str] = mapped_column(String(255))
+    name: Mapped[str] = mapped_column(Text)
+    birth_date: Mapped[str] = mapped_column(Text)
+    birth_time: Mapped[str | None] = mapped_column(Text, nullable=True)
+    birth_place_city: Mapped[str] = mapped_column(Text)
+    birth_place_region: Mapped[str | None] = mapped_column(Text, nullable=True)
+    birth_place_country: Mapped[str] = mapped_column(Text)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -21,11 +21,7 @@ class IsFeedbackScreen(BaseFilter):
 
 @router.message(IsFeedbackScreen(), F.text)
 async def handle_feedback_text(message: Message) -> None:
-    feedback_text = (message.text or "").strip()
-    if not feedback_text:
-        await message.answer("Сообщение не может быть пустым. Напишите текст для обратной связи.")
-        return
-
+    feedback_text = message.text or ""
     screen_manager.update_state(message.from_user.id, feedback_text=feedback_text)
     if (settings.feedback_mode or "native").lower() == "livegram":
         if settings.feedback_group_url:
