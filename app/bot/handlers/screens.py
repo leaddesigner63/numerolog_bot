@@ -286,6 +286,14 @@ def _get_latest_report(
     )
 
 
+def _get_report_for_order(session, order_id: int) -> Report | None:
+    return (
+        session.execute(select(Report).where(Report.order_id == order_id).limit(1))
+        .scalars()
+        .first()
+    )
+
+
 def _get_report_pdf_bytes(session, report: Report) -> bytes | None:
     pdf_bytes = None
     if report.pdf_storage_key:
@@ -743,6 +751,34 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     )
                     await _safe_callback_answer(callback)
                     return
+                existing_report = _get_report_for_order(session, order_id)
+                if existing_report:
+                    screen_manager.update_state(
+                        callback.from_user.id,
+                        report_text=existing_report.report_text,
+                        report_model=existing_report.model_used.value
+                        if existing_report.model_used
+                        else None,
+                    )
+                    await screen_manager.show_screen(
+                        bot=callback.bot,
+                        chat_id=callback.message.chat.id,
+                        user_id=callback.from_user.id,
+                        screen_id="S7",
+                    )
+                    pdf_bytes = _get_report_pdf_bytes(session, existing_report)
+                    if not await _send_report_pdf(
+                        callback.bot,
+                        callback.message.chat.id,
+                        existing_report.id,
+                        pdf_bytes=pdf_bytes,
+                    ):
+                        await callback.message.answer(
+                            "PDF уже сформирован ранее. "
+                            "Вы можете попробовать кнопку «Выгрузить PDF»."
+                        )
+                    await _safe_callback_answer(callback)
+                    return
         if tariff == Tariff.T0.value:
             with get_session() as session:
                 t0_allowed, next_available = _t0_cooldown_status(
@@ -870,6 +906,34 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S3",
                     )
+                    await _safe_callback_answer(callback)
+                    return
+                existing_report = _get_report_for_order(session, order_id)
+                if existing_report:
+                    screen_manager.update_state(
+                        callback.from_user.id,
+                        report_text=existing_report.report_text,
+                        report_model=existing_report.model_used.value
+                        if existing_report.model_used
+                        else None,
+                    )
+                    await screen_manager.show_screen(
+                        bot=callback.bot,
+                        chat_id=callback.message.chat.id,
+                        user_id=callback.from_user.id,
+                        screen_id="S7",
+                    )
+                    pdf_bytes = _get_report_pdf_bytes(session, existing_report)
+                    if not await _send_report_pdf(
+                        callback.bot,
+                        callback.message.chat.id,
+                        existing_report.id,
+                        pdf_bytes=pdf_bytes,
+                    ):
+                        await callback.message.answer(
+                            "PDF уже сформирован ранее. "
+                            "Вы можете попробовать кнопку «Выгрузить PDF»."
+                        )
                     await _safe_callback_answer(callback)
                     return
             questionnaire = state_snapshot.data.get("questionnaire") or {}
