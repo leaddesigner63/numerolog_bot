@@ -262,7 +262,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
 
     text_parts = [
         f"Оплата тарифа {selected_tariff}.\n\n"
-        "Оплачивая, вы подтверждаете согласие с офертой."
+        'Оплачивая, вы подтверждаете согласие с <a href="https://camypau.ru/">офертой</a>.'
         f"{order_block}"
     ]
     if not payment_url:
@@ -288,7 +288,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
     )
     rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
-    return ScreenContent(messages=[text], keyboard=keyboard)
+    return ScreenContent(messages=[text], keyboard=keyboard, parse_mode="HTML")
 
 
 def _format_birth_place(place: dict[str, Any] | None) -> str:
