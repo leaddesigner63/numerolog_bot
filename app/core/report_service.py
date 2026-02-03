@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.bot.questionnaire.config import load_questionnaire_config
+from app.core.config import settings
 from app.core.llm_router import LLMResponse, LLMUnavailableError, llm_router
 from app.core.prompt_settings import resolve_tariff_prompt
 from app.core.report_safety import FORBIDDEN_WORDS, report_safety
@@ -47,6 +48,22 @@ class ReportService:
             except LLMUnavailableError:
                 self._logger.warning("llm_unavailable", extra={"user_id": user_id})
                 return None
+
+            if not settings.report_safety_enabled:
+                safety_flags = report_safety.build_flags(
+                    attempts=0,
+                    history=[],
+                    provider=response.provider,
+                    model=response.model,
+                )
+                safety_flags["filtering_disabled"] = True
+                self._persist_report(
+                    user_id=user_id,
+                    state=state,
+                    response=response,
+                    safety_flags=safety_flags,
+                )
+                return response
 
             evaluation = report_safety.evaluate(response.text)
             safety_history.append(report_safety.evaluation_payload(evaluation))
