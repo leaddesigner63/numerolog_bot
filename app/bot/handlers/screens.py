@@ -321,19 +321,19 @@ def _get_report_pdf_bytes(session, report: Report) -> bytes | None:
 async def _send_report_pdf(
     bot,
     chat_id: int,
-    report: Report,
+    report_id: int,
     *,
     pdf_bytes: bytes | None,
 ) -> bool:
     if not pdf_bytes:
         return False
-    filename = f"report_{report.id}.pdf"
+    filename = f"report_{report_id}.pdf"
     try:
         await bot.send_document(chat_id, BufferedInputFile(pdf_bytes, filename=filename))
     except Exception as exc:
         logger.warning(
             "pdf_send_failed",
-            extra={"report_id": report.id, "error": str(exc)},
+            extra={"report_id": report_id, "error": str(exc)},
         )
         return False
     return True
@@ -824,15 +824,16 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         callback.from_user.id,
                         tariff_value=tariff,
                     )
+                    latest_report_id = latest_report.id if latest_report else None
                     pdf_bytes = (
                         _get_report_pdf_bytes(session, latest_report)
                         if latest_report
                         else None
                     )
-                if latest_report and not await _send_report_pdf(
+                if latest_report_id and not await _send_report_pdf(
                     callback.bot,
                     callback.message.chat.id,
-                    latest_report,
+                    latest_report_id,
                     pdf_bytes=pdf_bytes,
                 ):
                     await callback.message.answer(
@@ -932,15 +933,16 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     callback.from_user.id,
                     tariff_value=tariff,
                 )
+                latest_report_id = latest_report.id if latest_report else None
                 pdf_bytes = (
                     _get_report_pdf_bytes(session, latest_report)
                     if latest_report
                     else None
                 )
-            if latest_report and not await _send_report_pdf(
+            if latest_report_id and not await _send_report_pdf(
                 callback.bot,
                 callback.message.chat.id,
-                latest_report,
+                latest_report_id,
                 pdf_bytes=pdf_bytes,
             ):
                 await callback.message.answer(
@@ -960,7 +962,6 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.data == "report:pdf":
         state = screen_manager.update_state(callback.from_user.id)
         report_id = None
-        report_text = None
         with get_session() as session:
             report = _get_latest_report(
                 session,
@@ -971,11 +972,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await callback.message.answer("PDF будет доступен после генерации отчёта.")
                 await _safe_callback_answer(callback)
                 return
+            report_id = report.id
             pdf_bytes = _get_report_pdf_bytes(session, report)
-        if not await _send_report_pdf(
+        if report_id is None or not await _send_report_pdf(
             callback.bot,
             callback.message.chat.id,
-            report,
+            report_id,
             pdf_bytes=pdf_bytes,
         ):
             await callback.message.answer(
