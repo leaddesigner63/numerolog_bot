@@ -378,7 +378,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             ]
         )
     elif is_t0:
-        rows.append([InlineKeyboardButton(text="Старт", callback_data="profile:start")])
+        rows.append([InlineKeyboardButton(text="Дальше", callback_data="profile:start")])
         rows.append(
             [InlineKeyboardButton(text="Обратная связь", callback_data="screen:S8")]
         )
@@ -500,16 +500,7 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
 def screen_s8(_: dict[str, Any]) -> ScreenContent:
     text = _with_screen_prefix(
         "S8",
-        (
-            "Напишите сообщение. Нажмите «Отправить», чтобы опубликовать его в группе, "
-            "или «Перейти в группу»."
-        ),
-    )
-    rows = [
-        [
-            InlineKeyboardButton(text="Отправить", callback_data="feedback:send"),
-        ]
-    ]
+       
     if settings.feedback_group_url:
         rows.append(
             [
