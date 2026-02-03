@@ -354,7 +354,6 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         )
     elif is_t0:
         rows.append([InlineKeyboardButton(text="Старт", callback_data="profile:start")])
-        rows.append([InlineKeyboardButton(text="Назад", callback_data="screen:S1")])
         rows.append(
             [InlineKeyboardButton(text="Обратная связь", callback_data="screen:S8")]
         )
@@ -371,6 +370,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         )
     if not is_t0 or profile:
         rows.extend(_global_menu())
+    rows.append([InlineKeyboardButton(text="Назад", callback_data="screen:S1")])
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
