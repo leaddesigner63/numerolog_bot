@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-import re
 from typing import Any
 
 from aiogram import F, Router
@@ -26,9 +25,6 @@ from app.db.models import (
 from app.db.session import get_session
 
 router = Router()
-
-TIME_PATTERN = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
-DATE_PATTERN = re.compile(r"^(?:0[1-9]|[12]\d|3[01]):(?:0[1-9]|1[0-2]):\d{4}$")
 
 
 class ProfileStates(StatesGroup):
@@ -104,40 +100,6 @@ def _profile_payload(profile: UserProfile | None) -> dict[str, Any]:
     }
 
 
-def _parse_birth_date(value: str) -> str | None:
-    normalized = value.strip()
-    if not DATE_PATTERN.match(normalized):
-        return None
-    try:
-        parsed = datetime.strptime(normalized, "%d:%m:%Y")
-    except ValueError:
-        return None
-    return parsed.strftime("%d:%m:%Y")
-
-
-def _parse_birth_time(value: str) -> str | None:
-    normalized = value.strip()
-    if TIME_PATTERN.match(normalized):
-        return normalized
-    return None
-
-
-def _parse_birth_place(value: str) -> tuple[str, str | None, str] | None:
-    parts = [part.strip() for part in value.split(",") if part.strip()]
-    if len(parts) < 2:
-        return None
-    city = parts[0]
-    if len(parts) == 2:
-        region = None
-        country = parts[1]
-    else:
-        region = parts[1]
-        country = ", ".join(parts[2:])
-    if not city or not country:
-        return None
-    return city, region, country
-
-
 async def _show_profile_screen(message: Message, user_id: int) -> None:
     await screen_manager.show_screen(
         bot=message.bot,
@@ -163,7 +125,7 @@ def _clear_user_data(session, user: User) -> None:
 async def start_profile_wizard(message: Message, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(ProfileStates.name)
-    await message.answer("Введите имя (как к вам обращаться).")
+    await message.answer("Введите имя (в любом формате).")
 
 
 async def _ensure_paid_profile_access(callback: CallbackQuery) -> bool:
@@ -270,44 +232,31 @@ async def cancel_profile(message: Message, state: FSMContext) -> None:
 
 @router.message(ProfileStates.name)
 async def handle_profile_name(message: Message, state: FSMContext) -> None:
-    name = (message.text or "").strip()
-    if not name:
-        await message.answer("Имя не может быть пустым. Введите имя ещё раз.")
-        return
+    name = message.text or ""
     await state.update_data(name=name)
     await state.set_state(ProfileStates.birth_date)
-    await message.answer("Введите дату рождения в формате DD:MM:YYYY.")
+    await message.answer("Введите дату рождения (в любом формате).")
 
 
 @router.message(ProfileStates.birth_date)
 async def handle_profile_birth_date(message: Message, state: FSMContext) -> None:
-    birth_date = _parse_birth_date(message.text or "")
-    if not birth_date:
-        await message.answer("Неверный формат даты. Используйте DD:MM:YYYY.")
-        return
+    birth_date = message.text or ""
     await state.update_data(birth_date=birth_date)
     await state.set_state(ProfileStates.birth_time)
-    await message.answer("Введите время рождения в формате HH:MM (00:00-23:59).")
+    await message.answer("Введите время рождения (в любом формате).")
 
 
 @router.message(ProfileStates.birth_time)
 async def handle_profile_birth_time(message: Message, state: FSMContext) -> None:
-    birth_time = _parse_birth_time(message.text or "")
-    if not birth_time:
-        await message.answer("Неверный формат времени. Используйте HH:MM (00:00-23:59).")
-        return
+    birth_time = message.text or ""
     await state.update_data(birth_time=birth_time)
     await state.set_state(ProfileStates.birth_place)
-    await message.answer("Введите место рождения: город, регион, страна.")
+    await message.answer("Введите место рождения (в любом формате).")
 
 
 @router.message(ProfileStates.birth_place)
 async def handle_profile_birth_place(message: Message, state: FSMContext) -> None:
-    parsed_place = _parse_birth_place(message.text or "")
-    if not parsed_place:
-        await message.answer("Неверный формат. Используйте «город, регион, страна».")
-        return
-    city, region, country = parsed_place
+    birth_place = message.text or ""
     data = await state.get_data()
     with get_session() as session:
         user = _get_or_create_user(session, message.from_user.id)
@@ -316,18 +265,18 @@ async def handle_profile_birth_place(message: Message, state: FSMContext) -> Non
             profile.name = data["name"]
             profile.birth_date = data["birth_date"]
             profile.birth_time = data["birth_time"]
-            profile.birth_place_city = city
-            profile.birth_place_region = region
-            profile.birth_place_country = country
+            profile.birth_place_city = birth_place
+            profile.birth_place_region = None
+            profile.birth_place_country = ""
         else:
             profile = UserProfile(
                 user_id=user.id,
                 name=data["name"],
                 birth_date=data["birth_date"],
                 birth_time=data["birth_time"],
-                birth_place_city=city,
-                birth_place_region=region,
-                birth_place_country=country,
+                birth_place_city=birth_place,
+                birth_place_region=None,
+                birth_place_country="",
             )
             session.add(profile)
         session.flush()
