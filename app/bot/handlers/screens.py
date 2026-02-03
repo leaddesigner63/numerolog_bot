@@ -521,12 +521,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     return
                 _refresh_questionnaire_state(session, callback.from_user.id)
         if screen_id == "S7":
-            state = screen_manager.update_state(callback.from_user.id)
+            state_snapshot = screen_manager.update_state(callback.from_user.id)
             with get_session() as session:
                 _refresh_report_state(
                     session,
                     callback.from_user.id,
-                    tariff_value=state.data.get("selected_tariff"),
+                    tariff_value=state_snapshot.data.get("selected_tariff"),
                 )
         await screen_manager.show_screen(
             bot=callback.bot,
@@ -632,8 +632,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     if callback.data == "payment:paid":
-        state = screen_manager.update_state(callback.from_user.id)
-        order_id = _safe_int(state.data.get("order_id"))
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        order_id = _safe_int(state_snapshot.data.get("order_id"))
         if not order_id:
             await callback.message.answer("Сначала выберите тариф и создайте заказ.")
             await _safe_callback_answer(callback)
@@ -713,14 +713,14 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
 
     if callback.data == "profile:save":
         _ensure_profile_state(callback.from_user.id)
-        state = screen_manager.update_state(callback.from_user.id)
-        if not state.data.get("profile"):
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        if not state_snapshot.data.get("profile"):
             await callback.message.answer("Сначала заполните «Мои данные».")
             await _safe_callback_answer(callback)
             return
-        tariff = state.data.get("selected_tariff")
+        tariff = state_snapshot.data.get("selected_tariff")
         if tariff in {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}:
-            order_id = _safe_int(state.data.get("order_id"))
+            order_id = _safe_int(state_snapshot.data.get("order_id"))
             if not order_id:
                 await callback.message.answer("Сначала выберите тариф и завершите оплату.")
                 await _safe_callback_answer(callback)
@@ -846,10 +846,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     if callback.data == "questionnaire:done":
-        state = screen_manager.update_state(callback.from_user.id)
-        tariff = state.data.get("selected_tariff")
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        tariff = state_snapshot.data.get("selected_tariff")
         if tariff in {Tariff.T2.value, Tariff.T3.value}:
-            order_id = _safe_int(state.data.get("order_id"))
+            order_id = _safe_int(state_snapshot.data.get("order_id"))
             if not order_id:
                 await callback.message.answer("Сначала выберите тариф и завершите оплату.")
                 await _safe_callback_answer(callback)
@@ -872,7 +872,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     )
                     await _safe_callback_answer(callback)
                     return
-            questionnaire = state.data.get("questionnaire") or {}
+            questionnaire = state_snapshot.data.get("questionnaire") or {}
             if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
                 await callback.message.answer("Анкета ещё не заполнена. Нажмите «Заполнить анкету».")
                 await _safe_callback_answer(callback)
@@ -946,13 +946,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     if callback.data == "report:pdf":
-        state = screen_manager.update_state(callback.from_user.id)
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
         report_id = None
         with get_session() as session:
             report = _get_latest_report(
                 session,
                 callback.from_user.id,
-                tariff_value=state.data.get("selected_tariff"),
+                tariff_value=state_snapshot.data.get("selected_tariff"),
             )
             if not report:
                 await callback.message.answer("PDF будет доступен после генерации отчёта.")
@@ -973,8 +973,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     if callback.data == "feedback:send":
-        state = screen_manager.update_state(callback.from_user.id)
-        feedback_text = (state.data.get("feedback_text") or "").strip()
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        feedback_text = (state_snapshot.data.get("feedback_text") or "").strip()
         if not feedback_text:
             await callback.message.answer("Сначала напишите сообщение для обратной связи.")
             await _safe_callback_answer(callback)
