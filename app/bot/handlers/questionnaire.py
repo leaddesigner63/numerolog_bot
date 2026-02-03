@@ -366,26 +366,7 @@ async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> N
 
 
 def _validate_answer(question: QuestionnaireQuestion, answer: str) -> tuple[bool, Any, str | None]:
-    if question.question_type == "text":
-        cleaned = answer.strip()
-        if question.required and not cleaned:
-            return False, None, "Ответ не может быть пустым."
-        return True, cleaned, None
-    if question.question_type == "choice":
-        allowed = {option["value"] for option in question.options}
-        if answer not in allowed:
-            return False, None, "Выберите вариант из списка кнопок."
-        return True, answer, None
-    if question.question_type == "scale":
-        if not answer.isdigit():
-            return False, None, "Выберите число из шкалы."
-        value = int(answer)
-        min_value = int(question.scale.get("min", 1)) if question.scale else 1
-        max_value = int(question.scale.get("max", 5)) if question.scale else 5
-        if value < min_value or value > max_value:
-            return False, None, "Значение вне диапазона шкалы."
-        return True, value, None
-    return False, None, "Неизвестный тип вопроса."
+    return True, answer, None
 
 
 async def _handle_answer(
