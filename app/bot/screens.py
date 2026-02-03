@@ -279,7 +279,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="Перейти к оплате",
+                    text="Далее!🔥🔥🔥",
                     url=payment_url,
                 )
             ]
