@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     llm_primary: str = "gemini"
     llm_fallback: str = "openai"
     llm_timeout_seconds: int = 35
+    report_safety_enabled: bool = True
 
     # Прокси ТОЛЬКО для LLM-запросов (Gemini/OpenAI). Берется из .env:
     # LLM_PROXY_URL=http://user:pass@host:3128

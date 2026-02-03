@@ -64,6 +64,8 @@ BOT_TOKEN=...
 DATABASE_URL=postgresql://user:password@localhost:5432/numerolog_bot
 # Отключение глобального меню в inline-клавиатуре:
 GLOBAL_MENU_ENABLED=false
+# Отключение фильтрации результата (post-фильтр отчёта):
+REPORT_SAFETY_ENABLED=true
 # Отключение проверки оплаты (тестовый режим):
 PAYMENT_ENABLED=true
 ```
@@ -155,6 +157,7 @@ tmux attach -t numerolog_bot
 Если текст по-прежнему содержит «красные зоны», бот возвращает безопасный отказ.  
 Если нарушения остаются без красных зон, бот выдаёт резервный безопасный отчёт.  
 Флаги фильтрации сохраняются в `reports.safety_flags`.
+При необходимости можно отключить post-фильтр через `REPORT_SAFETY_ENABLED=false` (текст отправляется без проверки).  
 
 ## LLM fallback
 
@@ -355,6 +358,7 @@ sudo systemctl restart numerolog.target
 
 - `FEEDBACK_GROUP_CHAT_ID`, `FEEDBACK_GROUP_URL`, `FEEDBACK_MODE`
 - `LLM_PRIMARY`, `LLM_FALLBACK`, `LLM_TIMEOUT_SECONDS`
+- `REPORT_SAFETY_ENABLED` (включает/отключает post-фильтрацию отчёта)
 - `GEMINI_API_KEY`, `GEMINI_API_KEYS`, `GEMINI_MODEL`
 - `OPENAI_API_KEY`, `OPENAI_API_KEYS`, `OPENAI_MODEL`
 - `PAYMENT_PROVIDER`, `PRODAMUS_FORM_URL`, `PRODAMUS_SECRET`, `PRODAMUS_WEBHOOK_SECRET`,
