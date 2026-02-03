@@ -11,6 +11,7 @@ from app.core.prompt_settings import resolve_tariff_prompt
 from app.core.report_safety import report_safety
 from app.db.models import Order, OrderStatus, Report, ReportModel, Tariff
 from app.db.session import get_session
+from sqlalchemy import select
 
 
 REPORT_FRAMEWORK_TEMPLATE = """
@@ -181,6 +182,12 @@ class ReportService:
                 order_id = self._resolve_paid_order_id(session, state, user_id)
                 if not order_id and not force_store:
                     return
+                if order_id and self._order_has_report(session, order_id):
+                    self._logger.info(
+                        "report_already_exists_for_order",
+                        extra={"user_id": user_id, "order_id": order_id},
+                    )
+                    return
             report = Report(
                 user_id=user_id,
                 order_id=order_id,
@@ -204,6 +211,15 @@ class ReportService:
             )
             return None
         return order.id
+
+    @staticmethod
+    def _order_has_report(session, order_id: int) -> bool:
+        return (
+            session.execute(select(Report.id).where(Report.order_id == order_id).limit(1))
+            .scalars()
+            .first()
+            is not None
+        )
 
     @staticmethod
     def _map_model(provider: str) -> ReportModel | None:
