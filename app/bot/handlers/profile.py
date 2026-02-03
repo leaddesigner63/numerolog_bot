@@ -9,11 +9,20 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
-from app.db.models import FreeLimit, Order, OrderStatus, User, UserProfile
+from app.db.models import (
+    FeedbackMessage,
+    FreeLimit,
+    Order,
+    OrderStatus,
+    QuestionnaireResponse,
+    Report,
+    User,
+    UserProfile,
+)
 from app.db.session import get_session
 
 router = Router()
@@ -138,6 +147,19 @@ async def _show_profile_screen(message: Message, user_id: int) -> None:
     )
 
 
+def _clear_user_data(session, user: User) -> None:
+    session.execute(delete(UserProfile).where(UserProfile.user_id == user.id))
+    session.execute(delete(Order).where(Order.user_id == user.id))
+    session.execute(delete(FreeLimit).where(FreeLimit.user_id == user.id))
+    session.execute(
+        delete(FeedbackMessage).where(FeedbackMessage.user_id == user.id)
+    )
+    session.execute(
+        delete(QuestionnaireResponse).where(QuestionnaireResponse.user_id == user.id)
+    )
+    session.execute(delete(Report).where(Report.user_id == user.id))
+
+
 async def start_profile_wizard(message: Message, state: FSMContext) -> None:
     await state.clear()
     await state.set_state(ProfileStates.name)
@@ -219,6 +241,20 @@ async def start_profile_flow(callback: CallbackQuery, state: FSMContext) -> None
         await callback.answer()
         return
     await start_profile_wizard(callback.message, state)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "profile:delete:confirm")
+async def delete_profile_data(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    with get_session() as session:
+        user = _get_or_create_user(session, callback.from_user.id)
+        _clear_user_data(session, user)
+    screen_manager.clear_state(callback.from_user.id)
+    await callback.message.answer(
+        "Ваши данные удалены. Вы можете заполнить их заново в любой момент."
+    )
+    await _show_profile_screen(callback.message, callback.from_user.id)
     await callback.answer()
 
 

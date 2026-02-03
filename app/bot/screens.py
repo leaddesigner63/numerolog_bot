@@ -366,6 +366,14 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         rows.append(
             [InlineKeyboardButton(text="Перезаполнить", callback_data="profile:start")]
         )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text="Удалить мои данные",
+                    callback_data="screen:S4_DELETE",
+                )
+            ]
+        )
     elif is_t0:
         rows.append([InlineKeyboardButton(text="Старт", callback_data="profile:start")])
         rows.append(
@@ -385,6 +393,25 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     if not is_t0 or profile:
         rows.extend(_global_menu())
     rows.append([InlineKeyboardButton(text="Назад", callback_data="screen:S1")])
+    keyboard = _build_keyboard(rows)
+    return ScreenContent(messages=[text], keyboard=keyboard)
+
+
+def screen_s4_delete_confirm(_: dict[str, Any]) -> ScreenContent:
+    text = _with_screen_prefix(
+        "S4",
+        (
+            "Вы уверены, что хотите удалить все ваши данные?\n"
+            "Профиль, отчёты, анкеты и история платежей будут удалены, "
+            "а учётная запись останется."
+        ),
+    )
+    rows = [
+        [
+            InlineKeyboardButton(text="Да", callback_data="profile:delete:confirm"),
+            InlineKeyboardButton(text="Отмена", callback_data="screen:S4"),
+        ]
+    ]
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
@@ -524,6 +551,7 @@ SCREEN_REGISTRY = {
     "S2": screen_s2,
     "S3": screen_s3,
     "S4": screen_s4,
+    "S4_DELETE": screen_s4_delete_confirm,
     "S5": screen_s5,
     "S6": screen_s6,
     "S7": screen_s7,

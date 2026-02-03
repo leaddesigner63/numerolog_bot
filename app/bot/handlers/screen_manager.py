@@ -48,6 +48,15 @@ class ScreenStateStore:
         state.message_ids = []
         self._persist_state(user_id, state)
 
+    def clear_state(self, user_id: int) -> None:
+        if user_id in self._states:
+            del self._states[user_id]
+        with get_session() as session:
+            record = session.get(ScreenStateRecord, user_id)
+            if record:
+                session.delete(record)
+                session.flush()
+
     def _load_state(self, user_id: int) -> ScreenState:
         with get_session() as session:
             record = session.get(ScreenStateRecord, user_id)
@@ -186,6 +195,9 @@ class ScreenManager:
 
     def update_state(self, user_id: int, **kwargs: Any) -> ScreenState:
         return self._store.update_data(user_id, **kwargs)
+
+    def clear_state(self, user_id: int) -> None:
+        self._store.clear_state(user_id)
 
     def _split_message(self, message: str) -> list[str]:
         if not message:
