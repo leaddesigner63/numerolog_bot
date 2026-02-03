@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from html import escape as html_escape
 from typing import Any
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -13,6 +14,7 @@ from app.core.config import settings
 class ScreenContent:
     messages: list[str]
     keyboard: InlineKeyboardMarkup | None = None
+    parse_mode: str | None = None
 
 
 # Единый справочник тарифов (чтобы UI не расходился с логикой оплаты)
@@ -54,14 +56,14 @@ TARIFF_META: dict[str, dict[str, Any]] = {
     },
     "T3": {
         "title": "Т3 - Твой путь к себе!",
-        "price": "||5930||",
+        "price": 5930,
         "bullets": [
             "А ты знаешь, что можешь достичь большего, но не представляешь, с чего начать? Хватит действовать вслепую — "
             "тебе нужен чёткий план!🗓\n"
             "ИИ составит его специально под тебя.🏋️‍♀️\n"
             "Результат придаст твоей жизни движение вперед к новым победам: ты получишь персональный маршрут с чёткими "
             "шагами, сроками и рекомендациями — что, когда и как делать, чтобы раскрыть свой потенциал и жить по максимуму.🏆\n"
-            "Успей получить «Твой путь к себе» всего за ||5930||, жми \"Старт💥\" и начнем Твой путь к Себе!",
+            "Успей получить «Твой путь к себе» всего за 5930, жми \"Старт💥\" и начнем Твой путь к Себе!",
         ],
         "note": None,
     },
@@ -140,6 +142,15 @@ def _format_price(state: dict[str, Any], tariff: str) -> str:
     if not meta:
         return ""
     return f"{meta.get('price')} RUB"
+
+
+def _apply_spoiler_html(text: str, spoiler_text: str) -> str:
+    if not spoiler_text:
+        return html_escape(text)
+    escaped_text = html_escape(text)
+    escaped_spoiler = html_escape(spoiler_text)
+    spoiler_html = f'<span class="tg-spoiler">{escaped_spoiler}</span>'
+    return escaped_text.replace(escaped_spoiler, spoiler_html)
 
 
 def screen_s0(_: dict[str, Any]) -> ScreenContent:
@@ -229,6 +240,12 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
             
         ),
     )
+    parse_mode = None
+    if selected_tariff_raw == "T3":
+        price_value = str(meta.get("price", ""))
+        if price_value and price_value in text:
+            text = _apply_spoiler_html(text, price_value)
+            parse_mode = "HTML"
 
     rows: list[list[InlineKeyboardButton]] = []
     rows.append(
@@ -239,7 +256,7 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
     )
     rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
-    return ScreenContent(messages=[text], keyboard=keyboard)
+    return ScreenContent(messages=[text], keyboard=keyboard, parse_mode=parse_mode)
 
 
 def screen_s3(state: dict[str, Any]) -> ScreenContent:
