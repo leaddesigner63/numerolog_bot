@@ -5,7 +5,7 @@ Revises: 0004_expand_telegram_user_id
 Create Date: 2026-02-01 00:10:00.000000
 """
 
-from datetime import datetime
+from datetime import date, datetime
 
 from alembic import op
 import sqlalchemy as sa
@@ -35,7 +35,7 @@ def _format_birth_date(value: object) -> str | None:
     return None
 
 
-def _parse_birth_date(value: object) -> datetime.date | None:
+def _parse_birth_date(value: object) -> date | None:
     if value is None:
         return None
     if isinstance(value, str):
