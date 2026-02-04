@@ -21,6 +21,9 @@ class IsFeedbackScreen(BaseFilter):
 
 @router.message(IsFeedbackScreen(), F.text)
 async def handle_feedback_text(message: Message) -> None:
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     feedback_text = message.text or ""
     screen_manager.update_state(message.from_user.id, feedback_text=feedback_text)
     if (settings.feedback_mode or "native").lower() == "livegram":

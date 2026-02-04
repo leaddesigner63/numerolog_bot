@@ -229,6 +229,7 @@ class ScreenStateRecord(Base):
     telegram_user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     screen_id: Mapped[str | None] = mapped_column(String(16))
     message_ids: Mapped[list[int] | None] = mapped_column(JSON)
+    user_message_ids: Mapped[list[int] | None] = mapped_column(JSON)
     data: Mapped[dict | None] = mapped_column(JSON)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

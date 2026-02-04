@@ -467,4 +467,7 @@ async def handle_choice_answer(callback: CallbackQuery, state: FSMContext) -> No
 
 @router.message(QuestionnaireStates.answering)
 async def handle_text_answer(message: Message, state: FSMContext) -> None:
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     await _handle_answer(message=message, state=state, answer=message.text or "")

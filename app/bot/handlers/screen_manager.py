@@ -16,6 +16,7 @@ from app.db.session import get_session
 class ScreenState:
     screen_id: str | None = None
     message_ids: list[int] = field(default_factory=list)
+    user_message_ids: list[int] = field(default_factory=list)
     data: dict[str, Any] = field(default_factory=dict)
 
 
@@ -41,11 +42,24 @@ class ScreenStateStore:
         self._persist_state(user_id, state)
         return state
 
+    def add_user_message_id(self, user_id: int, message_id: int) -> ScreenState:
+        state = self.get_state(user_id)
+        state.user_message_ids.append(message_id)
+        self._persist_state(user_id, state)
+        return state
+
     def clear_message_ids(self, user_id: int) -> None:
         state = self.get_state(user_id)
         if not state.message_ids:
             return
         state.message_ids = []
+        self._persist_state(user_id, state)
+
+    def clear_user_message_ids(self, user_id: int) -> None:
+        state = self.get_state(user_id)
+        if not state.user_message_ids:
+            return
+        state.user_message_ids = []
         self._persist_state(user_id, state)
 
     def clear_state(self, user_id: int) -> None:
@@ -65,6 +79,7 @@ class ScreenStateStore:
             return ScreenState(
                 screen_id=record.screen_id,
                 message_ids=list(record.message_ids or []),
+                user_message_ids=list(record.user_message_ids or []),
                 data=dict(record.data or {}),
             )
 
@@ -74,12 +89,14 @@ class ScreenStateStore:
             if record:
                 record.screen_id = state.screen_id
                 record.message_ids = state.message_ids
+                record.user_message_ids = state.user_message_ids
                 record.data = state.data
             else:
                 record = ScreenStateRecord(
                     telegram_user_id=user_id,
                     screen_id=state.screen_id,
                     message_ids=state.message_ids,
+                    user_message_ids=state.user_message_ids,
                     data=state.data,
                 )
                 session.add(record)
@@ -104,6 +121,7 @@ class ScreenManager:
         content = self.render_screen(screen_id, user_id, state.data)
 
         previous_message_ids = list(state.message_ids)
+        previous_user_message_ids = list(state.user_message_ids)
         delete_failed = False
         for message_id in previous_message_ids:
             try:
@@ -120,8 +138,24 @@ class ScreenManager:
                     },
                 )
 
+        for message_id in previous_user_message_ids:
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=message_id)
+            except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
+                self._logger.info(
+                    "user_message_cleanup_failed",
+                    extra={
+                        "user_id": user_id,
+                        "screen_id": state.screen_id,
+                        "message_id": message_id,
+                        "error": str(exc),
+                    },
+                )
+
         if previous_message_ids:
             self._store.clear_message_ids(user_id)
+        if previous_user_message_ids:
+            self._store.clear_user_message_ids(user_id)
 
         if delete_failed and previous_message_ids:
             first_message_id = previous_message_ids[0]
@@ -195,6 +229,9 @@ class ScreenManager:
 
     def update_state(self, user_id: int, **kwargs: Any) -> ScreenState:
         return self._store.update_data(user_id, **kwargs)
+
+    def add_user_message_id(self, user_id: int, message_id: int) -> ScreenState:
+        return self._store.add_user_message_id(user_id, message_id)
 
     def clear_state(self, user_id: int) -> None:
         self._store.clear_state(user_id)
