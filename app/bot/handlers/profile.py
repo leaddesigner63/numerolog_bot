@@ -146,6 +146,7 @@ async def show_cabinet(message: Message) -> None:
         if user:
             screen_manager.update_state(message.from_user.id, **_profile_payload(user.profile))
         _refresh_reports_summary(session, message.from_user.id)
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     await screen_manager.show_screen(
         bot=message.bot,
         chat_id=message.chat.id,
