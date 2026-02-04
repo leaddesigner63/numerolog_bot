@@ -61,7 +61,7 @@ def _build_keyboard(question: QuestionnaireQuestion) -> InlineKeyboardMarkup | N
         rows = [
             [
                 InlineKeyboardButton(
-                    text=option["label"],
+                    text=_with_button_icons(option["label"], "🧩"),
                     callback_data=f"questionnaire:answer:{question.question_id}:{option['value']}",
                 )
             ]
@@ -73,7 +73,7 @@ def _build_keyboard(question: QuestionnaireQuestion) -> InlineKeyboardMarkup | N
         rows = [
             [
                 InlineKeyboardButton(
-                    text=str(value),
+                    text=_with_button_icons(str(value), "🔢"),
                     callback_data=f"questionnaire:answer:{question.question_id}:{value}",
                 )
                 for value in range(min_value, max_value + 1)
@@ -83,6 +83,11 @@ def _build_keyboard(question: QuestionnaireQuestion) -> InlineKeyboardMarkup | N
         return None
 
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _with_button_icons(text: str, icon: str) -> str:
+    clean_text = str(text).strip()
+    return f"{icon} {clean_text} {icon}"
 
 
 def _question_payload(
@@ -450,7 +455,12 @@ async def _handle_answer(
         await state.clear()
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="Готово", callback_data="questionnaire:done")]
+                [
+                    InlineKeyboardButton(
+                        text=_with_button_icons("Готово", "✅"),
+                        callback_data="questionnaire:done",
+                    )
+                ]
             ]
         )
         await message.answer(
