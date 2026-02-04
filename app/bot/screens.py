@@ -15,6 +15,7 @@ class ScreenContent:
     messages: list[str]
     keyboard: InlineKeyboardMarkup | None = None
     parse_mode: str | None = None
+    image_path: str | None = None
 
 
 # Единый справочник тарифов (чтобы UI не расходился с логикой оплаты)

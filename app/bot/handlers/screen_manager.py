@@ -6,8 +6,9 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
-from aiogram.types import Message
+from aiogram.types import FSInputFile, Message
 
+from app.bot.screen_images import resolve_screen_image_path
 from app.bot.screens import SCREEN_REGISTRY, ScreenContent
 from app.db.models import ScreenStateRecord
 from app.db.session import get_session
@@ -145,6 +146,7 @@ class ScreenManager:
     async def show_screen(self, bot: Bot, chat_id: int, user_id: int, screen_id: str) -> None:
         state = self._store.get_state(user_id)
         content = self.render_screen(screen_id, user_id, state.data)
+        image_path = resolve_screen_image_path(screen_id, state.data)
 
         previous_message_ids = list(state.message_ids)
         previous_user_message_ids = list(state.user_message_ids)
@@ -183,7 +185,7 @@ class ScreenManager:
         if previous_user_message_ids:
             self._store.clear_user_message_ids(user_id)
 
-        if failed_message_ids and previous_message_ids:
+        if failed_message_ids and previous_message_ids and not image_path:
             first_message_id = previous_message_ids[0]
             if await self._try_edit_screen(bot, chat_id, first_message_id, content, user_id, screen_id):
                 for message_id in failed_message_ids:
@@ -199,6 +201,23 @@ class ScreenManager:
             expanded_messages.extend(self._split_message(message))
 
         message_ids: list[int] = []
+        if image_path:
+            try:
+                sent_photo = await bot.send_photo(
+                    chat_id=chat_id,
+                    photo=FSInputFile(image_path),
+                )
+                message_ids.append(sent_photo.message_id)
+            except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
+                self._logger.info(
+                    "screen_image_send_failed",
+                    extra={
+                        "user_id": user_id,
+                        "screen_id": screen_id,
+                        "image_path": str(image_path),
+                        "error": str(exc),
+                    },
+                )
         for index, message in enumerate(expanded_messages):
             reply_markup = content.keyboard if index == len(expanded_messages) - 1 else None
             try:
