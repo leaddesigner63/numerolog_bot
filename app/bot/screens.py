@@ -106,7 +106,7 @@ def _build_keyboard(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMar
 
 def _with_button_icons(text: str, icon: str) -> str:
     clean_text = text.strip()
-    return f"{icon} {clean_text} {icon}"
+    return f"{icon} {clean_text}"
 
 
 def _format_tariff_label(tariff: str) -> str:
@@ -291,7 +291,7 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
                 callback_data="screen:S1",
             ),
             InlineKeyboardButton(
-                text=_with_button_icons("Старт💥", "🚀"),
+                text=_with_button_icons("Старт", "🚀"),
                 callback_data="screen:S3",
             ),
         ]
@@ -332,7 +332,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=_with_button_icons("Далее!🔥🔥🔥", "💳"),
+                    text=_with_button_icons("Далее", "💳"),
                     url=payment_url,
                 )
             ]
