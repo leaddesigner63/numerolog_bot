@@ -352,7 +352,23 @@ def _get_report_pdf_bytes(session, report: Report) -> bytes | None:
     return pdf_bytes
 
 
-def _build_report_pdf_filename(report: Report | None, username: str | None) -> str:
+def _get_report_pdf_meta(report: Report | None) -> dict | None:
+    if not report:
+        return None
+    report_id = str(report.id) if report.id is not None else "report"
+    if isinstance(report.tariff, Tariff):
+        tariff_value = report.tariff.value
+    else:
+        tariff_value = str(report.tariff or "tariff")
+    created_at_value = report.created_at if isinstance(report.created_at, datetime) else None
+    return {
+        "id": report_id,
+        "tariff": tariff_value,
+        "created_at": created_at_value,
+    }
+
+
+def _build_report_pdf_filename(report_meta: dict | None, username: str | None) -> str:
     raw_username = str(username) if username else "unknown"
     display_username = (
         raw_username if raw_username.startswith("@") else f"@{raw_username}"
@@ -360,14 +376,11 @@ def _build_report_pdf_filename(report: Report | None, username: str | None) -> s
     tariff_value = "tariff"
     created_at_value = "unknown-time"
     report_id = "report"
-    if report:
-        report_id = str(report.id)
-        if isinstance(report.tariff, Tariff):
-            tariff_value = report.tariff.value
-        else:
-            tariff_value = str(report.tariff or tariff_value)
-        if isinstance(report.created_at, datetime):
-            created_at = report.created_at
+    if report_meta:
+        report_id = str(report_meta.get("id") or report_id)
+        tariff_value = str(report_meta.get("tariff") or tariff_value)
+        created_at = report_meta.get("created_at")
+        if isinstance(created_at, datetime):
             if created_at.tzinfo is None:
                 created_at = created_at.replace(tzinfo=timezone.utc)
             created_at_value = created_at.astimezone(timezone.utc).strftime(
@@ -379,15 +392,15 @@ def _build_report_pdf_filename(report: Report | None, username: str | None) -> s
 async def _send_report_pdf(
     bot,
     chat_id: int,
-    report: Report | None,
+    report_meta: dict | None,
     *,
     pdf_bytes: bytes | None,
     username: str | None,
 ) -> bool:
     if not pdf_bytes:
         return False
-    filename = _build_report_pdf_filename(report, username)
-    report_id = report.id if report else None
+    filename = _build_report_pdf_filename(report_meta, username)
+    report_id = report_meta.get("id") if report_meta else None
     try:
         await bot.send_document(chat_id, BufferedInputFile(pdf_bytes, filename=filename))
     except Exception as exc:
@@ -846,11 +859,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S7",
                     )
+                    report_meta = _get_report_pdf_meta(existing_report)
                     pdf_bytes = _get_report_pdf_bytes(session, existing_report)
                     if not await _send_report_pdf(
                         callback.bot,
                         callback.message.chat.id,
-                        existing_report,
+                        report_meta,
                         pdf_bytes=pdf_bytes,
                         username=callback.from_user.username,
                     ):
@@ -932,7 +946,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         callback.from_user.id,
                         tariff_value=tariff,
                     )
-                    latest_report_id = latest_report.id if latest_report else None
+                    report_meta = _get_report_pdf_meta(latest_report)
+                    latest_report_id = report_meta.get("id") if report_meta else None
                     pdf_bytes = (
                         _get_report_pdf_bytes(session, latest_report)
                         if latest_report
@@ -941,7 +956,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 if latest_report_id and not await _send_report_pdf(
                     callback.bot,
                     callback.message.chat.id,
-                    latest_report,
+                    report_meta,
                     pdf_bytes=pdf_bytes,
                     username=callback.from_user.username,
                 ):
@@ -1022,11 +1037,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S7",
                     )
+                    report_meta = _get_report_pdf_meta(existing_report)
                     pdf_bytes = _get_report_pdf_bytes(session, existing_report)
                     if not await _send_report_pdf(
                         callback.bot,
                         callback.message.chat.id,
-                        existing_report,
+                        report_meta,
                         pdf_bytes=pdf_bytes,
                         username=callback.from_user.username,
                     ):
@@ -1088,7 +1104,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     callback.from_user.id,
                     tariff_value=tariff,
                 )
-                latest_report_id = latest_report.id if latest_report else None
+                report_meta = _get_report_pdf_meta(latest_report)
+                latest_report_id = report_meta.get("id") if report_meta else None
                 pdf_bytes = (
                     _get_report_pdf_bytes(session, latest_report)
                     if latest_report
@@ -1097,7 +1114,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             if latest_report_id and not await _send_report_pdf(
                 callback.bot,
                 callback.message.chat.id,
-                latest_report,
+                report_meta,
                 pdf_bytes=pdf_bytes,
                 username=callback.from_user.username,
             ):
@@ -1128,12 +1145,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await callback.message.answer("PDF будет доступен после генерации отчёта.")
                 await _safe_callback_answer(callback)
                 return
-            report_id = report.id
+            report_meta = _get_report_pdf_meta(report)
+            report_id = report_meta.get("id") if report_meta else None
             pdf_bytes = _get_report_pdf_bytes(session, report)
         if report_id is None or not await _send_report_pdf(
             callback.bot,
             callback.message.chat.id,
-            report,
+            report_meta,
             pdf_bytes=pdf_bytes,
             username=callback.from_user.username,
         ):
