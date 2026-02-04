@@ -9,6 +9,8 @@ router = Router()
 
 @router.message(CommandStart())
 async def handle_start(message: Message) -> None:
+    if message.from_user:
+        screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     await screen_manager.show_screen(
         bot=message.bot,
         chat_id=message.chat.id,
