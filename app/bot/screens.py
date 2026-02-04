@@ -102,6 +102,16 @@ def _with_screen_prefix(screen_id: str, text: str) -> str:
     return f"{screen_id}: {text.lstrip()}"
 
 
+def build_report_wait_message(remaining_seconds: int | None = None, frame: str = "⏳") -> str:
+    base_text = "Генерируем отчёт… Пожалуйста, подождите."
+    if remaining_seconds is None:
+        return _with_screen_prefix("S6", base_text)
+    return _with_screen_prefix(
+        "S6",
+        f"{frame} {base_text}\nОсталось: {remaining_seconds} сек.",
+    )
+
+
 def _common_disclaimer_short() -> str:
     return (
         "Важно:\n"
@@ -438,7 +448,7 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s6(_: dict[str, Any]) -> ScreenContent:
-    text = _with_screen_prefix("S6", "Генерируем отчёт… Пожалуйста, подождите.")
+    text = build_report_wait_message()
     rows = [
         [InlineKeyboardButton(text="Назад в тарифы", callback_data="screen:S1")],
         *_global_menu(),
