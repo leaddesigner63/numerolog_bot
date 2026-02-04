@@ -87,7 +87,7 @@ def _build_keyboard(question: QuestionnaireQuestion) -> InlineKeyboardMarkup | N
 
 def _with_button_icons(text: str, icon: str) -> str:
     clean_text = str(text).strip()
-    return f"{icon} {clean_text} {icon}"
+    return f"{icon} {clean_text}"
 
 
 def _question_payload(
