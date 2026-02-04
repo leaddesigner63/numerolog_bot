@@ -506,6 +506,12 @@ async def handle_choice_answer(callback: CallbackQuery, state: FSMContext) -> No
         await callback.answer()
         return
     _, _, question_id, value = parts
+    if callback.message:
+        await screen_manager.delete_last_question_message(
+            bot=callback.bot,
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+        )
     await _handle_answer(message=callback.message, state=state, answer=value, question_id=question_id)
     await callback.answer()
 

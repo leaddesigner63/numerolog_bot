@@ -151,6 +151,7 @@ class ScreenManager:
 
         previous_message_ids = list(state.message_ids)
         previous_user_message_ids = list(state.user_message_ids)
+        last_question_message_id = state.last_question_message_id
         failed_message_ids: list[int] = []
         for message_id in previous_message_ids:
             try:
@@ -181,10 +182,33 @@ class ScreenManager:
                     },
                 )
 
+        if last_question_message_id and (
+            last_question_message_id not in previous_message_ids
+            and last_question_message_id not in previous_user_message_ids
+        ):
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=last_question_message_id)
+            except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
+                self._logger.info(
+                    "last_question_cleanup_failed",
+                    extra={
+                        "user_id": user_id,
+                        "screen_id": state.screen_id,
+                        "message_id": last_question_message_id,
+                        "error": str(exc),
+                    },
+                )
+                await self._try_edit_placeholder(
+                    bot, chat_id, last_question_message_id, user_id, state.screen_id
+                )
+            self._store.clear_last_question_message_id(user_id)
+
         if previous_message_ids:
             self._store.clear_message_ids(user_id)
         if previous_user_message_ids:
             self._store.clear_user_message_ids(user_id)
+        if last_question_message_id and last_question_message_id in previous_message_ids:
+            self._store.clear_last_question_message_id(user_id)
 
         if failed_message_ids and previous_message_ids and not image_path:
             first_message_id = previous_message_ids[0]
@@ -343,7 +367,9 @@ class ScreenManager:
                     "error": str(exc),
                 },
             )
-            return
+            await self._try_edit_placeholder(
+                bot, chat_id, last_message_id, user_id, state.screen_id
+            )
         self._store.clear_last_question_message_id(user_id)
 
     async def send_ephemeral_message(
