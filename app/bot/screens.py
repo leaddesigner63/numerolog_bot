@@ -479,6 +479,14 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 )
             ]
         )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Кабинет", "👤"),
+                callback_data="screen:S11",
+            )
+        ]
+    )
     if not is_t0 or profile:
         rows.extend(_global_menu())
     rows.append(
