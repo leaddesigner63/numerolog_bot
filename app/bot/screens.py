@@ -560,6 +560,14 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
         rows.append(
             [
                 InlineKeyboardButton(
+                    text=_with_button_icons("Редактировать данные", "📝"),
+                    callback_data="screen:S4",
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
                     text=_with_button_icons("Готово", "✅"),
                     callback_data="questionnaire:done",
                 )
