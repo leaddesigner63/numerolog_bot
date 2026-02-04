@@ -75,12 +75,24 @@ def _global_menu() -> list[list[InlineKeyboardButton]]:
         return []
     return [
         [
-            InlineKeyboardButton(text="Тарифы", callback_data="screen:S1"),
-            InlineKeyboardButton(text="Мои данные", callback_data="screen:S4"),
+            InlineKeyboardButton(
+                text=_with_button_icons("Тарифы", "🧾"),
+                callback_data="screen:S1",
+            ),
+            InlineKeyboardButton(
+                text=_with_button_icons("Мои данные", "👤"),
+                callback_data="screen:S4",
+            ),
         ],
         [
-            InlineKeyboardButton(text="Оферта", callback_data="screen:S2"),
-            InlineKeyboardButton(text="Обратная связь", callback_data="screen:S8"),
+            InlineKeyboardButton(
+                text=_with_button_icons("Оферта", "📄"),
+                callback_data="screen:S2",
+            ),
+            InlineKeyboardButton(
+                text=_with_button_icons("Обратная связь", "💬"),
+                callback_data="screen:S8",
+            ),
         ],
     ]
 
@@ -90,6 +102,11 @@ def _build_keyboard(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMar
     for row in rows:
         builder.row(*row)
     return builder.as_markup()
+
+
+def _with_button_icons(text: str, icon: str) -> str:
+    clean_text = text.strip()
+    return f"{icon} {clean_text} {icon}"
 
 
 def _format_tariff_label(tariff: str) -> str:
@@ -162,7 +179,12 @@ def screen_s0(_: dict[str, Any]) -> ScreenContent:
         "Хочешь узнать больше?  Жми Далее😎"
     )
     rows = [
-        [InlineKeyboardButton(text="Далее", callback_data="screen:S1")],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Далее", "➡️"),
+                callback_data="screen:S1",
+            )
+        ],
         
     ]
     keyboard = _build_keyboard(rows)
@@ -177,17 +199,27 @@ def screen_s1(_: dict[str, Any]) -> ScreenContent:
     rows = [
         [
             InlineKeyboardButton(
-                text="Твоё новое начало", callback_data="tariff:T0"
+                text=_with_button_icons("Твоё новое начало", "🌱"),
+                callback_data="tariff:T0",
             ),
         ],
         [
-            InlineKeyboardButton(text="В чём твоя сила?", callback_data="tariff:T1"),
+            InlineKeyboardButton(
+                text=_with_button_icons("В чём твоя сила?", "💪"),
+                callback_data="tariff:T1",
+            ),
         ],
         [
-            InlineKeyboardButton(text="Где твои деньги?", callback_data="tariff:T2"),
+            InlineKeyboardButton(
+                text=_with_button_icons("Где твои деньги?", "💰"),
+                callback_data="tariff:T2",
+            ),
         ],
         [
-            InlineKeyboardButton(text="Твой путь к себе!", callback_data="tariff:T3"),
+            InlineKeyboardButton(
+                text=_with_button_icons("Твой путь к себе!", "🧭"),
+                callback_data="tariff:T3",
+            ),
         ],
     ]
     keyboard = _build_keyboard(rows)
@@ -215,7 +247,14 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
         text = _with_screen_prefix("S2", offer_text)
 
         rows: list[list[InlineKeyboardButton]] = []
-        rows.append([InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1")])
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Назад к тарифам", "↩️"),
+                    callback_data="screen:S1",
+                )
+            ]
+        )
         rows.extend(_global_menu())
         keyboard = _build_keyboard(rows)
         return ScreenContent(messages=[text], keyboard=keyboard)
@@ -247,8 +286,14 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
     rows: list[list[InlineKeyboardButton]] = []
     rows.append(
         [
-            InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1"),
-            InlineKeyboardButton(text="Старт💥", callback_data="screen:S3"),
+            InlineKeyboardButton(
+                text=_with_button_icons("Назад к тарифам", "↩️"),
+                callback_data="screen:S1",
+            ),
+            InlineKeyboardButton(
+                text=_with_button_icons("Старт💥", "🚀"),
+                callback_data="screen:S3",
+            ),
         ]
     )
     rows.extend(_global_menu())
@@ -287,15 +332,21 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="Далее!🔥🔥🔥",
+                    text=_with_button_icons("Далее!🔥🔥🔥", "💳"),
                     url=payment_url,
                 )
             ]
         )
     rows.append(
         [
-            InlineKeyboardButton(text="Я оплатил(а)", callback_data="payment:paid"),
-            InlineKeyboardButton(text="Назад", callback_data="screen:S1"),
+            InlineKeyboardButton(
+                text=_with_button_icons("Я оплатил(а)", "✅"),
+                callback_data="payment:paid",
+            ),
+            InlineKeyboardButton(
+                text=_with_button_icons("Назад", "⬅️"),
+                callback_data="screen:S1",
+            ),
         ]
     )
     rows.extend(_global_menu())
@@ -361,35 +412,83 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     rows: list[list[InlineKeyboardButton]] = []
     if profile:
         rows.append(
-            [InlineKeyboardButton(text="Перезаполнить", callback_data="profile:start")]
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Перезаполнить", "📝"),
+                    callback_data="profile:start",
+                )
+            ]
         )
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="Удалить мои данные",
+                    text=_with_button_icons("Удалить мои данные", "🗑️"),
                     callback_data="screen:S4_DELETE",
                 )
             ]
         )
     elif is_t0:
-        rows.append([InlineKeyboardButton(text="Дальше", callback_data="profile:start")])
         rows.append(
-            [InlineKeyboardButton(text="Обратная связь", callback_data="screen:S8")]
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Дальше", "➡️"),
+                    callback_data="profile:start",
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Обратная связь", "💬"),
+                    callback_data="screen:S8",
+                )
+            ]
         )
     elif requires_payment:
-        rows.append([InlineKeyboardButton(text="К оплате", callback_data="screen:S3")])
-        rows.append([InlineKeyboardButton(text="Тарифы", callback_data="screen:S1")])
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("К оплате", "💳"),
+                    callback_data="screen:S3",
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Тарифы", "🧾"),
+                    callback_data="screen:S1",
+                )
+            ]
+        )
     else:
         rows.append(
-            [InlineKeyboardButton(text="Заполнить данные", callback_data="profile:start")]
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Заполнить данные", "📝"),
+                    callback_data="profile:start",
+                )
+            ]
         )
     if profile_flow and profile and not requires_payment:
         rows.append(
-            [InlineKeyboardButton(text="Продолжить", callback_data="profile:save")]
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Продолжить", "▶️"),
+                    callback_data="profile:save",
+                )
+            ]
         )
     if not is_t0 or profile:
         rows.extend(_global_menu())
-    rows.append([InlineKeyboardButton(text="Назад", callback_data="screen:S1")])
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Назад", "⬅️"),
+                callback_data="screen:S1",
+            )
+        ]
+    )
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
@@ -405,8 +504,14 @@ def screen_s4_delete_confirm(_: dict[str, Any]) -> ScreenContent:
     )
     rows = [
         [
-            InlineKeyboardButton(text="Да", callback_data="profile:delete:confirm"),
-            InlineKeyboardButton(text="Отмена", callback_data="screen:S4"),
+            InlineKeyboardButton(
+                text=_with_button_icons("Да", "✅"),
+                callback_data="profile:delete:confirm",
+            ),
+            InlineKeyboardButton(
+                text=_with_button_icons("Отмена", "❌"),
+                callback_data="screen:S4",
+            ),
         ]
     ]
     keyboard = _build_keyboard(rows)
@@ -436,14 +541,41 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
 
     rows: list[list[InlineKeyboardButton]] = []
     if status == "completed":
-        rows.append([InlineKeyboardButton(text="Пройти заново", callback_data="questionnaire:restart")])
-        rows.append([InlineKeyboardButton(text="Готово", callback_data="questionnaire:done")])
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Пройти заново", "🔁"),
+                    callback_data="questionnaire:restart",
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Готово", "✅"),
+                    callback_data="questionnaire:done",
+                )
+            ]
+        )
     else:
         button_text = "Продолжить анкету" if answered_count else "Заполнить анкету"
+        button_icon = "▶️" if answered_count else "📝"
         rows.append(
-            [InlineKeyboardButton(text=button_text, callback_data="questionnaire:start")]
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons(button_text, button_icon),
+                    callback_data="questionnaire:start",
+                )
+            ]
         )
-    rows.append([InlineKeyboardButton(text="Назад к тарифам", callback_data="screen:S1")])
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Назад к тарифам", "↩️"),
+                callback_data="screen:S1",
+            )
+        ]
+    )
     rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
@@ -452,7 +584,12 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
 def screen_s6(_: dict[str, Any]) -> ScreenContent:
     text = build_report_wait_message()
     rows = [
-        [InlineKeyboardButton(text="Назад в тарифы", callback_data="screen:S1")],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Назад в тарифы", "↩️"),
+                callback_data="screen:S1",
+            )
+        ],
         *_global_menu(),
     ]
     keyboard = _build_keyboard(rows)
@@ -483,8 +620,12 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
             ),
         )
     rows = [
-       
-        [InlineKeyboardButton(text="Продолжить", callback_data="screen:S1")],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Продолжить", "➡️"),
+                callback_data="screen:S1",
+            )
+        ],
         *_global_menu(),
     ]
     keyboard = _build_keyboard(rows)
@@ -500,14 +641,24 @@ def screen_s8(_: dict[str, Any]) -> ScreenContent:
         ),
     )
     rows = [
-        [InlineKeyboardButton(text="Отправить", callback_data="feedback:send")],
-        [InlineKeyboardButton(text="Тарифы", callback_data="screen:S1")],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Отправить", "📤"),
+                callback_data="feedback:send",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Тарифы", "🧾"),
+                callback_data="screen:S1",
+            )
+        ],
     ]
     if settings.feedback_group_url:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text="Перейти в группу",
+                    text=_with_button_icons("Перейти в группу", "👥"),
                     url=settings.feedback_group_url,
                 )
             ]
@@ -526,7 +677,14 @@ def screen_s9(state: dict[str, Any]) -> ScreenContent:
             f"Следующий доступен: {next_available}."
         ),
     )
-    rows = [[InlineKeyboardButton(text="Назад", callback_data="screen:S1")]]
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Назад", "⬅️"),
+                callback_data="screen:S1",
+            )
+        ]
+    ]
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
@@ -534,7 +692,12 @@ def screen_s9(state: dict[str, Any]) -> ScreenContent:
 def screen_s10(_: dict[str, Any]) -> ScreenContent:
     text = _with_screen_prefix("S10", "Сервис временно недоступен. Попробуйте позже.")
     rows = [
-        [InlineKeyboardButton(text="Тарифы", callback_data="screen:S1")],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Тарифы", "🧾"),
+                callback_data="screen:S1",
+            )
+        ],
         *(_global_menu()),
     ]
     keyboard = _build_keyboard(rows)
