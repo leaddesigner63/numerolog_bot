@@ -127,7 +127,11 @@ async def _ensure_paid_access(callback: CallbackQuery) -> bool:
     state_snapshot = screen_manager.update_state(callback.from_user.id)
     selected_tariff = state_snapshot.data.get("selected_tariff")
     if selected_tariff not in {Tariff.T2.value, Tariff.T3.value}:
-        await callback.message.answer("Анкета доступна только для тарифов T2 и T3.")
+        await screen_manager.send_ephemeral_message(
+            callback.message,
+            "Анкета доступна только для тарифов T2 и T3.",
+            user_id=callback.from_user.id,
+        )
         await screen_manager.show_screen(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
@@ -138,7 +142,11 @@ async def _ensure_paid_access(callback: CallbackQuery) -> bool:
 
     order_id = _safe_int(state_snapshot.data.get("order_id"))
     if not order_id:
-        await callback.message.answer("Сначала выберите тариф и завершите оплату.")
+        await screen_manager.send_ephemeral_message(
+            callback.message,
+            "Сначала выберите тариф и завершите оплату.",
+            user_id=callback.from_user.id,
+        )
         await screen_manager.show_screen(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
@@ -158,8 +166,10 @@ async def _ensure_paid_access(callback: CallbackQuery) -> bool:
                 order_currency=order.currency,
             )
         if not order or order.status != OrderStatus.PAID:
-            await callback.message.answer(
-                "Оплата ещё не подтверждена. Доступ к анкете откроется после статуса paid."
+            await screen_manager.send_ephemeral_message(
+                callback.message,
+                "Оплата ещё не подтверждена. Доступ к анкете откроется после статуса paid.",
+                user_id=callback.from_user.id,
             )
             await screen_manager.show_screen(
                 bot=callback.bot,
@@ -181,7 +191,11 @@ async def _ensure_profile_ready(callback: CallbackQuery, state: FSMContext) -> b
     if profile:
         return True
 
-    await callback.message.answer("Сначала заполните «Мои данные».")
+    await screen_manager.send_ephemeral_message(
+        callback.message,
+        "Сначала заполните «Мои данные».",
+        user_id=callback.from_user.id,
+    )
     await screen_manager.show_screen(
         bot=callback.bot,
         chat_id=callback.message.chat.id,
@@ -236,8 +250,9 @@ async def _send_question(
     question: QuestionnaireQuestion | None,
 ) -> None:
     if not question:
-        await message.answer(
-            "Не удалось загрузить вопрос анкеты. Попробуйте начать заново через «Заполнить анкету»."
+        await screen_manager.send_ephemeral_message(
+            message,
+            "Не удалось загрузить вопрос анкеты. Попробуйте начать заново через «Заполнить анкету».",
         )
         return
     keyboard = _build_keyboard(question)
@@ -299,8 +314,10 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
         ).scalar_one_or_none()
 
         if response and response.status == QuestionnaireStatus.COMPLETED:
-            await callback.message.answer(
-                "Анкета уже заполнена. Нажмите «Сбросить», если хотите пройти её заново."
+            await screen_manager.send_ephemeral_message(
+                callback.message,
+                "Анкета уже заполнена. Нажмите «Сбросить», если хотите пройти её заново.",
+                user_id=callback.from_user.id,
             )
             await callback.answer()
             payload = _question_payload(response, config.version)
@@ -402,21 +419,26 @@ async def _handle_answer(
         current_question_id = restored.get("current_question_id")
         data = {**data, **restored}
     if question_id and question_id != current_question_id:
-        await message.answer("Этот вопрос уже не актуален. Пожалуйста, продолжите текущий шаг.")
+        await screen_manager.send_ephemeral_message(
+            message, "Этот вопрос уже не актуален. Пожалуйста, продолжите текущий шаг."
+        )
         return
     if not current_question_id:
-        await message.answer("Анкета не активна. Нажмите «Заполнить анкету».")
+        await screen_manager.send_ephemeral_message(
+            message, "Анкета не активна. Нажмите «Заполнить анкету»."
+        )
         return
 
     question = config.get_question(current_question_id)
     if not question:
-        await message.answer(
-            "Не удалось найти текущий вопрос анкеты. Попробуйте начать заполнение заново."
+        await screen_manager.send_ephemeral_message(
+            message,
+            "Не удалось найти текущий вопрос анкеты. Попробуйте начать заполнение заново.",
         )
         return
     is_valid, normalized, error = _validate_answer(question, answer)
     if not is_valid:
-        await message.answer(error or "Некорректный ответ.")
+        await screen_manager.send_ephemeral_message(message, error or "Некорректный ответ.")
         return
 
     answers = dict(data.get("answers", {}))
@@ -463,7 +485,8 @@ async def _handle_answer(
                 ]
             ]
         )
-        await message.answer(
+        await screen_manager.send_ephemeral_message(
+            message,
             "Анкета заполнена. Нажмите «Готово», чтобы продолжить.",
             reply_markup=keyboard,
         )

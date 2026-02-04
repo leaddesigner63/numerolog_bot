@@ -170,7 +170,9 @@ async def _ensure_paid_profile_access(callback: CallbackQuery) -> bool:
     state_snapshot = screen_manager.update_state(callback.from_user.id)
     selected_tariff = state_snapshot.data.get("selected_tariff")
     if not selected_tariff:
-        await callback.message.answer("Сначала выберите тариф.")
+        await screen_manager.send_ephemeral_message(
+            callback.message, "Сначала выберите тариф.", user_id=callback.from_user.id
+        )
         await screen_manager.show_screen(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
@@ -202,7 +204,11 @@ async def _ensure_paid_profile_access(callback: CallbackQuery) -> bool:
     order_id = state_snapshot.data.get("order_id")
     order_id = _safe_int(order_id)
     if not order_id:
-        await callback.message.answer("Сначала выберите тариф и завершите оплату.")
+        await screen_manager.send_ephemeral_message(
+            callback.message,
+            "Сначала выберите тариф и завершите оплату.",
+            user_id=callback.from_user.id,
+        )
         await screen_manager.show_screen(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
@@ -222,8 +228,10 @@ async def _ensure_paid_profile_access(callback: CallbackQuery) -> bool:
                     order_amount=str(order.amount),
                     order_currency=order.currency,
                 )
-            await callback.message.answer(
-                "Оплата ещё не подтверждена. Доступ к вводу данных откроется после статуса paid."
+            await screen_manager.send_ephemeral_message(
+                callback.message,
+                "Оплата ещё не подтверждена. Доступ к вводу данных откроется после статуса paid.",
+                user_id=callback.from_user.id,
             )
             await screen_manager.show_screen(
                 bot=callback.bot,
@@ -251,8 +259,10 @@ async def delete_profile_data(callback: CallbackQuery, state: FSMContext) -> Non
         user = _get_or_create_user(session, callback.from_user.id)
         _clear_user_data(session, user)
     screen_manager.clear_state(callback.from_user.id)
-    await callback.message.answer(
-        "Ваши данные удалены. Вы можете заполнить их заново в любой момент."
+    await screen_manager.send_ephemeral_message(
+        callback.message,
+        "Ваши данные удалены. Вы можете заполнить их заново в любой момент.",
+        user_id=callback.from_user.id,
     )
     await _show_profile_screen(callback.message, callback.from_user.id)
     await callback.answer()
@@ -272,7 +282,7 @@ async def cancel_profile(message: Message, state: FSMContext) -> None:
         user_id=message.from_user.id,
     )
     await state.clear()
-    await message.answer("Ввод данных отменён.")
+    await screen_manager.send_ephemeral_message(message, "Ввод данных отменён.")
     await _show_profile_screen(message, message.from_user.id)
 
 
@@ -375,5 +385,5 @@ async def handle_profile_birth_place(message: Message, state: FSMContext) -> Non
             **_profile_payload(profile),
         )
     await state.clear()
-    await message.answer("Данные сохранены.")
+    await screen_manager.send_ephemeral_message(message, "Данные сохранены.")
     await _show_profile_screen(message, message.from_user.id)
