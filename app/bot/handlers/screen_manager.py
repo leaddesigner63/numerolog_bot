@@ -148,12 +148,12 @@ class ScreenManager:
 
         previous_message_ids = list(state.message_ids)
         previous_user_message_ids = list(state.user_message_ids)
-        delete_failed = False
+        failed_message_ids: list[int] = []
         for message_id in previous_message_ids:
             try:
                 await bot.delete_message(chat_id=chat_id, message_id=message_id)
             except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
-                delete_failed = True
+                failed_message_ids.append(message_id)
                 self._logger.info(
                     "screen_cleanup_failed",
                     extra={
@@ -183,10 +183,16 @@ class ScreenManager:
         if previous_user_message_ids:
             self._store.clear_user_message_ids(user_id)
 
-        if delete_failed and previous_message_ids:
+        if failed_message_ids and previous_message_ids:
             first_message_id = previous_message_ids[0]
             if await self._try_edit_screen(bot, chat_id, first_message_id, content, user_id, screen_id):
+                for message_id in failed_message_ids:
+                    if message_id == first_message_id:
+                        continue
+                    await self._try_edit_placeholder(bot, chat_id, message_id, user_id, screen_id)
                 return
+            for message_id in failed_message_ids:
+                await self._try_edit_placeholder(bot, chat_id, message_id, user_id, screen_id)
 
         expanded_messages: list[str] = []
         for message in content.messages:
@@ -215,6 +221,33 @@ class ScreenManager:
 
         if message_ids:
             self._store.update_screen(user_id, screen_id, message_ids)
+
+    async def _try_edit_placeholder(
+        self,
+        bot: Bot,
+        chat_id: int,
+        message_id: int,
+        user_id: int,
+        screen_id: str | None,
+    ) -> None:
+        placeholder = "Экран обновлён."
+        try:
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=placeholder,
+                reply_markup=None,
+            )
+        except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
+            self._logger.info(
+                "screen_placeholder_edit_failed",
+                extra={
+                    "user_id": user_id,
+                    "screen_id": screen_id,
+                    "message_id": message_id,
+                    "error": str(exc),
+                },
+            )
 
     async def _try_edit_screen(
         self,
