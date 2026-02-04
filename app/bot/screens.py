@@ -492,7 +492,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     rows.append(
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Дальше", "➡️"),
+                text=_with_button_icons("Тарифы", "➡️"),
                 callback_data="screen:S1",
             )
         ]
