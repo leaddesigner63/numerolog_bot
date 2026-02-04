@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     feedback_group_url: str | None = None
     feedback_mode: str = "native"
     global_menu_enabled: bool = False
+    screen_title_enabled: bool = True
 
     llm_primary: str = "gemini"
     llm_fallback: str = "openai"
