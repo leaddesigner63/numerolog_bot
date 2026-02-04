@@ -122,10 +122,16 @@ def _clear_user_data(session, user: User) -> None:
     session.execute(delete(Report).where(Report.user_id == user.id))
 
 
-async def start_profile_wizard(message: Message, state: FSMContext) -> None:
+async def start_profile_wizard(
+    message: Message, state: FSMContext, user_id: int
+) -> None:
     await state.clear()
     await state.set_state(ProfileStates.name)
-    await message.answer("Введите имя (в любом формате).")
+    sent = await message.bot.send_message(
+        chat_id=message.chat.id,
+        text="Введите имя (в любом формате).",
+    )
+    screen_manager.update_last_question_message_id(user_id, sent.message_id)
 
 
 async def _ensure_paid_profile_access(callback: CallbackQuery) -> bool:
@@ -202,7 +208,7 @@ async def start_profile_flow(callback: CallbackQuery, state: FSMContext) -> None
     if not await _ensure_paid_profile_access(callback):
         await callback.answer()
         return
-    await start_profile_wizard(callback.message, state)
+    await start_profile_wizard(callback.message, state, callback.from_user.id)
     await callback.answer()
 
 
@@ -228,6 +234,11 @@ async def cancel_profile(message: Message, state: FSMContext) -> None:
     if not message.from_user:
         return
     screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
     await state.clear()
     await message.answer("Ввод данных отменён.")
     await _show_profile_screen(message, message.from_user.id)
@@ -238,10 +249,19 @@ async def handle_profile_name(message: Message, state: FSMContext) -> None:
     if not message.from_user:
         return
     screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
     name = message.text or ""
     await state.update_data(name=name)
     await state.set_state(ProfileStates.birth_date)
-    await message.answer("Введите дату рождения (в любом формате).")
+    sent = await message.bot.send_message(
+        chat_id=message.chat.id,
+        text="Введите дату рождения (в любом формате).",
+    )
+    screen_manager.update_last_question_message_id(message.from_user.id, sent.message_id)
 
 
 @router.message(ProfileStates.birth_date)
@@ -249,10 +269,19 @@ async def handle_profile_birth_date(message: Message, state: FSMContext) -> None
     if not message.from_user:
         return
     screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
     birth_date = message.text or ""
     await state.update_data(birth_date=birth_date)
     await state.set_state(ProfileStates.birth_time)
-    await message.answer("Введите время рождения (в любом формате).")
+    sent = await message.bot.send_message(
+        chat_id=message.chat.id,
+        text="Введите время рождения (в любом формате).",
+    )
+    screen_manager.update_last_question_message_id(message.from_user.id, sent.message_id)
 
 
 @router.message(ProfileStates.birth_time)
@@ -260,10 +289,19 @@ async def handle_profile_birth_time(message: Message, state: FSMContext) -> None
     if not message.from_user:
         return
     screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
     birth_time = message.text or ""
     await state.update_data(birth_time=birth_time)
     await state.set_state(ProfileStates.birth_place)
-    await message.answer("Введите место рождения (в любом формате).")
+    sent = await message.bot.send_message(
+        chat_id=message.chat.id,
+        text="Введите место рождения (в любом формате).",
+    )
+    screen_manager.update_last_question_message_id(message.from_user.id, sent.message_id)
 
 
 @router.message(ProfileStates.birth_place)
@@ -271,6 +309,11 @@ async def handle_profile_birth_place(message: Message, state: FSMContext) -> Non
     if not message.from_user:
         return
     screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
     birth_place = message.text or ""
     data = await state.get_data()
     with get_session() as session:

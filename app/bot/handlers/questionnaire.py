@@ -183,7 +183,7 @@ async def _ensure_profile_ready(callback: CallbackQuery, state: FSMContext) -> b
         user_id=callback.from_user.id,
         screen_id="S4",
     )
-    await start_profile_wizard(callback.message, state)
+    await start_profile_wizard(callback.message, state, callback.from_user.id)
     return False
 
 
@@ -227,6 +227,7 @@ def _upsert_progress(
 async def _send_question(
     *,
     message: Message,
+    user_id: int,
     question: QuestionnaireQuestion | None,
 ) -> None:
     if not question:
@@ -235,7 +236,12 @@ async def _send_question(
         )
         return
     keyboard = _build_keyboard(question)
-    await message.answer(question.text, reply_markup=keyboard)
+    sent = await message.bot.send_message(
+        chat_id=message.chat.id,
+        text=question.text,
+        reply_markup=keyboard,
+    )
+    screen_manager.update_last_question_message_id(user_id, sent.message_id)
 
 
 async def _restore_state_from_db(
@@ -322,6 +328,7 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
     )
     await _send_question(
         message=callback.message,
+        user_id=callback.from_user.id,
         question=config.get_question(current_question_id),
     )
     _update_screen_state(callback.from_user.id, payload)
@@ -359,6 +366,7 @@ async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> N
     )
     await _send_question(
         message=callback.message,
+        user_id=callback.from_user.id,
         question=config.get_question(config.start_question_id),
     )
     _update_screen_state(callback.from_user.id, payload)
@@ -451,7 +459,11 @@ async def _handle_answer(
         )
         return
 
-    await _send_question(message=message, question=config.get_question(next_question_id))
+    await _send_question(
+        message=message,
+        user_id=message.from_user.id,
+        question=config.get_question(next_question_id),
+    )
 
 
 @router.callback_query(F.data.startswith("questionnaire:answer:"))
@@ -470,4 +482,9 @@ async def handle_text_answer(message: Message, state: FSMContext) -> None:
     if not message.from_user:
         return
     screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
     await _handle_answer(message=message, state=state, answer=message.text or "")

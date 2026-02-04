@@ -17,6 +17,7 @@ class ScreenState:
     screen_id: str | None = None
     message_ids: list[int] = field(default_factory=list)
     user_message_ids: list[int] = field(default_factory=list)
+    last_question_message_id: int | None = None
     data: dict[str, Any] = field(default_factory=dict)
 
 
@@ -62,6 +63,21 @@ class ScreenStateStore:
         state.user_message_ids = []
         self._persist_state(user_id, state)
 
+    def update_last_question_message_id(
+        self, user_id: int, message_id: int | None
+    ) -> ScreenState:
+        state = self.get_state(user_id)
+        state.last_question_message_id = message_id
+        self._persist_state(user_id, state)
+        return state
+
+    def clear_last_question_message_id(self, user_id: int) -> None:
+        state = self.get_state(user_id)
+        if state.last_question_message_id is None:
+            return
+        state.last_question_message_id = None
+        self._persist_state(user_id, state)
+
     def clear_state(self, user_id: int) -> None:
         if user_id in self._states:
             del self._states[user_id]
@@ -80,6 +96,7 @@ class ScreenStateStore:
                 screen_id=record.screen_id,
                 message_ids=list(record.message_ids or []),
                 user_message_ids=list(record.user_message_ids or []),
+                last_question_message_id=record.last_question_message_id,
                 data=dict(record.data or {}),
             )
 
@@ -90,6 +107,7 @@ class ScreenStateStore:
                 record.screen_id = state.screen_id
                 record.message_ids = state.message_ids
                 record.user_message_ids = state.user_message_ids
+                record.last_question_message_id = state.last_question_message_id
                 record.data = state.data
             else:
                 record = ScreenStateRecord(
@@ -97,6 +115,7 @@ class ScreenStateStore:
                     screen_id=state.screen_id,
                     message_ids=state.message_ids,
                     user_message_ids=state.user_message_ids,
+                    last_question_message_id=state.last_question_message_id,
                     data=state.data,
                 )
                 session.add(record)
@@ -232,6 +251,33 @@ class ScreenManager:
 
     def add_user_message_id(self, user_id: int, message_id: int) -> ScreenState:
         return self._store.add_user_message_id(user_id, message_id)
+
+    def update_last_question_message_id(
+        self, user_id: int, message_id: int | None
+    ) -> ScreenState:
+        return self._store.update_last_question_message_id(user_id, message_id)
+
+    async def delete_last_question_message(
+        self, bot: Bot, chat_id: int, user_id: int
+    ) -> None:
+        state = self._store.get_state(user_id)
+        last_message_id = state.last_question_message_id
+        if not last_message_id:
+            return
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=last_message_id)
+        except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
+            self._logger.info(
+                "last_question_cleanup_failed",
+                extra={
+                    "user_id": user_id,
+                    "screen_id": state.screen_id,
+                    "message_id": last_message_id,
+                    "error": str(exc),
+                },
+            )
+            return
+        self._store.clear_last_question_message_id(user_id)
 
     def clear_state(self, user_id: int) -> None:
         self._store.clear_state(user_id)
