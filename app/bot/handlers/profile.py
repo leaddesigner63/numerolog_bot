@@ -10,6 +10,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy import delete, select, func
 
+from app.bot.questionnaire.config import load_questionnaire_config
 from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
 from app.db.models import (
@@ -135,6 +136,30 @@ def _refresh_reports_summary(session, telegram_user_id: int) -> None:
     screen_manager.update_state(telegram_user_id, reports_total=total)
 
 
+def _refresh_questionnaire_summary(session, telegram_user_id: int) -> None:
+    config = load_questionnaire_config()
+    user = _get_or_create_user(session, telegram_user_id)
+    response = session.execute(
+        select(QuestionnaireResponse).where(
+            QuestionnaireResponse.user_id == user.id,
+            QuestionnaireResponse.questionnaire_version == config.version,
+        )
+    ).scalar_one_or_none()
+    answers = response.answers if response and response.answers else {}
+    screen_manager.update_state(
+        telegram_user_id,
+        questionnaire={
+            "version": config.version,
+            "status": response.status.value if response else "empty",
+            "answers": answers,
+            "current_question_id": response.current_question_id if response else None,
+            "answered_count": len(answers),
+            "total_questions": len(config.questions),
+            "completed_at": response.completed_at.isoformat() if response and response.completed_at else None,
+        },
+    )
+
+
 @router.message(Command("lk"))
 async def show_cabinet(message: Message) -> None:
     if not message.from_user:
@@ -146,6 +171,7 @@ async def show_cabinet(message: Message) -> None:
         if user:
             screen_manager.update_state(message.from_user.id, **_profile_payload(user.profile))
         _refresh_reports_summary(session, message.from_user.id)
+        _refresh_questionnaire_summary(session, message.from_user.id)
     screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     await screen_manager.show_screen(
         bot=message.bot,

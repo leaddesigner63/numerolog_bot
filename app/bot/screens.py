@@ -375,6 +375,33 @@ def _format_report_list(reports: list[dict[str, Any]] | None, total: int | None)
     return "\n".join(lines)
 
 
+def _format_questionnaire_profile(questionnaire: dict[str, Any] | None) -> str:
+    if not questionnaire:
+        return "Профиль расширенной анкеты: нет данных."
+    status = questionnaire.get("status", "empty")
+    version = questionnaire.get("version", "—")
+    answered_count = questionnaire.get("answered_count", 0)
+    total_questions = questionnaire.get("total_questions", 0)
+    completed_at = questionnaire.get("completed_at") or "не завершена"
+    answers = questionnaire.get("answers")
+    lines = [
+        "Профиль расширенной анкеты:",
+        f"Статус: {status}",
+        f"Версия: {version}",
+        f"Прогресс: {answered_count}/{total_questions}",
+        f"Завершена: {completed_at}",
+    ]
+    if isinstance(answers, dict) and answers:
+        lines.append("Ответы:")
+        for key, value in answers.items():
+            lines.append(f"- {key}: {value}")
+    elif answers:
+        lines.append(f"Ответы: {answers}")
+    else:
+        lines.append("Ответы: нет данных.")
+    return "\n".join(lines)
+
+
 def screen_s4(state: dict[str, Any]) -> ScreenContent:
     selected_tariff_raw = state.get("selected_tariff", "T0")
     selected_tariff = _format_tariff_label(selected_tariff_raw)
@@ -748,6 +775,7 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
     reports_line = ""
     if reports_total is not None:
         reports_line = f"\n\nСохранённых отчётов: {reports_total}."
+    questionnaire_text = _format_questionnaire_profile(state.get("questionnaire"))
 
     if profile:
         text = _with_screen_prefix(
@@ -758,14 +786,14 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
                 f"Дата рождения: {profile.get('birth_date')}\n"
                 f"Время рождения: {birth_time}\n"
                 f"Место рождения: {birth_place}"
-                f"{reports_line}"
+                f"{reports_line}\n\n{questionnaire_text}"
             ),
         )
     else:
         text = _with_screen_prefix(
             "S11",
             "Личный кабинет.\n\nДанные профиля ещё не заполнены."
-            f"{reports_line}",
+            f"{reports_line}\n\n{questionnaire_text}",
         )
 
     rows = [

@@ -600,6 +600,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             with get_session() as session:
                 _refresh_profile_state(session, callback.from_user.id)
                 _refresh_reports_list_state(session, callback.from_user.id)
+                if screen_id == "S11":
+                    _refresh_questionnaire_state(session, callback.from_user.id)
         if screen_id == "S3":
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             selected_tariff = state_snapshot.data.get("selected_tariff")
