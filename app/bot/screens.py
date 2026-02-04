@@ -250,7 +250,7 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=_with_button_icons("Назад к тарифам", "↩️"),
+                    text=_with_button_icons("Назад", "↩️"),
                     callback_data="screen:S1",
                 )
             ]
@@ -287,7 +287,7 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
     rows.append(
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Назад к тарифам", "↩️"),
+                text=_with_button_icons("Назад", "↩️"),
                 callback_data="screen:S1",
             ),
             InlineKeyboardButton(
@@ -571,7 +571,7 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
     rows.append(
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Назад к тарифам", "↩️"),
+                text=_with_button_icons("Назад", "↩️"),
                 callback_data="screen:S1",
             )
         ]
