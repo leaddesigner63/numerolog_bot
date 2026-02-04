@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import asyncio
 import logging
 
-from aiogram import Router
+from aiogram import Bot, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery
 from sqlalchemy import select
 
 from app.bot.questionnaire.config import load_questionnaire_config
+from app.bot.screens import build_report_wait_message
 from app.bot.handlers.profile import start_profile_wizard
 from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
@@ -52,6 +54,42 @@ def _safe_int(value: str | int | None) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
+    delay_seconds = settings.report_delay_seconds
+    if delay_seconds <= 0:
+        return
+    state = screen_manager.update_state(user_id)
+    if not state.message_ids:
+        await asyncio.sleep(delay_seconds)
+        return
+    message_id = state.message_ids[-1]
+    content = screen_manager.render_screen("S6", user_id, state.data)
+    frames = ["⏳", "⌛", "🔄", "✨"]
+    for remaining in range(delay_seconds, 0, -1):
+        frame = frames[remaining % len(frames)]
+        text = build_report_wait_message(remaining, frame)
+        try:
+            await bot.edit_message_text(
+                chat_id=chat_id,
+                message_id=message_id,
+                text=text,
+                reply_markup=content.keyboard,
+                parse_mode=content.parse_mode,
+            )
+        except Exception as exc:
+            logger.info(
+                "report_delay_edit_failed",
+                extra={
+                    "user_id": user_id,
+                    "message_id": message_id,
+                    "error": str(exc),
+                },
+            )
+            await asyncio.sleep(delay_seconds)
+            return
+        await asyncio.sleep(1)
 
 
 async def _safe_callback_answer(callback: CallbackQuery) -> None:
@@ -760,6 +798,18 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         if existing_report.model_used
                         else None,
                     )
+                    if settings.report_delay_seconds > 0:
+                        await screen_manager.show_screen(
+                            bot=callback.bot,
+                            chat_id=callback.message.chat.id,
+                            user_id=callback.from_user.id,
+                            screen_id="S6",
+                        )
+                        await _run_report_delay(
+                            callback.bot,
+                            callback.message.chat.id,
+                            callback.from_user.id,
+                        )
                     await screen_manager.show_screen(
                         bot=callback.bot,
                         chat_id=callback.message.chat.id,
@@ -833,6 +883,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     report_text=report.text,
                     report_provider=report.provider,
                     report_model=report.model,
+                )
+                await _run_report_delay(
+                    callback.bot,
+                    callback.message.chat.id,
+                    callback.from_user.id,
                 )
                 await screen_manager.show_screen(
                     bot=callback.bot,
@@ -917,6 +972,18 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         if existing_report.model_used
                         else None,
                     )
+                    if settings.report_delay_seconds > 0:
+                        await screen_manager.show_screen(
+                            bot=callback.bot,
+                            chat_id=callback.message.chat.id,
+                            user_id=callback.from_user.id,
+                            screen_id="S6",
+                        )
+                        await _run_report_delay(
+                            callback.bot,
+                            callback.message.chat.id,
+                            callback.from_user.id,
+                        )
                     await screen_manager.show_screen(
                         bot=callback.bot,
                         chat_id=callback.message.chat.id,
@@ -970,6 +1037,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 report_text=report.text,
                 report_provider=report.provider,
                 report_model=report.model,
+            )
+            await _run_report_delay(
+                callback.bot,
+                callback.message.chat.id,
+                callback.from_user.id,
             )
             await screen_manager.show_screen(
                 bot=callback.bot,
