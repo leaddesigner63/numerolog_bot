@@ -99,7 +99,9 @@ def _format_tariff_label(tariff: str) -> str:
 
 
 def _with_screen_prefix(screen_id: str, text: str) -> str:
-    return f"{screen_id}: {text.lstrip()}"
+    if settings.screen_title_enabled:
+        return f"{screen_id}: {text.lstrip()}"
+    return text.lstrip()
 
 
 def build_report_wait_message(remaining_seconds: int | None = None, frame: str = "⏳") -> str:
