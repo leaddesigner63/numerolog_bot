@@ -143,10 +143,11 @@ class ScreenManager:
             raise ValueError(f"Unknown screen id: {screen_id}")
         return screen_fn(state)
 
-    async def show_screen(self, bot: Bot, chat_id: int, user_id: int, screen_id: str) -> None:
+    async def show_screen(self, bot: Bot, chat_id: int, user_id: int, screen_id: str) -> bool:
         state = self._store.get_state(user_id)
         content = self.render_screen(screen_id, user_id, state.data)
         image_path = resolve_screen_image_path(screen_id, state.data)
+        delivered = False
 
         previous_message_ids = list(state.message_ids)
         previous_user_message_ids = list(state.user_message_ids)
@@ -192,7 +193,7 @@ class ScreenManager:
                     if message_id == first_message_id:
                         continue
                     await self._try_edit_placeholder(bot, chat_id, message_id, user_id, screen_id)
-                return
+                return True
             for message_id in failed_message_ids:
                 await self._try_edit_placeholder(bot, chat_id, message_id, user_id, screen_id)
 
@@ -208,6 +209,7 @@ class ScreenManager:
                     photo=FSInputFile(image_path),
                 )
                 message_ids.append(sent_photo.message_id)
+                delivered = True
             except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
                 self._logger.info(
                     "screen_image_send_failed",
@@ -228,6 +230,7 @@ class ScreenManager:
                     parse_mode=content.parse_mode,
                 )
                 message_ids.append(sent.message_id)
+                delivered = True
             except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
                 self._logger.info(
                     "screen_send_failed",
@@ -240,6 +243,8 @@ class ScreenManager:
 
         if message_ids:
             self._store.update_screen(user_id, screen_id, message_ids)
+            delivered = True
+        return delivered
 
     async def _try_edit_placeholder(
         self,
