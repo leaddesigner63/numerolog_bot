@@ -704,6 +704,47 @@ def screen_s10(_: dict[str, Any]) -> ScreenContent:
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
+def screen_s11(state: dict[str, Any]) -> ScreenContent:
+    profile = state.get("profile") or {}
+    birth_place = _format_birth_place(profile.get("birth_place"))
+    birth_time = profile.get("birth_time") or "не указано"
+
+    if profile:
+        text = _with_screen_prefix(
+            "S11",
+            (
+                "Личный кабинет.\n\n"
+                f"Имя: {profile.get('name')}\n"
+                f"Дата рождения: {profile.get('birth_date')}\n"
+                f"Время рождения: {birth_time}\n"
+                f"Место рождения: {birth_place}"
+            ),
+        )
+    else:
+        text = _with_screen_prefix(
+            "S11",
+            "Личный кабинет.\n\nДанные профиля ещё не заполнены.",
+        )
+
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Мои данные", "🧩"),
+                callback_data="screen:S4",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Тарифы", "🧾"),
+                callback_data="screen:S1",
+            )
+        ],
+        *(_global_menu()),
+    ]
+    keyboard = _build_keyboard(rows)
+    return ScreenContent(messages=[text], keyboard=keyboard)
+
+
 SCREEN_REGISTRY = {
     "S0": screen_s0,
     "S1": screen_s1,
@@ -717,4 +758,5 @@ SCREEN_REGISTRY = {
     "S8": screen_s8,
     "S9": screen_s9,
     "S10": screen_s10,
+    "S11": screen_s11,
 }

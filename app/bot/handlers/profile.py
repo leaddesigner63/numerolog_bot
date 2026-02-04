@@ -122,6 +122,18 @@ def _clear_user_data(session, user: User) -> None:
     session.execute(delete(Report).where(Report.user_id == user.id))
 
 
+@router.message(Command("lk"))
+async def show_cabinet(message: Message) -> None:
+    if not message.from_user:
+        return
+    await screen_manager.show_screen(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        screen_id="S11",
+    )
+
+
 async def start_profile_wizard(
     message: Message, state: FSMContext, user_id: int
 ) -> None:
