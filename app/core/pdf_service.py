@@ -83,6 +83,9 @@ class PdfStorage(Protocol):
     def load(self, key: str) -> bytes:
         ...
 
+    def delete(self, key: str) -> None:
+        ...
+
 
 class LocalPdfStorage:
     def __init__(self, root: Path) -> None:
@@ -97,6 +100,12 @@ class LocalPdfStorage:
     def load(self, key: str) -> bytes:
         path = self._root / key
         return path.read_bytes()
+
+    def delete(self, key: str) -> None:
+        path = self._root / key
+        if not path.exists():
+            return
+        path.unlink()
 
 
 class BucketPdfStorage:
@@ -119,6 +128,10 @@ class BucketPdfStorage:
         storage_key = self._build_key(key, use_prefix=False)
         response = self._client.get_object(Bucket=self._bucket, Key=storage_key)
         return response["Body"].read()
+
+    def delete(self, key: str) -> None:
+        storage_key = self._build_key(key, use_prefix=False)
+        self._client.delete_object(Bucket=self._bucket, Key=storage_key)
 
     def _build_key(self, key: str, *, use_prefix: bool = True) -> str:
         if not use_prefix or not self._prefix:
@@ -181,6 +194,19 @@ class PdfService:
                 extra={"storage_key": storage_key, "error": str(exc)},
             )
             return None
+
+    def delete_pdf(self, storage_key: str | None) -> bool:
+        if not storage_key:
+            return False
+        try:
+            self._storage.delete(storage_key)
+            return True
+        except Exception as exc:
+            self._logger.warning(
+                "pdf_delete_failed",
+                extra={"storage_key": storage_key, "error": str(exc)},
+            )
+            return False
 
     def storage_mode(self) -> str:
         if settings.pdf_storage_bucket:

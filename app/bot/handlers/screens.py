@@ -8,7 +8,7 @@ from aiogram import Bot, Router
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from app.bot.questionnaire.config import load_questionnaire_config
 from app.bot.screens import build_report_wait_message
@@ -332,6 +332,82 @@ def _get_report_for_order(session, order_id: int) -> Report | None:
     )
 
 
+def _get_user(session, telegram_user_id: int) -> User | None:
+    return session.execute(
+        select(User).where(User.telegram_user_id == telegram_user_id)
+    ).scalar_one_or_none()
+
+
+def _format_report_created_at(created_at: datetime | None) -> str:
+    if not isinstance(created_at, datetime):
+        return "неизвестно"
+    value = created_at
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+
+def _refresh_reports_list_state(session, telegram_user_id: int, *, limit: int = 10) -> None:
+    user = _get_user(session, telegram_user_id)
+    if not user:
+        screen_manager.update_state(
+            telegram_user_id,
+            reports=[],
+            reports_total=0,
+        )
+        return
+    total = session.execute(
+        select(func.count(Report.id)).where(Report.user_id == user.id)
+    ).scalar() or 0
+    reports = (
+        session.execute(
+            select(Report)
+            .where(Report.user_id == user.id)
+            .order_by(Report.created_at.desc())
+            .limit(limit)
+        )
+        .scalars()
+        .all()
+    )
+    report_entries = []
+    for report in reports:
+        tariff_value = (
+            report.tariff.value if isinstance(report.tariff, Tariff) else str(report.tariff)
+        )
+        report_entries.append(
+            {
+                "id": report.id,
+                "tariff": tariff_value,
+                "created_at": _format_report_created_at(report.created_at),
+            }
+        )
+    screen_manager.update_state(
+        telegram_user_id,
+        reports=report_entries,
+        reports_total=total,
+    )
+
+
+def _get_report_for_user(
+    session, telegram_user_id: int, report_id: int
+) -> Report | None:
+    user = _get_user(session, telegram_user_id)
+    if not user:
+        return None
+    return session.execute(
+        select(Report).where(Report.user_id == user.id, Report.id == report_id)
+    ).scalar_one_or_none()
+
+
+def _report_meta_payload(report: Report) -> dict[str, str]:
+    tariff_value = report.tariff.value if isinstance(report.tariff, Tariff) else str(report.tariff)
+    return {
+        "id": str(report.id),
+        "tariff": tariff_value,
+        "created_at": _format_report_created_at(report.created_at),
+    }
+
+
 def _get_report_pdf_bytes(session, report: Report) -> bytes | None:
     pdf_bytes = None
     if report.pdf_storage_key:
@@ -510,6 +586,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         screen_manager.update_state(
                             callback.from_user.id, **_refresh_order_state(order)
                         )
+        if screen_id in {"S11", "S12"}:
+            with get_session() as session:
+                _refresh_profile_state(session, callback.from_user.id)
+                _refresh_reports_list_state(session, callback.from_user.id)
         if screen_id == "S3":
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             selected_tariff = state_snapshot.data.get("selected_tariff")
@@ -1128,6 +1208,116 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 chat_id=callback.message.chat.id,
                 user_id=callback.from_user.id,
                 screen_id="S10",
+            )
+        await _safe_callback_answer(callback)
+        return
+
+    if callback.data.startswith("report:view:"):
+        report_id = _safe_int(callback.data.split("report:view:")[-1])
+        if not report_id:
+            await callback.message.answer("Не удалось открыть отчёт. Попробуйте выбрать его ещё раз.")
+            await _safe_callback_answer(callback)
+            return
+        with get_session() as session:
+            report = _get_report_for_user(session, callback.from_user.id, report_id)
+            if not report:
+                await callback.message.answer("Отчёт не найден. Обновите список в кабинете.")
+                await _safe_callback_answer(callback)
+                return
+            screen_manager.update_state(
+                callback.from_user.id,
+                report_text=report.report_text,
+                report_meta=_report_meta_payload(report),
+            )
+        await screen_manager.show_screen(
+            bot=callback.bot,
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+            screen_id="S13",
+        )
+        await _safe_callback_answer(callback)
+        return
+
+    if callback.data.startswith("report:delete:") and callback.data != "report:delete:confirm":
+        report_id = _safe_int(callback.data.split("report:delete:")[-1])
+        if not report_id:
+            await callback.message.answer("Не удалось выбрать отчёт для удаления.")
+            await _safe_callback_answer(callback)
+            return
+        with get_session() as session:
+            report = _get_report_for_user(session, callback.from_user.id, report_id)
+            if not report:
+                await callback.message.answer("Отчёт не найден. Обновите список.")
+                await _safe_callback_answer(callback)
+                return
+            screen_manager.update_state(
+                callback.from_user.id,
+                report_meta=_report_meta_payload(report),
+                report_text=report.report_text,
+            )
+        await screen_manager.show_screen(
+            bot=callback.bot,
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+            screen_id="S14",
+        )
+        await _safe_callback_answer(callback)
+        return
+
+    if callback.data == "report:delete:confirm":
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        report_meta = state_snapshot.data.get("report_meta") or {}
+        report_id = _safe_int(report_meta.get("id"))
+        if not report_id:
+            await callback.message.answer("Не удалось удалить отчёт. Попробуйте ещё раз.")
+            await _safe_callback_answer(callback)
+            return
+        with get_session() as session:
+            report = _get_report_for_user(session, callback.from_user.id, report_id)
+            if not report:
+                await callback.message.answer("Отчёт уже удалён или недоступен.")
+            else:
+                pdf_service.delete_pdf(report.pdf_storage_key)
+                session.delete(report)
+            _refresh_reports_list_state(session, callback.from_user.id)
+        screen_manager.update_state(
+            callback.from_user.id,
+            report_text=None,
+            report_meta=None,
+        )
+        await callback.message.answer("Отчёт удалён.")
+        await screen_manager.show_screen(
+            bot=callback.bot,
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+            screen_id="S12",
+        )
+        await _safe_callback_answer(callback)
+        return
+
+    if callback.data.startswith("report:pdf:"):
+        report_id = _safe_int(callback.data.split("report:pdf:")[-1])
+        if not report_id:
+            await callback.message.answer("Не удалось сформировать PDF. Попробуйте ещё раз.")
+            await _safe_callback_answer(callback)
+            return
+        with get_session() as session:
+            report = _get_report_for_user(session, callback.from_user.id, report_id)
+            if not report:
+                await callback.message.answer("Отчёт не найден. Попробуйте выбрать другой.")
+                await _safe_callback_answer(callback)
+                return
+            report_meta = _get_report_pdf_meta(report)
+            pdf_bytes = _get_report_pdf_bytes(session, report)
+        if not await _send_report_pdf(
+            callback.bot,
+            callback.message.chat.id,
+            report_meta,
+            pdf_bytes=pdf_bytes,
+            username=callback.from_user.username,
+        ):
+            await callback.message.answer(
+                "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
             )
         await _safe_callback_answer(callback)
         return
