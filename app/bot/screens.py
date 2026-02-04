@@ -472,7 +472,7 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
         )
     rows = [
        
-        [InlineKeyboardButton(text="Назад", callback_data="screen:S1")],
+        [InlineKeyboardButton(text="Продолжить", callback_data="screen:S1")],
         *_global_menu(),
     ]
     keyboard = _build_keyboard(rows)
