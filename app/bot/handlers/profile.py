@@ -225,6 +225,9 @@ async def delete_profile_data(callback: CallbackQuery, state: FSMContext) -> Non
 async def cancel_profile(message: Message, state: FSMContext) -> None:
     if await state.get_state() is None:
         return
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     await state.clear()
     await message.answer("Ввод данных отменён.")
     await _show_profile_screen(message, message.from_user.id)
@@ -232,6 +235,9 @@ async def cancel_profile(message: Message, state: FSMContext) -> None:
 
 @router.message(ProfileStates.name)
 async def handle_profile_name(message: Message, state: FSMContext) -> None:
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     name = message.text or ""
     await state.update_data(name=name)
     await state.set_state(ProfileStates.birth_date)
@@ -240,6 +246,9 @@ async def handle_profile_name(message: Message, state: FSMContext) -> None:
 
 @router.message(ProfileStates.birth_date)
 async def handle_profile_birth_date(message: Message, state: FSMContext) -> None:
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     birth_date = message.text or ""
     await state.update_data(birth_date=birth_date)
     await state.set_state(ProfileStates.birth_time)
@@ -248,6 +257,9 @@ async def handle_profile_birth_date(message: Message, state: FSMContext) -> None
 
 @router.message(ProfileStates.birth_time)
 async def handle_profile_birth_time(message: Message, state: FSMContext) -> None:
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     birth_time = message.text or ""
     await state.update_data(birth_time=birth_time)
     await state.set_state(ProfileStates.birth_place)
@@ -256,6 +268,9 @@ async def handle_profile_birth_time(message: Message, state: FSMContext) -> None
 
 @router.message(ProfileStates.birth_place)
 async def handle_profile_birth_place(message: Message, state: FSMContext) -> None:
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     birth_place = message.text or ""
     data = await state.get_data()
     with get_session() as session:
