@@ -262,7 +262,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
 
     text_parts = [
         f"Оплата тарифа {selected_tariff}.\n\n"
-        'Оплачивая, вы подтверждаете согласие с <a href="https://camypau.ru/">офертой</a>.'
+        'Оплачивая, вы подтверждаете согласие с <a href="https://camypau.ru/oferta.html">офертой</a>.'
         f"{order_block}"
     ]
     if not payment_url:
