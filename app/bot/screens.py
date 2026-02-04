@@ -361,6 +361,20 @@ def _format_birth_place(place: dict[str, Any] | None) -> str:
     return ", ".join(part for part in parts if part)
 
 
+def _format_report_list(reports: list[dict[str, Any]] | None, total: int | None) -> str:
+    if not reports:
+        return "Отчётов пока нет. После генерации они будут доступны здесь."
+    lines = []
+    for index, report in enumerate(reports, start=1):
+        report_id = report.get("id", "—")
+        tariff = report.get("tariff", "—")
+        created_at = report.get("created_at", "неизвестно")
+        lines.append(f"{index}. Отчёт #{report_id} • {tariff} • {created_at}")
+    if total and total > len(reports):
+        lines.append(f"\nПоказаны последние {len(reports)} из {total}.")
+    return "\n".join(lines)
+
+
 def screen_s4(state: dict[str, Any]) -> ScreenContent:
     selected_tariff_raw = state.get("selected_tariff", "T0")
     selected_tariff = _format_tariff_label(selected_tariff_raw)
@@ -630,6 +644,12 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
     rows = [
         [
             InlineKeyboardButton(
+                text=_with_button_icons("Выгрузить PDF", "📄"),
+                callback_data="report:pdf",
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 text=_with_button_icons("Продолжить", "➡️"),
                 callback_data="screen:S1",
             )
@@ -716,6 +736,10 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
     profile = state.get("profile") or {}
     birth_place = _format_birth_place(profile.get("birth_place"))
     birth_time = profile.get("birth_time") or "не указано"
+    reports_total = state.get("reports_total")
+    reports_line = ""
+    if reports_total is not None:
+        reports_line = f"\n\nСохранённых отчётов: {reports_total}."
 
     if profile:
         text = _with_screen_prefix(
@@ -726,15 +750,23 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
                 f"Дата рождения: {profile.get('birth_date')}\n"
                 f"Время рождения: {birth_time}\n"
                 f"Место рождения: {birth_place}"
+                f"{reports_line}"
             ),
         )
     else:
         text = _with_screen_prefix(
             "S11",
-            "Личный кабинет.\n\nДанные профиля ещё не заполнены.",
+            "Личный кабинет.\n\nДанные профиля ещё не заполнены."
+            f"{reports_line}",
         )
 
     rows = [
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Мои отчёты", "🗂️"),
+                callback_data="screen:S12",
+            )
+        ],
         [
             InlineKeyboardButton(
                 text=_with_button_icons("Мои данные", "🧩"),
@@ -753,6 +785,124 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
+def screen_s12(state: dict[str, Any]) -> ScreenContent:
+    reports = state.get("reports") or []
+    reports_total = state.get("reports_total")
+    text = _with_screen_prefix(
+        "S12",
+        "Мои отчёты:\n\n" + _format_report_list(reports, reports_total),
+    )
+    rows: list[list[InlineKeyboardButton]] = []
+    for report in reports:
+        report_id = report.get("id")
+        if report_id is None:
+            continue
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons(f"Открыть #{report_id}", "📖"),
+                    callback_data=f"report:view:{report_id}",
+                ),
+                InlineKeyboardButton(
+                    text=_with_button_icons("Удалить", "🗑️"),
+                    callback_data=f"report:delete:{report_id}",
+                ),
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Назад", "↩️"),
+                callback_data="screen:S11",
+            )
+        ]
+    )
+    rows.extend(_global_menu())
+    keyboard = _build_keyboard(rows)
+    return ScreenContent(messages=[text], keyboard=keyboard)
+
+
+def screen_s13(state: dict[str, Any]) -> ScreenContent:
+    report_text = (state.get("report_text") or "").strip()
+    report_meta = state.get("report_meta") or {}
+    report_id_value = str(report_meta.get("id") or "")
+    report_id = report_id_value or "—"
+    report_tariff = report_meta.get("tariff", "—")
+    report_created_at = report_meta.get("created_at", "неизвестно")
+    disclaimer = (
+        "Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
+        "Все выводы носят аналитический и описательный характер.\n"
+        "Ответственность за решения остаётся за пользователем.\n"
+        "Сервис не гарантирует финансовых или иных результатов.\n"
+    )
+    header = (
+        f"Отчёт #{report_id}\n"
+        f"Тариф: {report_tariff}\n"
+        f"Дата: {report_created_at}\n\n"
+    )
+    if report_text:
+        text = _with_screen_prefix("S13", f"{header}{report_text}\n\n{disclaimer}")
+    else:
+        text = _with_screen_prefix(
+            "S13",
+            f"{header}Текст отчёта недоступен. Попробуйте выбрать другой отчёт.",
+        )
+
+    rows = []
+    if report_id_value:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Выгрузить PDF", "📄"),
+                    callback_data=f"report:pdf:{report_id_value}",
+                )
+            ]
+        )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Удалить отчёт", "🗑️"),
+                    callback_data=f"report:delete:{report_id_value}",
+                )
+            ]
+        )
+    rows.append(
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Назад к списку", "↩️"),
+                callback_data="screen:S12",
+            )
+        ]
+    )
+    rows.extend(_global_menu())
+    keyboard = _build_keyboard(rows)
+    return ScreenContent(messages=[text], keyboard=keyboard)
+
+
+def screen_s14(state: dict[str, Any]) -> ScreenContent:
+    report_meta = state.get("report_meta") or {}
+    report_id = report_meta.get("id", "—")
+    text = _with_screen_prefix(
+        "S14",
+        f"Удалить отчёт #{report_id}? Это действие нельзя отменить.",
+    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Удалить", "✅"),
+                callback_data="report:delete:confirm",
+            ),
+            InlineKeyboardButton(
+                text=_with_button_icons("Отмена", "❌"),
+                callback_data="screen:S13",
+            ),
+        ],
+    ]
+    rows.extend(_global_menu())
+    keyboard = _build_keyboard(rows)
+    return ScreenContent(messages=[text], keyboard=keyboard)
+
+
 SCREEN_REGISTRY = {
     "S0": screen_s0,
     "S1": screen_s1,
@@ -767,4 +917,7 @@ SCREEN_REGISTRY = {
     "S9": screen_s9,
     "S10": screen_s10,
     "S11": screen_s11,
+    "S12": screen_s12,
+    "S13": screen_s13,
+    "S14": screen_s14,
 }

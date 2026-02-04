@@ -8,7 +8,7 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, func
 
 from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
@@ -122,10 +122,30 @@ def _clear_user_data(session, user: User) -> None:
     session.execute(delete(Report).where(Report.user_id == user.id))
 
 
+def _refresh_reports_summary(session, telegram_user_id: int) -> None:
+    user = session.execute(
+        select(User).where(User.telegram_user_id == telegram_user_id)
+    ).scalar_one_or_none()
+    if not user:
+        screen_manager.update_state(telegram_user_id, reports_total=0, reports=[])
+        return
+    total = session.execute(
+        select(func.count(Report.id)).where(Report.user_id == user.id)
+    ).scalar() or 0
+    screen_manager.update_state(telegram_user_id, reports_total=total)
+
+
 @router.message(Command("lk"))
 async def show_cabinet(message: Message) -> None:
     if not message.from_user:
         return
+    with get_session() as session:
+        user = session.execute(
+            select(User).where(User.telegram_user_id == message.from_user.id)
+        ).scalar_one_or_none()
+        if user:
+            screen_manager.update_state(message.from_user.id, **_profile_payload(user.profile))
+        _refresh_reports_summary(session, message.from_user.id)
     await screen_manager.show_screen(
         bot=message.bot,
         chat_id=message.chat.id,
