@@ -562,7 +562,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         user_id=callback.from_user.id,
                         screen_id="S4",
                     )
-                    await start_profile_wizard(callback.message, state)
+                    await start_profile_wizard(
+                        callback.message, state, callback.from_user.id
+                    )
                     await _safe_callback_answer(callback)
                     return
                 _refresh_questionnaire_state(session, callback.from_user.id)
@@ -673,7 +675,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         if tariff == Tariff.T0.value:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             if not state_snapshot.data.get("profile"):
-                await start_profile_wizard(callback.message, state)
+                await start_profile_wizard(
+                    callback.message, state, callback.from_user.id
+                )
         await _safe_callback_answer(callback)
         return
 
@@ -753,7 +757,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         )
         state_snapshot = screen_manager.update_state(callback.from_user.id)
         if not state_snapshot.data.get("profile"):
-            await start_profile_wizard(callback.message, state)
+            await start_profile_wizard(callback.message, state, callback.from_user.id)
         await _safe_callback_answer(callback)
         return
 
