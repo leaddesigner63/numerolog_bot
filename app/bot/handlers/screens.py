@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import asyncio
 import logging
+from typing import Any
 
 from aiogram import Bot, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -126,6 +127,15 @@ async def _safe_callback_processing(callback: CallbackQuery) -> None:
             setattr(callback, "_answered", True)
             return
         raise
+
+
+async def _send_notice(callback: CallbackQuery, text: str, **kwargs: Any) -> None:
+    await screen_manager.send_ephemeral_message(
+        callback.message,
+        text,
+        user_id=callback.from_user.id,
+        **kwargs,
+    )
 
 
 def _missing_payment_link_config(provider: PaymentProviderEnum) -> list[str]:
@@ -533,7 +543,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 selected_tariff = state_snapshot.data.get("selected_tariff")
                 profile = state_snapshot.data.get("profile")
                 if not selected_tariff and not profile:
-                    await callback.message.answer("Сначала выберите тариф.")
+                    await _send_notice(callback, "Сначала выберите тариф.")
                     await screen_manager.show_screen(
                         bot=callback.bot,
                         chat_id=callback.message.chat.id,
@@ -550,7 +560,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                             callback.from_user.id, **_refresh_order_state(order)
                         )
                     if not order or order.status != OrderStatus.PAID:
-                        await callback.message.answer(
+                        await _send_notice(callback, 
                             "Сначала подтвердите оплату, чтобы заполнить «Мои данные»."
                         )
                         await screen_manager.show_screen(
@@ -594,7 +604,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             selected_tariff = state_snapshot.data.get("selected_tariff")
             if selected_tariff not in PAID_TARIFFS:
-                await callback.message.answer("Сначала выберите платный тариф.")
+                await _send_notice(callback, "Сначала выберите платный тариф.")
                 await screen_manager.show_screen(
                     bot=callback.bot,
                     chat_id=callback.message.chat.id,
@@ -604,7 +614,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await _safe_callback_answer(callback)
                 return
             if not state_snapshot.data.get("offer_seen"):
-                await callback.message.answer("Сначала ознакомьтесь с офертой.")
+                await _send_notice(callback, "Сначала ознакомьтесь с офертой.")
                 await screen_manager.show_screen(
                     bot=callback.bot,
                     chat_id=callback.message.chat.id,
@@ -614,7 +624,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await _safe_callback_answer(callback)
                 return
             if not state_snapshot.data.get("order_id"):
-                await callback.message.answer(
+                await _send_notice(callback, 
                     "Сначала выберите тариф и создайте заказ."
                 )
                 await screen_manager.show_screen(
@@ -629,7 +639,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             selected_tariff = state_snapshot.data.get("selected_tariff")
             if selected_tariff not in {Tariff.T2.value, Tariff.T3.value}:
-                await callback.message.answer(
+                await _send_notice(callback, 
                     "Анкета доступна только для тарифов T2 и T3."
                 )
                 await screen_manager.show_screen(
@@ -643,7 +653,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             with get_session() as session:
                 order_id = _safe_int(state_snapshot.data.get("order_id"))
                 if not order_id:
-                    await callback.message.answer(
+                    await _send_notice(callback, 
                         "Сначала выберите тариф и завершите оплату."
                     )
                     await screen_manager.show_screen(
@@ -660,7 +670,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         callback.from_user.id, **_refresh_order_state(order)
                     )
                 if not order or order.status != OrderStatus.PAID:
-                    await callback.message.answer(
+                    await _send_notice(callback, 
                         "Сначала подтвердите оплату, чтобы перейти к анкете."
                     )
                     await screen_manager.show_screen(
@@ -674,7 +684,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 _refresh_profile_state(session, callback.from_user.id)
                 state_snapshot = screen_manager.update_state(callback.from_user.id)
                 if not state_snapshot.data.get("profile"):
-                    await callback.message.answer("Сначала заполните «Мои данные».")
+                    await _send_notice(callback, "Сначала заполните «Мои данные».")
                     await screen_manager.show_screen(
                         bot=callback.bot,
                         chat_id=callback.message.chat.id,
@@ -765,7 +775,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         missing_vars = (
                             ", ".join(missing_primary + missing_fallback) or "секреты провайдера"
                         )
-                        await callback.message.answer(
+                        await _send_notice(callback, 
                             "Платёжная ссылка недоступна: не настроены ключи оплаты. "
                             f"Проверьте переменные {missing_vars}."
                         )
@@ -804,13 +814,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         state_snapshot = screen_manager.update_state(callback.from_user.id)
         order_id = _safe_int(state_snapshot.data.get("order_id"))
         if not order_id:
-            await callback.message.answer("Сначала выберите тариф и создайте заказ.")
+            await _send_notice(callback, "Сначала выберите тариф и создайте заказ.")
             await _safe_callback_answer(callback)
             return
         with get_session() as session:
             order = session.get(Order, order_id)
             if not order:
-                await callback.message.answer("Заказ не найден. Попробуйте выбрать тариф заново.")
+                await _send_notice(callback, "Заказ не найден. Попробуйте выбрать тариф заново.")
                 await _safe_callback_answer(callback)
                 return
             if not settings.payment_enabled:
@@ -829,7 +839,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                             "missing": missing_status,
                         },
                     )
-                    await callback.message.answer(
+                    await _send_notice(callback, 
                         "Проверка оплаты недоступна: не настроены ключи платёжного провайдера. "
                         f"Добавьте {', '.join(missing_status)}."
                     )
@@ -854,7 +864,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     screen_manager.update_state(
                         callback.from_user.id, **_refresh_order_state(order)
                     )
-                    await callback.message.answer(
+                    await _send_notice(callback, 
                         "Оплата ещё не подтверждена. Мы проверим статус и сообщим, когда всё будет готово."
                     )
                     await screen_manager.show_screen(
@@ -884,14 +894,14 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         _ensure_profile_state(callback.from_user.id)
         state_snapshot = screen_manager.update_state(callback.from_user.id)
         if not state_snapshot.data.get("profile"):
-            await callback.message.answer("Сначала заполните «Мои данные».")
+            await _send_notice(callback, "Сначала заполните «Мои данные».")
             await _safe_callback_answer(callback)
             return
         tariff = state_snapshot.data.get("selected_tariff")
         if tariff in {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}:
             order_id = _safe_int(state_snapshot.data.get("order_id"))
             if not order_id:
-                await callback.message.answer("Сначала выберите тариф и завершите оплату.")
+                await _send_notice(callback, "Сначала выберите тариф и завершите оплату.")
                 await _safe_callback_answer(callback)
                 return
             with get_session() as session:
@@ -901,7 +911,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         screen_manager.update_state(
                             callback.from_user.id, **_refresh_order_state(order)
                         )
-                    await callback.message.answer(
+                    await _send_notice(callback, 
                         "Оплата ещё не подтверждена. Доступ к генерации откроется после статуса paid."
                     )
                     await screen_manager.show_screen(
@@ -948,7 +958,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         pdf_bytes=pdf_bytes,
                         username=callback.from_user.username,
                     ):
-                        await callback.message.answer(
+                        await _send_notice(callback, 
                             "PDF уже сформирован ранее. "
                             "Вы можете попробовать кнопку «Выгрузить PDF»."
                         )
@@ -1040,7 +1050,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     pdf_bytes=pdf_bytes,
                     username=callback.from_user.username,
                 ):
-                    await callback.message.answer(
+                    await _send_notice(callback, 
                         "Не удалось сформировать PDF автоматически. "
                         "Вы можете попробовать кнопку «Выгрузить PDF»."
                     )
@@ -1069,7 +1079,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         if tariff in {Tariff.T2.value, Tariff.T3.value}:
             order_id = _safe_int(state_snapshot.data.get("order_id"))
             if not order_id:
-                await callback.message.answer("Сначала выберите тариф и завершите оплату.")
+                await _send_notice(callback, "Сначала выберите тариф и завершите оплату.")
                 await _safe_callback_answer(callback)
                 return
             with get_session() as session:
@@ -1079,7 +1089,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         screen_manager.update_state(
                             callback.from_user.id, **_refresh_order_state(order)
                         )
-                    await callback.message.answer(
+                    await _send_notice(callback, 
                         "Оплата ещё не подтверждена. Генерация будет доступна после статуса paid."
                     )
                     await screen_manager.show_screen(
@@ -1126,7 +1136,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         pdf_bytes=pdf_bytes,
                         username=callback.from_user.username,
                     ):
-                        await callback.message.answer(
+                        await _send_notice(callback, 
                             "PDF уже сформирован ранее. "
                             "Вы можете попробовать кнопку «Выгрузить PDF»."
                         )
@@ -1134,7 +1144,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     return
             questionnaire = state_snapshot.data.get("questionnaire") or {}
             if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
-                await callback.message.answer("Анкета ещё не заполнена. Нажмите «Заполнить анкету».")
+                await _send_notice(callback, "Анкета ещё не заполнена. Нажмите «Заполнить анкету».")
                 await _safe_callback_answer(callback)
                 return
         await screen_manager.show_screen(
@@ -1198,7 +1208,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 pdf_bytes=pdf_bytes,
                 username=callback.from_user.username,
             ):
-                await callback.message.answer(
+                await _send_notice(callback, 
                     "Не удалось сформировать PDF автоматически. "
                     "Вы можете попробовать кнопку «Выгрузить PDF»."
                 )
@@ -1215,13 +1225,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.data.startswith("report:view:"):
         report_id = _safe_int(callback.data.split("report:view:")[-1])
         if not report_id:
-            await callback.message.answer("Не удалось открыть отчёт. Попробуйте выбрать его ещё раз.")
+            await _send_notice(callback, "Не удалось открыть отчёт. Попробуйте выбрать его ещё раз.")
             await _safe_callback_answer(callback)
             return
         with get_session() as session:
             report = _get_report_for_user(session, callback.from_user.id, report_id)
             if not report:
-                await callback.message.answer("Отчёт не найден. Обновите список в кабинете.")
+                await _send_notice(callback, "Отчёт не найден. Обновите список в кабинете.")
                 await _safe_callback_answer(callback)
                 return
             screen_manager.update_state(
@@ -1241,13 +1251,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.data.startswith("report:delete:") and callback.data != "report:delete:confirm":
         report_id = _safe_int(callback.data.split("report:delete:")[-1])
         if not report_id:
-            await callback.message.answer("Не удалось выбрать отчёт для удаления.")
+            await _send_notice(callback, "Не удалось выбрать отчёт для удаления.")
             await _safe_callback_answer(callback)
             return
         with get_session() as session:
             report = _get_report_for_user(session, callback.from_user.id, report_id)
             if not report:
-                await callback.message.answer("Отчёт не найден. Обновите список.")
+                await _send_notice(callback, "Отчёт не найден. Обновите список.")
                 await _safe_callback_answer(callback)
                 return
             screen_manager.update_state(
@@ -1269,13 +1279,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         report_meta = state_snapshot.data.get("report_meta") or {}
         report_id = _safe_int(report_meta.get("id"))
         if not report_id:
-            await callback.message.answer("Не удалось удалить отчёт. Попробуйте ещё раз.")
+            await _send_notice(callback, "Не удалось удалить отчёт. Попробуйте ещё раз.")
             await _safe_callback_answer(callback)
             return
         with get_session() as session:
             report = _get_report_for_user(session, callback.from_user.id, report_id)
             if not report:
-                await callback.message.answer("Отчёт уже удалён или недоступен.")
+                await _send_notice(callback, "Отчёт уже удалён или недоступен.")
             else:
                 pdf_service.delete_pdf(report.pdf_storage_key)
                 session.delete(report)
@@ -1285,7 +1295,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             report_text=None,
             report_meta=None,
         )
-        await callback.message.answer("Отчёт удалён.")
+        await _send_notice(callback, "Отчёт удалён.")
         await screen_manager.show_screen(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
@@ -1298,13 +1308,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.data.startswith("report:pdf:"):
         report_id = _safe_int(callback.data.split("report:pdf:")[-1])
         if not report_id:
-            await callback.message.answer("Не удалось сформировать PDF. Попробуйте ещё раз.")
+            await _send_notice(callback, "Не удалось сформировать PDF. Попробуйте ещё раз.")
             await _safe_callback_answer(callback)
             return
         with get_session() as session:
             report = _get_report_for_user(session, callback.from_user.id, report_id)
             if not report:
-                await callback.message.answer("Отчёт не найден. Попробуйте выбрать другой.")
+                await _send_notice(callback, "Отчёт не найден. Попробуйте выбрать другой.")
                 await _safe_callback_answer(callback)
                 return
             report_meta = _get_report_pdf_meta(report)
@@ -1316,7 +1326,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             pdf_bytes=pdf_bytes,
             username=callback.from_user.username,
         ):
-            await callback.message.answer(
+            await _send_notice(callback, 
                 "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
             )
         await _safe_callback_answer(callback)
@@ -1332,7 +1342,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 tariff_value=state_snapshot.data.get("selected_tariff"),
             )
             if not report:
-                await callback.message.answer("PDF будет доступен после генерации отчёта.")
+                await _send_notice(callback, "PDF будет доступен после генерации отчёта.")
                 await _safe_callback_answer(callback)
                 return
             report_meta = _get_report_pdf_meta(report)
@@ -1345,7 +1355,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             pdf_bytes=pdf_bytes,
             username=callback.from_user.username,
         ):
-            await callback.message.answer(
+            await _send_notice(callback, 
                 "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
             )
         await _safe_callback_answer(callback)
@@ -1362,18 +1372,18 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             status = FeedbackStatus.FAILED
             sent_at = None
             if settings.feedback_group_url:
-                await callback.message.answer(
+                await _send_notice(callback, 
                     "Обратная связь настроена через livegram. "
                     "Нажмите «Перейти в группу», чтобы отправить сообщение."
                 )
             else:
-                await callback.message.answer(
+                await _send_notice(callback, 
                     "Обратная связь настроена через livegram, но ссылка на группу не указана."
                 )
         elif not settings.feedback_group_chat_id:
             status = FeedbackStatus.FAILED
             sent_at = None
-            await callback.message.answer(
+            await _send_notice(callback, 
                 "Чат для обратной связи не настроен. "
                 "Добавьте FEEDBACK_GROUP_CHAT_ID или используйте livegram."
             )
@@ -1409,10 +1419,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             )
 
         if status == FeedbackStatus.SENT:
-            await callback.message.answer("Сообщение отправлено. Спасибо за обратную связь!")
+            await _send_notice(callback, "Сообщение отправлено. Спасибо за обратную связь!")
             screen_manager.update_state(callback.from_user.id, feedback_text=None)
         else:
-            await callback.message.answer(
+            await _send_notice(callback, 
                 "Не удалось отправить сообщение. Попробуйте позже или используйте «Перейти в группу»."
             )
         await _safe_callback_answer(callback)

@@ -6,6 +6,7 @@ from typing import Any
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+from aiogram.types import Message
 
 from app.bot.screens import SCREEN_REGISTRY, ScreenContent
 from app.db.models import ScreenStateRecord
@@ -40,6 +41,12 @@ class ScreenStateStore:
         state = self.get_state(user_id)
         state.screen_id = screen_id
         state.message_ids = message_ids
+        self._persist_state(user_id, state)
+        return state
+
+    def add_screen_message_id(self, user_id: int, message_id: int) -> ScreenState:
+        state = self.get_state(user_id)
+        state.message_ids.append(message_id)
         self._persist_state(user_id, state)
         return state
 
@@ -249,6 +256,9 @@ class ScreenManager:
     def update_state(self, user_id: int, **kwargs: Any) -> ScreenState:
         return self._store.update_data(user_id, **kwargs)
 
+    def add_screen_message_id(self, user_id: int, message_id: int) -> ScreenState:
+        return self._store.add_screen_message_id(user_id, message_id)
+
     def add_user_message_id(self, user_id: int, message_id: int) -> ScreenState:
         return self._store.add_user_message_id(user_id, message_id)
 
@@ -278,6 +288,20 @@ class ScreenManager:
             )
             return
         self._store.clear_last_question_message_id(user_id)
+
+    async def send_ephemeral_message(
+        self,
+        message: Message,
+        text: str,
+        user_id: int | None = None,
+        **kwargs: Any,
+    ) -> None:
+        if user_id is None:
+            if not message.from_user:
+                return
+            user_id = message.from_user.id
+        sent = await message.answer(text, **kwargs)
+        self._store.add_screen_message_id(user_id, sent.message_id)
 
     def clear_state(self, user_id: int) -> None:
         self._store.clear_state(user_id)

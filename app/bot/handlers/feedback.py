@@ -28,13 +28,17 @@ async def handle_feedback_text(message: Message) -> None:
     screen_manager.update_state(message.from_user.id, feedback_text=feedback_text)
     if (settings.feedback_mode or "native").lower() == "livegram":
         if settings.feedback_group_url:
-            await message.answer(
+            await screen_manager.send_ephemeral_message(
+                message,
                 "Сообщение сохранено. В режиме livegram нажмите «Перейти в группу», "
                 "чтобы отправить его."
             )
         else:
-            await message.answer(
+            await screen_manager.send_ephemeral_message(
+                message,
                 "Сообщение сохранено, но ссылка на группу для livegram не настроена."
             )
         return
-    await message.answer("Сообщение сохранено. Нажмите «Отправить», чтобы опубликовать его.")
+    await screen_manager.send_ephemeral_message(
+        message, "Сообщение сохранено. Нажмите «Отправить», чтобы опубликовать его."
+    )
