@@ -38,6 +38,7 @@ class FillScreenImagesSession:
     task: asyncio.Task[None] | None = None
     progress_message_id: int | None = None
     report_message_id: int | None = None
+    report_message_ids: list[int] = field(default_factory=list)
     cleanup_message_ids: list[int] = field(default_factory=list)
     cleanup_user_message_ids: list[int] = field(default_factory=list)
 
@@ -87,6 +88,29 @@ def _collect_targets(base_dir: Path) -> list[ScreenImageTarget]:
             )
         )
     return targets
+
+
+def _split_message(text: str, *, max_length: int = 4096) -> list[str]:
+    if not text:
+        return [""]
+    chunks: list[str] = []
+    current = ""
+    for line in text.split("\n"):
+        candidate = f"{current}\n{line}" if current else line
+        if len(candidate) <= max_length:
+            current = candidate
+            continue
+        if current:
+            chunks.append(current)
+            current = ""
+        if len(line) <= max_length:
+            current = line
+            continue
+        for idx in range(0, len(line), max_length):
+            chunks.append(line[idx : idx + max_length])
+    if current:
+        chunks.append(current)
+    return chunks
 
 
 async def _safe_delete_message(bot: Bot, chat_id: int, message_id: int | None) -> None:
@@ -259,27 +283,33 @@ async def _send_report(bot: Bot, session: FillScreenImagesSession, report_text: 
         await _safe_delete_message(bot, session.chat_id, session.progress_message_id)
 
     try:
-        sent = await bot.send_message(
-            chat_id=session.chat_id,
-            text=report_text,
-            reply_markup=_close_keyboard(),
-        )
-        session.report_message_id = sent.message_id
+        parts = _split_message(report_text)
+        for index, part in enumerate(parts):
+            sent = await bot.send_message(
+                chat_id=session.chat_id,
+                text=part,
+                reply_markup=_close_keyboard() if index == len(parts) - 1 else None,
+            )
+            session.report_message_ids.append(sent.message_id)
+            session.report_message_id = sent.message_id
         asyncio.create_task(
             _auto_delete_report(
                 bot=bot,
                 chat_id=session.chat_id,
-                message_id=sent.message_id,
+                message_ids=session.report_message_ids,
                 user_id=session.user_id,
             )
         )
     finally:
-        ACTIVE_FILL_SESSIONS.pop(session.user_id, None)
+        if session.user_id not in ACTIVE_FILL_SESSIONS:
+            ACTIVE_FILL_SESSIONS[session.user_id] = session
 
 
-async def _auto_delete_report(*, bot: Bot, chat_id: int, message_id: int, user_id: int) -> None:
+async def _auto_delete_report(
+    *, bot: Bot, chat_id: int, message_ids: list[int], user_id: int
+) -> None:
     await asyncio.sleep(REPORT_TTL_SECONDS)
-    await _safe_delete_message(bot, chat_id, message_id)
+    await _cleanup_messages(bot, chat_id, message_ids)
     ACTIVE_FILL_SESSIONS.pop(user_id, None)
 
 
@@ -356,8 +386,14 @@ async def handle_fill_screen_images_stop(callback: CallbackQuery) -> None:
 async def handle_fill_screen_images_close(callback: CallbackQuery) -> None:
     if not callback.from_user or not callback.message:
         return
-    await _safe_delete_message(callback.message.bot, callback.message.chat.id, callback.message.message_id)
-    ACTIVE_FILL_SESSIONS.pop(callback.from_user.id, None)
+    session = ACTIVE_FILL_SESSIONS.get(callback.from_user.id)
+    if session:
+        await _cleanup_messages(callback.message.bot, callback.message.chat.id, session.report_message_ids)
+        ACTIVE_FILL_SESSIONS.pop(callback.from_user.id, None)
+    else:
+        await _safe_delete_message(
+            callback.message.bot, callback.message.chat.id, callback.message.message_id
+        )
     try:
         await callback.answer("Отчёт удалён.")
     except Exception:
