@@ -211,6 +211,13 @@ async def _run_fill_screen_images(
             details.append(f"✅ {target.screen_key}: {image_path.as_posix()}")
         except GeminiImageError as exc:
             failed += 1
+            if exc.category == "rate_limited":
+                retry_hint = ""
+                if exc.retry_after:
+                    retry_hint = f" (повторите через {int(exc.retry_after)} сек.)"
+                details.append(f"❌ {target.screen_key}: превышен лимит Gemini{retry_hint}.")
+                stopped = True
+                break
             details.append(f"❌ {target.screen_key}: {exc}")
             if exc.category in {"missing_api_key", "missing_model"}:
                 break
