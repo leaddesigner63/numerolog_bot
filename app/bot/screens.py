@@ -414,21 +414,23 @@ def _format_questionnaire_profile(questionnaire: dict[str, Any] | None) -> str:
 def screen_s4(state: dict[str, Any]) -> ScreenContent:
     selected_tariff_raw = state.get("selected_tariff", "T0")
     selected_tariff = _format_tariff_label(selected_tariff_raw)
-    profile = state.get("profile") or {}
-    birth_place = _format_birth_place(profile.get("birth_place"))
-    birth_time = profile.get("birth_time") or "не указано"
+    profile = state.get("profile")
+    profile_data = profile or {}
+    has_profile = profile is not None
+    birth_place = _format_birth_place(profile_data.get("birth_place"))
+    birth_time = profile_data.get("birth_time") or "не указано"
     profile_flow = state.get("profile_flow")
     order_status = (state.get("order_status") or "").lower()
     requires_payment = selected_tariff_raw in {"T1", "T2", "T3"} and order_status != "paid"
     is_t0 = selected_tariff == "Т0"
 
-    if profile:
+    if has_profile:
         text = _with_screen_prefix(
             "S4",
             (
                 f"Мои данные для тарифа {selected_tariff}:\n\n"
-                f"Имя: {profile.get('name')}\n"
-                f"Дата рождения: {profile.get('birth_date')}\n"
+                f"Имя: {profile_data.get('name')}\n"
+                f"Дата рождения: {profile_data.get('birth_date')}\n"
                 f"Время рождения: {birth_time}\n"
                 f"Место рождения: {birth_place}\n\n"
                 "Для изменения данных нажмите «Редактировать»."
@@ -460,7 +462,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         )
 
     rows: list[list[InlineKeyboardButton]] = []
-    if profile:
+    if has_profile:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -520,7 +522,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 )
             ]
         )
-    if profile_flow and profile and not requires_payment:
+    if profile_flow and has_profile and not requires_payment:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -537,7 +539,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             )
         ]
     )
-    if not is_t0 or profile:
+    if not is_t0 or has_profile:
         rows.extend(_global_menu())
     rows.append(
         [
