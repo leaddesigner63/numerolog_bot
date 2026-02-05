@@ -90,9 +90,23 @@ def admin_ui() -> str:
     }
     main {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 240px 1fr;
       gap: 16px;
       padding: 24px;
+      min-height: calc(100vh - 96px);
+    }
+    .sidebar {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 16px;
+      height: fit-content;
+      position: sticky;
+      top: 24px;
+    }
+    .content {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
     }
     section {
       background: var(--card);
@@ -100,9 +114,38 @@ def admin_ui() -> str:
       padding: 16px;
       min-height: 200px;
     }
+    section[data-panel] {
+      display: none;
+    }
+    section[data-panel].active {
+      display: block;
+    }
     section h2 {
       margin: 0 0 12px;
       font-size: 16px;
+    }
+    nav {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .nav-button {
+      text-align: left;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text);
+      padding: 10px 12px;
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .nav-button.active {
+      background: rgba(59, 130, 246, 0.15);
+      border-color: rgba(59, 130, 246, 0.4);
+      color: #dbeafe;
+    }
+    .nav-button:hover {
+      border-color: #3a4150;
     }
     .row {
       display: flex;
@@ -193,56 +236,70 @@ def admin_ui() -> str:
     </div>
   </header>
   <main>
-    <section>
-      <h2>Сводка</h2>
-      <div id="overview" class="muted">Загрузка...</div>
-      <div class="row" style="margin-top: 12px;">
-        <button class="secondary" onclick="loadOverview()">Обновить</button>
-      </div>
-    </section>
-    <section>
-      <h2>Состояние сервиса</h2>
-      <div id="health" class="muted">Загрузка...</div>
-      <div class="row" style="margin-top: 12px;">
-        <button class="secondary" onclick="loadHealth()">Обновить</button>
-      </div>
-    </section>
-    <section class="wide">
-      <h2>Заказы</h2>
-      <div class="row">
-        <button class="secondary" onclick="loadOrders()">Обновить</button>
-      </div>
-      <div id="orders" class="muted">Загрузка...</div>
-    </section>
-    <section class="wide">
-      <h2>Отчёты</h2>
-      <div class="row">
-        <button class="secondary" onclick="loadReports()">Обновить</button>
-      </div>
-      <div id="reports" class="muted">Загрузка...</div>
-    </section>
-    <section class="wide">
-      <h2>Пользователи</h2>
-      <div class="row">
-        <button class="secondary" onclick="loadUsers()">Обновить</button>
-      </div>
-      <div id="users" class="muted">Загрузка...</div>
-    </section>
-    <section class="wide">
-      <h2>Обратная связь</h2>
-      <div class="row">
-        <button class="secondary" onclick="loadFeedback()">Обновить</button>
-      </div>
-      <div id="feedback" class="muted">Загрузка...</div>
-    </section>
-    <section class="wide">
-      <h2>Админ-заметки</h2>
-      <div class="row">
-        <textarea id="noteInput" placeholder="Введите заметку или JSON-объект"></textarea>
-        <button onclick="createNote()">Добавить</button>
-      </div>
-      <div id="notes" class="muted">Загрузка...</div>
-    </section>
+    <aside class="sidebar">
+      <div class="muted">Разделы админки</div>
+      <nav>
+        <button class="nav-button" data-section="overview">Сводка</button>
+        <button class="nav-button" data-section="health">Состояние сервиса</button>
+        <button class="nav-button" data-section="orders">Заказы</button>
+        <button class="nav-button" data-section="reports">Отчёты</button>
+        <button class="nav-button" data-section="users">Пользователи</button>
+        <button class="nav-button" data-section="feedback">Обратная связь</button>
+        <button class="nav-button" data-section="notes">Админ-заметки</button>
+      </nav>
+    </aside>
+    <div class="content">
+      <section data-panel="overview">
+        <h2>Сводка</h2>
+        <div id="overview" class="muted">Загрузка...</div>
+        <div class="row" style="margin-top: 12px;">
+          <button class="secondary" onclick="loadOverview()">Обновить</button>
+        </div>
+      </section>
+      <section data-panel="health">
+        <h2>Состояние сервиса</h2>
+        <div id="health" class="muted">Загрузка...</div>
+        <div class="row" style="margin-top: 12px;">
+          <button class="secondary" onclick="loadHealth()">Обновить</button>
+        </div>
+      </section>
+      <section data-panel="orders">
+        <h2>Заказы</h2>
+        <div class="row">
+          <button class="secondary" onclick="loadOrders()">Обновить</button>
+        </div>
+        <div id="orders" class="muted">Загрузка...</div>
+      </section>
+      <section data-panel="reports">
+        <h2>Отчёты</h2>
+        <div class="row">
+          <button class="secondary" onclick="loadReports()">Обновить</button>
+        </div>
+        <div id="reports" class="muted">Загрузка...</div>
+      </section>
+      <section data-panel="users">
+        <h2>Пользователи</h2>
+        <div class="row">
+          <button class="secondary" onclick="loadUsers()">Обновить</button>
+        </div>
+        <div id="users" class="muted">Загрузка...</div>
+      </section>
+      <section data-panel="feedback">
+        <h2>Обратная связь</h2>
+        <div class="row">
+          <button class="secondary" onclick="loadFeedback()">Обновить</button>
+        </div>
+        <div id="feedback" class="muted">Загрузка...</div>
+      </section>
+      <section data-panel="notes">
+        <h2>Админ-заметки</h2>
+        <div class="row">
+          <textarea id="noteInput" placeholder="Введите заметку или JSON-объект"></textarea>
+          <button onclick="createNote()">Добавить</button>
+        </div>
+        <div id="notes" class="muted">Загрузка...</div>
+      </section>
+    </div>
   </main>
   <script>
     const apiKeyInput = document.getElementById("apiKey");
@@ -443,13 +500,36 @@ def admin_ui() -> str:
       }
     }
 
-    loadOverview();
-    loadHealth();
-    loadOrders();
-    loadReports();
-    loadUsers();
-    loadFeedback();
-    loadNotes();
+    const sectionButtons = document.querySelectorAll("[data-section]");
+    const panels = document.querySelectorAll("[data-panel]");
+    const loaders = {
+      overview: loadOverview,
+      health: loadHealth,
+      orders: loadOrders,
+      reports: loadReports,
+      users: loadUsers,
+      feedback: loadFeedback,
+      notes: loadNotes,
+    };
+
+    function showPanel(name) {
+      panels.forEach((panel) => {
+        panel.classList.toggle("active", panel.dataset.panel === name);
+      });
+      sectionButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.section === name);
+      });
+      const loader = loaders[name];
+      if (loader) {
+        loader();
+      }
+    }
+
+    sectionButtons.forEach((button) => {
+      button.addEventListener("click", () => showPanel(button.dataset.section));
+    });
+
+    showPanel("overview");
   </script>
 </body>
 </html>
