@@ -465,7 +465,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             [
                 InlineKeyboardButton(
                     text=_with_button_icons("Редактировать", "📝"),
-                    callback_data="profile:start",
+                    callback_data="screen:S4_EDIT",
                 )
             ]
         )
@@ -547,6 +547,71 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             )
         ]
     )
+    keyboard = _build_keyboard(rows)
+    return ScreenContent(messages=[text], keyboard=keyboard)
+
+
+def screen_s4_edit(state: dict[str, Any]) -> ScreenContent:
+    profile = state.get("profile") or {}
+    birth_place = _format_birth_place(profile.get("birth_place"))
+    birth_time = profile.get("birth_time") or "не указано"
+    if not profile:
+        text = _with_screen_prefix(
+            "S4",
+            "Данные ещё не заполнены. Вернитесь назад и заполните профиль.",
+        )
+        rows = [
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Назад", "↩️"),
+                    callback_data="screen:S4",
+                )
+            ]
+        ]
+        keyboard = _build_keyboard(rows)
+        return ScreenContent(messages=[text], keyboard=keyboard)
+    text = _with_screen_prefix(
+        "S4",
+        (
+            "Выберите поле для частичного редактирования:\n\n"
+            f"Имя: {profile.get('name')}\n"
+            f"Дата рождения: {profile.get('birth_date')}\n"
+            f"Время рождения: {birth_time}\n"
+            f"Место рождения: {birth_place}"
+        ),
+    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Имя", "📝"),
+                callback_data="profile:edit:name",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Дата рождения", "🗓️"),
+                callback_data="profile:edit:birth_date",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Время рождения", "⏰"),
+                callback_data="profile:edit:birth_time",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Место рождения", "📍"),
+                callback_data="profile:edit:birth_place",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Назад", "↩️"),
+                callback_data="screen:S4",
+            )
+        ],
+    ]
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
@@ -960,6 +1025,7 @@ SCREEN_REGISTRY = {
     "S2": screen_s2,
     "S3": screen_s3,
     "S4": screen_s4,
+    "S4_EDIT": screen_s4_edit,
     "S4_DELETE": screen_s4_delete_confirm,
     "S5": screen_s5,
     "S6": screen_s6,

@@ -33,6 +33,10 @@ class ProfileStates(StatesGroup):
     birth_date = State()
     birth_time = State()
     birth_place = State()
+    edit_name = State()
+    edit_birth_date = State()
+    edit_birth_time = State()
+    edit_birth_place = State()
 
 
 def _safe_int(value: str | int | None) -> int | None:
@@ -193,6 +197,20 @@ async def start_profile_wizard(
     screen_manager.update_last_question_message_id(user_id, sent.message_id)
 
 
+async def _start_profile_edit(
+    callback: CallbackQuery, state: FSMContext, next_state: State, prompt: str
+) -> None:
+    await state.clear()
+    await state.set_state(next_state)
+    sent = await callback.bot.send_message(
+        chat_id=callback.message.chat.id,
+        text=prompt,
+    )
+    screen_manager.update_last_question_message_id(
+        callback.from_user.id, sent.message_id
+    )
+
+
 async def _ensure_paid_profile_access(callback: CallbackQuery) -> bool:
     state_snapshot = screen_manager.update_state(callback.from_user.id)
     selected_tariff = state_snapshot.data.get("selected_tariff")
@@ -276,6 +294,56 @@ async def start_profile_flow(callback: CallbackQuery, state: FSMContext) -> None
         await callback.answer()
         return
     await start_profile_wizard(callback.message, state, callback.from_user.id)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "profile:edit:name")
+async def start_profile_edit_name(callback: CallbackQuery, state: FSMContext) -> None:
+    await _start_profile_edit(
+        callback,
+        state,
+        ProfileStates.edit_name,
+        "Введите новое имя (в любом формате).",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "profile:edit:birth_date")
+async def start_profile_edit_birth_date(
+    callback: CallbackQuery, state: FSMContext
+) -> None:
+    await _start_profile_edit(
+        callback,
+        state,
+        ProfileStates.edit_birth_date,
+        "Введите новую дату рождения (в любом формате).",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "profile:edit:birth_time")
+async def start_profile_edit_birth_time(
+    callback: CallbackQuery, state: FSMContext
+) -> None:
+    await _start_profile_edit(
+        callback,
+        state,
+        ProfileStates.edit_birth_time,
+        "Введите новое время рождения (в любом формате).",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "profile:edit:birth_place")
+async def start_profile_edit_birth_place(
+    callback: CallbackQuery, state: FSMContext
+) -> None:
+    await _start_profile_edit(
+        callback,
+        state,
+        ProfileStates.edit_birth_place,
+        "Введите новое место рождения (в любом формате).",
+    )
     await callback.answer()
 
 
@@ -413,4 +481,132 @@ async def handle_profile_birth_place(message: Message, state: FSMContext) -> Non
         )
     await state.clear()
     await screen_manager.send_ephemeral_message(message, "Данные сохранены.")
+    await _show_profile_screen(message, message.from_user.id)
+
+
+@router.message(ProfileStates.edit_name)
+async def handle_profile_edit_name(message: Message, state: FSMContext) -> None:
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
+    name = message.text or ""
+    with get_session() as session:
+        user = _get_or_create_user(session, message.from_user.id)
+        profile = user.profile
+        if not profile:
+            await state.clear()
+            await screen_manager.send_ephemeral_message(
+                message, "Сначала заполните «Мои данные»."
+            )
+            await _show_profile_screen(message, message.from_user.id)
+            return
+        profile.name = name
+        session.flush()
+        screen_manager.update_state(
+            message.from_user.id,
+            **_profile_payload(profile),
+        )
+    await state.clear()
+    await screen_manager.send_ephemeral_message(message, "Данные обновлены.")
+    await _show_profile_screen(message, message.from_user.id)
+
+
+@router.message(ProfileStates.edit_birth_date)
+async def handle_profile_edit_birth_date(message: Message, state: FSMContext) -> None:
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
+    birth_date = message.text or ""
+    with get_session() as session:
+        user = _get_or_create_user(session, message.from_user.id)
+        profile = user.profile
+        if not profile:
+            await state.clear()
+            await screen_manager.send_ephemeral_message(
+                message, "Сначала заполните «Мои данные»."
+            )
+            await _show_profile_screen(message, message.from_user.id)
+            return
+        profile.birth_date = birth_date
+        session.flush()
+        screen_manager.update_state(
+            message.from_user.id,
+            **_profile_payload(profile),
+        )
+    await state.clear()
+    await screen_manager.send_ephemeral_message(message, "Данные обновлены.")
+    await _show_profile_screen(message, message.from_user.id)
+
+
+@router.message(ProfileStates.edit_birth_time)
+async def handle_profile_edit_birth_time(message: Message, state: FSMContext) -> None:
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
+    birth_time = message.text or ""
+    with get_session() as session:
+        user = _get_or_create_user(session, message.from_user.id)
+        profile = user.profile
+        if not profile:
+            await state.clear()
+            await screen_manager.send_ephemeral_message(
+                message, "Сначала заполните «Мои данные»."
+            )
+            await _show_profile_screen(message, message.from_user.id)
+            return
+        profile.birth_time = birth_time
+        session.flush()
+        screen_manager.update_state(
+            message.from_user.id,
+            **_profile_payload(profile),
+        )
+    await state.clear()
+    await screen_manager.send_ephemeral_message(message, "Данные обновлены.")
+    await _show_profile_screen(message, message.from_user.id)
+
+
+@router.message(ProfileStates.edit_birth_place)
+async def handle_profile_edit_birth_place(message: Message, state: FSMContext) -> None:
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
+    birth_place = message.text or ""
+    with get_session() as session:
+        user = _get_or_create_user(session, message.from_user.id)
+        profile = user.profile
+        if not profile:
+            await state.clear()
+            await screen_manager.send_ephemeral_message(
+                message, "Сначала заполните «Мои данные»."
+            )
+            await _show_profile_screen(message, message.from_user.id)
+            return
+        profile.birth_place_city = birth_place
+        session.flush()
+        screen_manager.update_state(
+            message.from_user.id,
+            **_profile_payload(profile),
+        )
+    await state.clear()
+    await screen_manager.send_ephemeral_message(message, "Данные обновлены.")
     await _show_profile_screen(message, message.from_user.id)
