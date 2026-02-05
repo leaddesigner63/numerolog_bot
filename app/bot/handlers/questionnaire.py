@@ -316,7 +316,7 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
         if response and response.status == QuestionnaireStatus.COMPLETED:
             await screen_manager.send_ephemeral_message(
                 callback.message,
-                "Анкета уже заполнена. Нажмите «Сбросить», если хотите пройти её заново.",
+                "Анкета уже заполнена. Нажмите «Редактировать анкету», чтобы внести изменения.",
                 user_id=callback.from_user.id,
             )
             await callback.answer()
@@ -390,6 +390,54 @@ async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> N
         message=callback.message,
         user_id=callback.from_user.id,
         question=config.get_question(config.start_question_id),
+    )
+    _update_screen_state(callback.from_user.id, payload)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "questionnaire:edit")
+async def edit_questionnaire(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await _ensure_paid_access(callback):
+        await callback.answer()
+        return
+    if not await _ensure_profile_ready(callback, state):
+        await callback.answer()
+        return
+    config = load_questionnaire_config()
+    with get_session() as session:
+        user = _get_or_create_user(session, callback.from_user.id)
+        response = session.execute(
+            select(QuestionnaireResponse).where(
+                QuestionnaireResponse.user_id == user.id,
+                QuestionnaireResponse.questionnaire_version == config.version,
+            )
+        ).scalar_one_or_none()
+        answers = response.answers if response and response.answers else {}
+        current_question_id = response.current_question_id if response else None
+        if not current_question_id:
+            current_question_id = config.start_question_id
+        response = _upsert_progress(
+            session,
+            user_id=user.id,
+            config_version=config.version,
+            answers=answers,
+            current_question_id=current_question_id,
+            status=QuestionnaireStatus.IN_PROGRESS,
+            completed_at=None,
+        )
+        payload = _question_payload(response, config.version)
+        payload["questionnaire"]["total_questions"] = len(config.questions)
+
+    await state.set_state(QuestionnaireStates.answering)
+    await state.update_data(
+        questionnaire_version=config.version,
+        current_question_id=current_question_id,
+        answers=answers,
+    )
+    await _send_question(
+        message=callback.message,
+        user_id=callback.from_user.id,
+        question=config.get_question(current_question_id),
     )
     _update_screen_state(callback.from_user.id, payload)
     await callback.answer()
