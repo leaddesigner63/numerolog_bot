@@ -328,8 +328,15 @@ def admin_ui() -> str:
         </div>
         <div class="row" style="margin-top: 12px; align-items: flex-end;">
           <div class="field" style="min-width: 220px;">
-            <label for="promptKey">Ключ промпта</label>
-            <input id="promptKey" type="text" placeholder="PROMPT_T1" />
+            <label for="promptKeySelect">Ключ промпта</label>
+            <select id="promptKeySelect">
+              <option value="PROMPT_T0">PROMPT_T0</option>
+              <option value="PROMPT_T1">PROMPT_T1</option>
+              <option value="PROMPT_T2">PROMPT_T2</option>
+              <option value="PROMPT_T3">PROMPT_T3</option>
+              <option value="CUSTOM">Свой ключ</option>
+            </select>
+            <input id="promptKeyCustom" type="text" placeholder="Введите свой ключ" style="margin-top: 6px; display: none;" />
           </div>
           <div class="field" style="flex: 1 1 320px;">
             <label for="promptContent">Текст промпта</label>
@@ -688,11 +695,24 @@ def admin_ui() -> str:
       }
     }
 
+    const promptKeySelect = document.getElementById("promptKeySelect");
+    const promptKeyCustom = document.getElementById("promptKeyCustom");
+    const promptKeyOptions = new Set(["PROMPT_T0", "PROMPT_T1", "PROMPT_T2", "PROMPT_T3"]);
     let promptEditingId = null;
+
+    function updatePromptKeyVisibility() {
+      const showCustom = promptKeySelect.value === "CUSTOM";
+      promptKeyCustom.style.display = showCustom ? "block" : "none";
+    }
+
+    promptKeySelect.addEventListener("change", updatePromptKeyVisibility);
+    updatePromptKeyVisibility();
 
     function resetSystemPromptForm() {
       promptEditingId = null;
-      document.getElementById("promptKey").value = "";
+      promptKeySelect.value = "PROMPT_T0";
+      promptKeyCustom.value = "";
+      updatePromptKeyVisibility();
       document.getElementById("promptContent").value = "";
     }
 
@@ -702,13 +722,21 @@ def admin_ui() -> str:
         return;
       }
       promptEditingId = prompt.id;
-      document.getElementById("promptKey").value = normalizeValue(prompt.key);
+      const promptKey = normalizeValue(prompt.key);
+      if (promptKeyOptions.has(promptKey)) {
+        promptKeySelect.value = promptKey;
+        promptKeyCustom.value = "";
+      } else {
+        promptKeySelect.value = "CUSTOM";
+        promptKeyCustom.value = promptKey;
+      }
+      updatePromptKeyVisibility();
       document.getElementById("promptContent").value = normalizeValue(prompt.content);
       showPanel("system-prompts");
     }
 
     async function saveSystemPrompt() {
-      const key = document.getElementById("promptKey").value;
+      const key = promptKeySelect.value === "CUSTOM" ? promptKeyCustom.value : promptKeySelect.value;
       const content = document.getElementById("promptContent").value;
       try {
         if (promptEditingId) {
