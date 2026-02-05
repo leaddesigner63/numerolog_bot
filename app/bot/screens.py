@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from html import escape as html_escape
+import re
 from typing import Any
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -169,6 +170,13 @@ def _apply_spoiler_html(text: str, spoiler_text: str) -> str:
     escaped_spoiler = html_escape(spoiler_text)
     spoiler_html = f'<span class="tg-spoiler">{escaped_spoiler}</span>'
     return escaped_text.replace(escaped_spoiler, spoiler_html)
+
+
+def _render_markdown_bold_as_html(text: str) -> str:
+    if not text:
+        return ""
+    escaped_text = html_escape(text)
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", escaped_text, flags=re.DOTALL)
 
 
 def screen_s0(_: dict[str, Any]) -> ScreenContent:
@@ -663,8 +671,10 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
         "Сервис не гарантирует финансовых или иных результатов.\n"
        
     )
+    disclaimer_html = html_escape(disclaimer)
     if report_text:
-        text = _with_screen_prefix("S7", f"{report_text}\n\n{disclaimer}")
+        report_html = _render_markdown_bold_as_html(report_text)
+        text = _with_screen_prefix("S7", f"{report_html}\n\n{disclaimer_html}")
     else:
         text = _with_screen_prefix(
             "S7",
@@ -693,7 +703,7 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
         *_global_menu(),
     ]
     keyboard = _build_keyboard(rows)
-    return ScreenContent(messages=[text], keyboard=keyboard)
+    return ScreenContent(messages=[text], keyboard=keyboard, parse_mode="HTML")
 
 
 def screen_s8(_: dict[str, Any]) -> ScreenContent:
@@ -872,13 +882,17 @@ def screen_s13(state: dict[str, Any]) -> ScreenContent:
         "Ответственность за решения остаётся за пользователем.\n"
         "Сервис не гарантирует финансовых или иных результатов.\n"
     )
-    header = (
-        f"Отчёт #{report_id}\n"
-        f"Тариф: {report_tariff}\n"
-        f"Дата: {report_created_at}\n\n"
+    disclaimer_html = html_escape(disclaimer)
+    header = html_escape(
+        (
+            f"Отчёт #{report_id}\n"
+            f"Тариф: {report_tariff}\n"
+            f"Дата: {report_created_at}\n\n"
+        )
     )
     if report_text:
-        text = _with_screen_prefix("S13", f"{header}{report_text}\n\n{disclaimer}")
+        report_html = _render_markdown_bold_as_html(report_text)
+        text = _with_screen_prefix("S13", f"{header}{report_html}\n\n{disclaimer_html}")
     else:
         text = _with_screen_prefix(
             "S13",
@@ -913,7 +927,7 @@ def screen_s13(state: dict[str, Any]) -> ScreenContent:
     )
     rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
-    return ScreenContent(messages=[text], keyboard=keyboard)
+    return ScreenContent(messages=[text], keyboard=keyboard, parse_mode="HTML")
 
 
 def screen_s14(state: dict[str, Any]) -> ScreenContent:
