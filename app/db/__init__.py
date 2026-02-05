@@ -1,5 +1,6 @@
 from app.db.base import Base
 from app.db.models import (
+    AdminNote,
     FeedbackMessage,
     FeedbackStatus,
     FreeLimit,
@@ -16,6 +17,7 @@ from app.db.models import (
 
 __all__ = [
     "Base",
+    "AdminNote",
     "FeedbackMessage",
     "FeedbackStatus",
     "FreeLimit",
