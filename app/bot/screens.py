@@ -755,12 +755,6 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
     rows = [
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Выгрузить PDF", "📄"),
-                callback_data="report:pdf",
-            )
-        ],
-        [
-            InlineKeyboardButton(
                 text=_with_button_icons("Продолжить", "➡️"),
                 callback_data="screen:S1",
             )
