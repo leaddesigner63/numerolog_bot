@@ -667,6 +667,20 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         screen_manager.update_state(
                             callback.from_user.id, **_refresh_order_state(order)
                         )
+        if screen_id == "S4_EDIT":
+            with get_session() as session:
+                _refresh_profile_state(session, callback.from_user.id)
+            state_snapshot = screen_manager.update_state(callback.from_user.id)
+            if not state_snapshot.data.get("profile"):
+                await _send_notice(callback, "Сначала заполните «Мои данные».")
+                await screen_manager.show_screen(
+                    bot=callback.bot,
+                    chat_id=callback.message.chat.id,
+                    user_id=callback.from_user.id,
+                    screen_id="S4",
+                )
+                await _safe_callback_answer(callback)
+                return
         if screen_id in {"S11", "S12"}:
             with get_session() as session:
                 _refresh_profile_state(session, callback.from_user.id)
