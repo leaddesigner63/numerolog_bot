@@ -15,6 +15,7 @@ from app.db.models import (
     Order,
     OrderStatus,
     Report,
+    SystemPrompt,
     User,
     UserProfile,
 )
@@ -264,6 +265,7 @@ def admin_ui() -> str:
         <button class="nav-button" data-section="reports">Отчёты</button>
         <button class="nav-button" data-section="users">Пользователи</button>
         <button class="nav-button" data-section="feedback">Обратная связь</button>
+        <button class="nav-button" data-section="system-prompts">Системные промпты</button>
         <button class="nav-button" data-section="notes">Админ-заметки</button>
       </nav>
     </aside>
@@ -317,6 +319,33 @@ def admin_ui() -> str:
           <button class="secondary" onclick="loadFeedback()">Обновить</button>
         </div>
         <div id="feedback" class="muted">Загрузка...</div>
+      </section>
+      <section data-panel="system-prompts">
+        <h2>Системные промпты</h2>
+        <div class="muted">
+          Промпты из админки имеют приоритет. При наличии хотя бы одного промпта
+          в базе файл <code>.env.prompts</code> игнорируется.
+        </div>
+        <div class="row" style="margin-top: 12px; align-items: flex-end;">
+          <div class="field" style="min-width: 220px;">
+            <label for="promptKey">Ключ промпта</label>
+            <input id="promptKey" type="text" placeholder="PROMPT_T1" />
+          </div>
+          <div class="field" style="flex: 1 1 320px;">
+            <label for="promptContent">Текст промпта</label>
+            <textarea id="promptContent" placeholder="Введите системный промпт"></textarea>
+          </div>
+          <div class="field">
+            <button onclick="saveSystemPrompt()">Сохранить</button>
+            <button class="secondary" style="margin-top: 6px;" onclick="resetSystemPromptForm()">Очистить</button>
+          </div>
+        </div>
+        <div class="row table-controls">
+          <input id="systemPromptsSearch" class="table-search" type="text" placeholder="Поиск по ключу и тексту" />
+          <button class="secondary" onclick="clearTableFilters('systemPrompts')">Сбросить</button>
+          <button class="secondary" onclick="loadSystemPrompts()">Обновить</button>
+        </div>
+        <div id="systemPrompts" class="muted">Загрузка...</div>
       </section>
       <section data-panel="notes">
         <h2>Админ-заметки</h2>
@@ -398,6 +427,7 @@ def admin_ui() -> str:
       reports: [],
       users: [],
       feedback: [],
+      systemPrompts: [],
       notes: [],
     };
 
@@ -406,6 +436,7 @@ def admin_ui() -> str:
       reports: {search: "", sortKey: null, sortDir: "asc"},
       users: {search: "", sortKey: null, sortDir: "asc"},
       feedback: {search: "", sortKey: null, sortDir: "asc"},
+      systemPrompts: {search: "", sortKey: null, sortDir: "asc"},
       notes: {search: "", sortKey: null, sortDir: "asc"},
     };
 
@@ -456,6 +487,29 @@ def admin_ui() -> str:
           {label: "Пользователь", key: "telegram_user_id", sortable: true},
           {label: "Статус", key: "status", sortable: true},
           {label: "Сообщение", key: "text", sortable: true},
+        ],
+      },
+      systemPrompts: {
+        targetId: "systemPrompts",
+        columns: [
+          {label: "ID", key: "id", sortable: true},
+          {label: "Ключ", key: "key", sortable: true},
+          {label: "Обновлено", key: "updated_at", sortable: true},
+          {
+            label: "Промпт",
+            key: "content",
+            sortable: true,
+            render: (prompt) => `<pre class="muted">${normalizeValue(prompt.content)}</pre>`,
+          },
+          {
+            label: "Действия",
+            key: null,
+            sortable: false,
+            render: (prompt) => `
+              <button class="secondary" onclick="editSystemPrompt(${prompt.id})">Изменить</button>
+              <button class="secondary" onclick="deleteSystemPrompt(${prompt.id})">Удалить</button>
+            `,
+          },
         ],
       },
       notes: {
@@ -624,6 +678,69 @@ def admin_ui() -> str:
       }
     }
 
+    async function loadSystemPrompts() {
+      try {
+        const data = await fetchJson("/system-prompts");
+        tableData.systemPrompts = data.prompts || [];
+        renderTableForKey("systemPrompts");
+      } catch (error) {
+        document.getElementById("systemPrompts").textContent = error.message;
+      }
+    }
+
+    let promptEditingId = null;
+
+    function resetSystemPromptForm() {
+      promptEditingId = null;
+      document.getElementById("promptKey").value = "";
+      document.getElementById("promptContent").value = "";
+    }
+
+    function editSystemPrompt(promptId) {
+      const prompt = (tableData.systemPrompts || []).find((item) => item.id === promptId);
+      if (!prompt) {
+        return;
+      }
+      promptEditingId = prompt.id;
+      document.getElementById("promptKey").value = normalizeValue(prompt.key);
+      document.getElementById("promptContent").value = normalizeValue(prompt.content);
+      showPanel("system-prompts");
+    }
+
+    async function saveSystemPrompt() {
+      const key = document.getElementById("promptKey").value;
+      const content = document.getElementById("promptContent").value;
+      try {
+        if (promptEditingId) {
+          await fetchJson(`/system-prompts/${promptEditingId}`, {
+            method: "PATCH",
+            body: JSON.stringify({key, content})
+          });
+        } else {
+          await fetchJson("/system-prompts", {
+            method: "POST",
+            body: JSON.stringify({key, content})
+          });
+        }
+        resetSystemPromptForm();
+        await loadSystemPrompts();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function deleteSystemPrompt(promptId) {
+      if (!confirm("Удалить промпт?")) {
+        return;
+      }
+      try {
+        await fetchJson(`/system-prompts/${promptId}`, {method: "DELETE"});
+        await loadSystemPrompts();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
     async function loadNotes() {
       try {
         const data = await fetchJson("/notes");
@@ -664,6 +781,7 @@ def admin_ui() -> str:
       reports: loadReports,
       users: loadUsers,
       feedback: loadFeedback,
+      "system-prompts": loadSystemPrompts,
       notes: loadNotes,
     };
 
@@ -869,6 +987,93 @@ def admin_feedback(limit: int = 50, session: Session = Depends(_get_db_session))
             }
         )
     return {"feedback": feedback}
+
+
+@router.get("/api/system-prompts")
+def admin_system_prompts(
+    limit: int = 200, session: Session = Depends(_get_db_session)
+) -> dict:
+    rows = session.execute(
+        select(SystemPrompt).order_by(SystemPrompt.updated_at.desc()).limit(limit)
+    ).scalars()
+    prompts = []
+    for prompt in rows:
+        prompts.append(
+            {
+                "id": prompt.id,
+                "key": prompt.key,
+                "content": prompt.content,
+                "created_at": prompt.created_at.isoformat(),
+                "updated_at": prompt.updated_at.isoformat(),
+            }
+        )
+    return {"prompts": prompts}
+
+
+@router.post("/api/system-prompts")
+async def admin_create_system_prompt(
+    request: Request, session: Session = Depends(_get_db_session)
+) -> dict:
+    body = await request.body()
+    payload: dict | None = None
+    if body:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = None
+    payload = payload if isinstance(payload, dict) else {}
+    key = payload.get("key")
+    content = payload.get("content")
+    prompt = SystemPrompt(
+        key="" if key is None else str(key),
+        content="" if content is None else (content if isinstance(content, str) else str(content)),
+    )
+    session.add(prompt)
+    session.flush()
+    return {
+        "id": prompt.id,
+        "created_at": prompt.created_at.isoformat(),
+        "updated_at": prompt.updated_at.isoformat(),
+    }
+
+
+@router.patch("/api/system-prompts/{prompt_id}")
+async def admin_update_system_prompt(
+    prompt_id: int, request: Request, session: Session = Depends(_get_db_session)
+) -> dict:
+    body = await request.body()
+    payload: dict | None = None
+    if body:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = None
+    payload = payload if isinstance(payload, dict) else {}
+    prompt = session.get(SystemPrompt, prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    if "key" in payload:
+        value = payload.get("key")
+        prompt.key = "" if value is None else str(value)
+    if "content" in payload:
+        value = payload.get("content")
+        prompt.content = "" if value is None else (value if isinstance(value, str) else str(value))
+    session.flush()
+    return {
+        "id": prompt.id,
+        "updated_at": prompt.updated_at.isoformat(),
+    }
+
+
+@router.delete("/api/system-prompts/{prompt_id}")
+def admin_delete_system_prompt(
+    prompt_id: int, session: Session = Depends(_get_db_session)
+) -> dict:
+    prompt = session.get(SystemPrompt, prompt_id)
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    session.delete(prompt)
+    return {"deleted": True}
 
 
 @router.get("/api/notes")

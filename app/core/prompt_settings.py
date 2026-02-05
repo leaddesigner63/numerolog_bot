@@ -3,8 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 
 from dotenv import dotenv_values
+from sqlalchemy import select
 
-from app.db.models import Tariff
+from app.db.models import SystemPrompt, Tariff
+from app.db.session import get_session_factory
 
 
 PROMPTS_ENV_PATH = Path(".env.prompts")
@@ -42,10 +44,34 @@ def _load_prompt_overrides() -> dict[str, str]:
     if not PROMPTS_ENV_PATH.exists():
         return {}
     values = dotenv_values(PROMPTS_ENV_PATH)
-    return {key: str(value).strip() for key, value in values.items() if value}
+    return {key: str(value) if value is not None else "" for key, value in values.items()}
+
+
+def _load_admin_prompt_overrides() -> dict[str, str]:
+    try:
+        session_factory = get_session_factory()
+    except RuntimeError:
+        return {}
+    session = session_factory()
+    try:
+        rows = session.execute(
+            select(SystemPrompt).order_by(SystemPrompt.updated_at.desc())
+        ).scalars()
+        overrides: dict[str, str] = {}
+        for prompt in rows:
+            if prompt.key not in overrides:
+                overrides[prompt.key] = prompt.content
+        return overrides
+    except Exception:
+        return {}
+    finally:
+        session.close()
 
 
 def resolve_tariff_prompt(tariff: Tariff) -> str:
-    overrides = _load_prompt_overrides()
     key = f"PROMPT_{tariff.value}"
-    return overrides.get(key) or DEFAULT_TARIFF_PROMPTS[tariff]
+    admin_overrides = _load_admin_prompt_overrides()
+    if admin_overrides:
+        return admin_overrides.get(key) or DEFAULT_TARIFF_PROMPTS[tariff]
+    file_overrides = _load_prompt_overrides()
+    return file_overrides.get(key) or DEFAULT_TARIFF_PROMPTS[tariff]
