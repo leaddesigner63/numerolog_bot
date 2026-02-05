@@ -233,6 +233,22 @@ class AdminNote(Base):
     payload: Mapped[dict | None] = mapped_column(JSON)
 
 
+class SystemPrompt(Base):
+    __tablename__ = "system_prompts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    key: Mapped[str] = mapped_column(String(64), index=True)
+    content: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class ScreenStateRecord(Base):
     __tablename__ = "screen_states"
 
