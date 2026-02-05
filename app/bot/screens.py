@@ -526,7 +526,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=_with_button_icons("Продолжить", "▶️"),
+                    text=_with_button_icons("Продолжить", "✅"),
                     callback_data="profile:save",
                 )
             ]
@@ -757,7 +757,7 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
     rows = [
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Продолжить", "➡️"),
+                text=_with_button_icons("Продолжить", "✅"),
                 callback_data="screen:S1",
             )
         ],
