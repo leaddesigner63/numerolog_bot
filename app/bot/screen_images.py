@@ -31,6 +31,8 @@ def resolve_screen_image_path(screen_id: str, state: dict[str, Any]) -> Path | N
     if not base_dir_value:
         return None
     base_dir = Path(base_dir_value)
+    if not base_dir.is_absolute():
+        base_dir = (Path(__file__).resolve().parents[2] / base_dir_value).resolve()
     if not base_dir.is_dir():
         return None
 
@@ -44,9 +46,10 @@ def resolve_screen_image_path(screen_id: str, state: dict[str, Any]) -> Path | N
     if not target_dir.is_dir():
         return None
 
+    allowed_suffixes = {".png", ".jpg", ".jpeg", ".webp"}
     for item in sorted(target_dir.iterdir()):
         if item.name.startswith("."):
             continue
-        if item.is_file():
+        if item.is_file() and item.suffix.lower() in allowed_suffixes:
             return item
     return None
