@@ -153,6 +153,13 @@ def admin_ui() -> str:
       flex-wrap: wrap;
       margin-bottom: 8px;
     }
+    .table-controls {
+      align-items: center;
+    }
+    .table-search {
+      min-width: 240px;
+      flex: 1 1 240px;
+    }
     .field {
       display: flex;
       flex-direction: column;
@@ -190,6 +197,18 @@ def admin_ui() -> str:
       padding: 6px 8px;
       border-bottom: 1px solid #2a2f3a;
       vertical-align: top;
+    }
+    th.sortable {
+      cursor: pointer;
+      user-select: none;
+    }
+    th.sortable:hover {
+      color: #dbeafe;
+    }
+    .sort-indicator {
+      opacity: 0.6;
+      margin-left: 4px;
+      font-size: 11px;
     }
     .muted {
       color: var(--muted);
@@ -265,28 +284,36 @@ def admin_ui() -> str:
       </section>
       <section data-panel="orders">
         <h2>Заказы</h2>
-        <div class="row">
+        <div class="row table-controls">
+          <input id="ordersSearch" class="table-search" type="text" placeholder="Поиск по любому столбцу" />
+          <button class="secondary" onclick="clearTableFilters('orders')">Сбросить</button>
           <button class="secondary" onclick="loadOrders()">Обновить</button>
         </div>
         <div id="orders" class="muted">Загрузка...</div>
       </section>
       <section data-panel="reports">
         <h2>Отчёты</h2>
-        <div class="row">
+        <div class="row table-controls">
+          <input id="reportsSearch" class="table-search" type="text" placeholder="Поиск по любому столбцу" />
+          <button class="secondary" onclick="clearTableFilters('reports')">Сбросить</button>
           <button class="secondary" onclick="loadReports()">Обновить</button>
         </div>
         <div id="reports" class="muted">Загрузка...</div>
       </section>
       <section data-panel="users">
         <h2>Пользователи</h2>
-        <div class="row">
+        <div class="row table-controls">
+          <input id="usersSearch" class="table-search" type="text" placeholder="Поиск по любому столбцу" />
+          <button class="secondary" onclick="clearTableFilters('users')">Сбросить</button>
           <button class="secondary" onclick="loadUsers()">Обновить</button>
         </div>
         <div id="users" class="muted">Загрузка...</div>
       </section>
       <section data-panel="feedback">
         <h2>Обратная связь</h2>
-        <div class="row">
+        <div class="row table-controls">
+          <input id="feedbackSearch" class="table-search" type="text" placeholder="Поиск по любому столбцу" />
+          <button class="secondary" onclick="clearTableFilters('feedback')">Сбросить</button>
           <button class="secondary" onclick="loadFeedback()">Обновить</button>
         </div>
         <div id="feedback" class="muted">Загрузка...</div>
@@ -296,6 +323,11 @@ def admin_ui() -> str:
         <div class="row">
           <textarea id="noteInput" placeholder="Введите заметку или JSON-объект"></textarea>
           <button onclick="createNote()">Добавить</button>
+        </div>
+        <div class="row table-controls">
+          <input id="notesSearch" class="table-search" type="text" placeholder="Поиск по любому столбцу" />
+          <button class="secondary" onclick="clearTableFilters('notes')">Сбросить</button>
+          <button class="secondary" onclick="loadNotes()">Обновить</button>
         </div>
         <div id="notes" class="muted">Загрузка...</div>
       </section>
@@ -361,35 +393,190 @@ def admin_ui() -> str:
       }
     }
 
-    function renderTable(targetId, columns, rows, rowRenderer) {
-      const target = document.getElementById(targetId);
-      if (!rows.length) {
+    const tableData = {
+      orders: [],
+      reports: [],
+      users: [],
+      feedback: [],
+      notes: [],
+    };
+
+    const tableStates = {
+      orders: {search: "", sortKey: null, sortDir: "asc"},
+      reports: {search: "", sortKey: null, sortDir: "asc"},
+      users: {search: "", sortKey: null, sortDir: "asc"},
+      feedback: {search: "", sortKey: null, sortDir: "asc"},
+      notes: {search: "", sortKey: null, sortDir: "asc"},
+    };
+
+    const tableConfigs = {
+      orders: {
+        targetId: "orders",
+        columns: [
+          {label: "ID", key: "id", sortable: true},
+          {label: "Пользователь", key: "telegram_user_id", sortable: true},
+          {label: "Тариф", key: "tariff", sortable: true},
+          {label: "Статус", key: "status", sortable: true},
+          {
+            label: "Сумма",
+            key: "amount",
+            sortable: true,
+            sortValue: (order) => order.amount,
+            render: (order) => `${normalizeValue(order.amount)} ${normalizeValue(order.currency)}`.trim(),
+          },
+          {label: "Действия", key: null, sortable: false, render: (order) => `
+            <button class="secondary" onclick="markOrder(${order.id}, 'paid')">Оплачен</button>
+            <button class="secondary" onclick="markOrder(${order.id}, 'failed')">Ошибка</button>
+          `},
+        ],
+      },
+      reports: {
+        targetId: "reports",
+        columns: [
+          {label: "ID", key: "id", sortable: true},
+          {label: "Пользователь", key: "telegram_user_id", sortable: true},
+          {label: "Тариф", key: "tariff", sortable: true},
+          {label: "Создан", key: "created_at", sortable: true},
+          {label: "Модель", key: "model_used", sortable: true},
+        ],
+      },
+      users: {
+        targetId: "users",
+        columns: [
+          {label: "ID", key: "id", sortable: true},
+          {label: "Telegram", key: "telegram_user_id", sortable: true},
+          {label: "Имя", key: "name", sortable: true},
+          {label: "Дата рождения", key: "birth_date", sortable: true},
+        ],
+      },
+      feedback: {
+        targetId: "feedback",
+        columns: [
+          {label: "ID", key: "id", sortable: true},
+          {label: "Пользователь", key: "telegram_user_id", sortable: true},
+          {label: "Статус", key: "status", sortable: true},
+          {label: "Сообщение", key: "text", sortable: true},
+        ],
+      },
+      notes: {
+        targetId: "notes",
+        columns: [
+          {label: "ID", key: "id", sortable: true},
+          {label: "Создано", key: "created_at", sortable: true},
+          {label: "Содержимое", key: "payload", sortable: true, render: (note) => `
+            <pre class="muted">${note.payload}</pre>
+          `},
+        ],
+      },
+    };
+
+    function normalizeValue(value) {
+      if (value === null || value === undefined) {
+        return "";
+      }
+      return String(value);
+    }
+
+    function compareValues(aValue, bValue) {
+      const aText = normalizeValue(aValue);
+      const bText = normalizeValue(bValue);
+      const aNumber = Number(aText);
+      const bNumber = Number(bText);
+      if (!Number.isNaN(aNumber) && !Number.isNaN(bNumber) && aText.trim() !== "" && bText.trim() !== "") {
+        return aNumber - bNumber;
+      }
+      return aText.localeCompare(bText, "ru", {numeric: true, sensitivity: "base"});
+    }
+
+    function collectSearchableText(columns, row) {
+      const parts = columns.map((column) => {
+        if (column.searchValue) {
+          return normalizeValue(column.searchValue(row));
+        }
+        if (column.key) {
+          return normalizeValue(row[column.key]);
+        }
+        return "";
+      });
+      return parts.join(" ").toLowerCase();
+    }
+
+    function renderTableForKey(tableKey) {
+      const config = tableConfigs[tableKey];
+      const target = document.getElementById(config.targetId);
+      const rows = tableData[tableKey] || [];
+      const state = tableStates[tableKey];
+      const searchTerm = state.search.trim().toLowerCase();
+      let filteredRows = rows;
+      if (searchTerm) {
+        filteredRows = rows.filter((row) => collectSearchableText(config.columns, row).includes(searchTerm));
+      }
+      if (state.sortKey) {
+        const column = config.columns.find((col) => col.key === state.sortKey);
+        if (column) {
+          filteredRows = [...filteredRows].sort((a, b) => {
+            const valueA = column.sortValue ? column.sortValue(a) : a[state.sortKey];
+            const valueB = column.sortValue ? column.sortValue(b) : b[state.sortKey];
+            const result = compareValues(valueA, valueB);
+            return state.sortDir === "asc" ? result : -result;
+          });
+        }
+      }
+      if (!filteredRows.length) {
         target.textContent = "Нет данных";
         return;
       }
-      const header = columns.map(col => `<th>${col}</th>`).join("");
-      const body = rows.map(rowRenderer).join("");
+      const header = config.columns.map((column) => {
+        const sortable = column.sortable && column.key;
+        const isActive = sortable && state.sortKey === column.key;
+        const indicator = isActive ? (state.sortDir === "asc" ? "▲" : "▼") : "⇅";
+        if (sortable) {
+          return `
+            <th class="sortable" onclick="toggleSort('${tableKey}', '${column.key}')">
+              ${column.label}
+              <span class="sort-indicator">${indicator}</span>
+            </th>
+          `;
+        }
+        return `<th>${column.label}</th>`;
+      }).join("");
+      const body = filteredRows.map((row) => {
+        const cells = config.columns.map((column) => {
+          const cellValue = column.render
+            ? column.render(row)
+            : normalizeValue(row[column.key] ?? "—");
+          return `<td>${cellValue || "—"}</td>`;
+        }).join("");
+        return `<tr>${cells}</tr>`;
+      }).join("");
       target.innerHTML = `<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
+    }
+
+    function toggleSort(tableKey, columnKey) {
+      const state = tableStates[tableKey];
+      if (state.sortKey === columnKey) {
+        state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+      } else {
+        state.sortKey = columnKey;
+        state.sortDir = "asc";
+      }
+      renderTableForKey(tableKey);
+    }
+
+    function clearTableFilters(tableKey) {
+      tableStates[tableKey] = {search: "", sortKey: null, sortDir: "asc"};
+      const input = document.getElementById(`${tableKey}Search`);
+      if (input) {
+        input.value = "";
+      }
+      renderTableForKey(tableKey);
     }
 
     async function loadOrders() {
       try {
         const data = await fetchJson("/orders");
-        renderTable("orders", ["ID", "Пользователь", "Тариф", "Статус", "Сумма", "Действия"], data.orders, (order) => {
-          return `
-            <tr>
-              <td>${order.id}</td>
-              <td>${order.telegram_user_id || "—"}</td>
-              <td>${order.tariff}</td>
-              <td>${order.status}</td>
-              <td>${order.amount} ${order.currency}</td>
-              <td>
-                <button class="secondary" onclick="markOrder(${order.id}, 'paid')">Оплачен</button>
-                <button class="secondary" onclick="markOrder(${order.id}, 'failed')">Ошибка</button>
-              </td>
-            </tr>
-          `;
-        });
+        tableData.orders = data.orders || [];
+        renderTableForKey("orders");
       } catch (error) {
         document.getElementById("orders").textContent = error.message;
       }
@@ -410,17 +597,8 @@ def admin_ui() -> str:
     async function loadReports() {
       try {
         const data = await fetchJson("/reports");
-        renderTable("reports", ["ID", "Пользователь", "Тариф", "Создан", "Модель"], data.reports, (report) => {
-          return `
-            <tr>
-              <td>${report.id}</td>
-              <td>${report.telegram_user_id || "—"}</td>
-              <td>${report.tariff}</td>
-              <td>${report.created_at}</td>
-              <td>${report.model_used || "—"}</td>
-            </tr>
-          `;
-        });
+        tableData.reports = data.reports || [];
+        renderTableForKey("reports");
       } catch (error) {
         document.getElementById("reports").textContent = error.message;
       }
@@ -429,16 +607,8 @@ def admin_ui() -> str:
     async function loadUsers() {
       try {
         const data = await fetchJson("/users");
-        renderTable("users", ["ID", "Telegram", "Имя", "Дата рождения"], data.users, (user) => {
-          return `
-            <tr>
-              <td>${user.id}</td>
-              <td>${user.telegram_user_id || "—"}</td>
-              <td>${user.name || "—"}</td>
-              <td>${user.birth_date || "—"}</td>
-            </tr>
-          `;
-        });
+        tableData.users = data.users || [];
+        renderTableForKey("users");
       } catch (error) {
         document.getElementById("users").textContent = error.message;
       }
@@ -447,16 +617,8 @@ def admin_ui() -> str:
     async function loadFeedback() {
       try {
         const data = await fetchJson("/feedback");
-        renderTable("feedback", ["ID", "Пользователь", "Статус", "Сообщение"], data.feedback, (item) => {
-          return `
-            <tr>
-              <td>${item.id}</td>
-              <td>${item.telegram_user_id || "—"}</td>
-              <td>${item.status}</td>
-              <td>${item.text}</td>
-            </tr>
-          `;
-        });
+        tableData.feedback = data.feedback || [];
+        renderTableForKey("feedback");
       } catch (error) {
         document.getElementById("feedback").textContent = error.message;
       }
@@ -465,15 +627,8 @@ def admin_ui() -> str:
     async function loadNotes() {
       try {
         const data = await fetchJson("/notes");
-        renderTable("notes", ["ID", "Создано", "Содержимое"], data.notes, (note) => {
-          return `
-            <tr>
-              <td>${note.id}</td>
-              <td>${note.created_at}</td>
-              <td><pre class="muted">${note.payload}</pre></td>
-            </tr>
-          `;
-        });
+        tableData.notes = data.notes || [];
+        renderTableForKey("notes");
       } catch (error) {
         document.getElementById("notes").textContent = error.message;
       }
@@ -511,6 +666,16 @@ def admin_ui() -> str:
       feedback: loadFeedback,
       notes: loadNotes,
     };
+
+    Object.keys(tableStates).forEach((tableKey) => {
+      const input = document.getElementById(`${tableKey}Search`);
+      if (input) {
+        input.addEventListener("input", (event) => {
+          tableStates[tableKey].search = event.target.value || "";
+          renderTableForKey(tableKey);
+        });
+      }
+    });
 
     function showPanel(name) {
       panels.forEach((panel) => {
