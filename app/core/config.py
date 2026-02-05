@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     pdf_font_path: str | None = None
 
     monitoring_webhook_url: str | None = None
+    admin_api_key: str | None = None
 
     env: str = "dev"
     log_level: str = "info"

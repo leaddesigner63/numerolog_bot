@@ -223,6 +223,16 @@ class QuestionnaireResponse(Base):
     user: Mapped[User] = relationship(back_populates="questionnaire_responses")
 
 
+class AdminNote(Base):
+    __tablename__ = "admin_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    payload: Mapped[dict | None] = mapped_column(JSON)
+
+
 class ScreenStateRecord(Base):
     __tablename__ = "screen_states"
 
