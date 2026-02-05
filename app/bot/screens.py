@@ -761,8 +761,17 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
                 callback_data="screen:S1",
             )
         ],
-        *_global_menu(),
     ]
+    if settings.community_channel_url:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Сообщество", "👥"),
+                    url=settings.community_channel_url,
+                )
+            ]
+        )
+    rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard, parse_mode="HTML")
 
@@ -881,6 +890,18 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
                 callback_data="screen:S4",
             )
         ],
+    ]
+    if settings.community_channel_url:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Сообщество", "👥"),
+                    url=settings.community_channel_url,
+                )
+            ]
+        )
+    rows.extend(
+        [
         [
             InlineKeyboardButton(
                 text=_with_button_icons("Тарифы", "🧾"),
@@ -889,6 +910,7 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
         ],
         *(_global_menu()),
     ]
+    )
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
@@ -975,6 +997,15 @@ def screen_s13(state: dict[str, Any]) -> ScreenContent:
                 InlineKeyboardButton(
                     text=_with_button_icons("Удалить отчёт", "🗑️"),
                     callback_data=f"report:delete:{report_id_value}",
+                )
+            ]
+        )
+    if settings.community_channel_url:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Сообщество", "👥"),
+                    url=settings.community_channel_url,
                 )
             ]
         )

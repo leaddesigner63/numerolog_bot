@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     offer_url: str | None = None
     feedback_group_chat_id: int | None = None
     feedback_group_url: str | None = None
+    community_channel_url: str | None = None
     feedback_mode: str = "native"
     global_menu_enabled: bool = False
     screen_title_enabled: bool = True
