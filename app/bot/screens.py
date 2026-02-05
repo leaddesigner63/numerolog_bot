@@ -602,8 +602,8 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=_with_button_icons("Пройти заново", "🔁"),
-                    callback_data="questionnaire:restart",
+                    text=_with_button_icons("Редактировать анкету", "📝"),
+                    callback_data="questionnaire:edit",
                 )
             ]
         )
