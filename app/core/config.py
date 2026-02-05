@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     gemini_api_key: str | None = None
     gemini_api_keys: str | None = None
     gemini_model: str = "gemini-1.5-flash"
+    gemini_image_model: str | None = None
 
     openai_api_key: str | None = None
     openai_api_keys: str | None = None
