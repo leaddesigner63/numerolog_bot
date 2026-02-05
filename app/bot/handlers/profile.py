@@ -190,6 +190,11 @@ async def start_profile_wizard(
 ) -> None:
     await state.clear()
     await state.set_state(ProfileStates.name)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=user_id,
+    )
     sent = await message.bot.send_message(
         chat_id=message.chat.id,
         text="Введите имя (в любом формате).",
@@ -202,6 +207,11 @@ async def _start_profile_edit(
 ) -> None:
     await state.clear()
     await state.set_state(next_state)
+    await screen_manager.delete_last_question_message(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+    )
     sent = await callback.bot.send_message(
         chat_id=callback.message.chat.id,
         text=prompt,
@@ -353,7 +363,20 @@ async def delete_profile_data(callback: CallbackQuery, state: FSMContext) -> Non
     with get_session() as session:
         user = _get_or_create_user(session, callback.from_user.id)
         _clear_user_data(session, user)
-    screen_manager.clear_state(callback.from_user.id)
+        _refresh_reports_summary(session, callback.from_user.id)
+        _refresh_questionnaire_summary(session, callback.from_user.id)
+    screen_manager.update_state(
+        callback.from_user.id,
+        profile=None,
+        reports=[],
+        selected_tariff=None,
+        order_id=None,
+        order_status=None,
+        order_amount=None,
+        order_currency=None,
+        profile_flow=None,
+        t0_next_available=None,
+    )
     await screen_manager.send_ephemeral_message(
         callback.message,
         "Ваши данные удалены. Вы можете заполнить их заново в любой момент.",
