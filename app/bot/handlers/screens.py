@@ -553,19 +553,23 @@ async def _send_report_pdf(
     *,
     pdf_bytes: bytes | None,
     username: str | None,
+    user_id: int,
 ) -> bool:
     if not pdf_bytes:
         return False
     filename = _build_report_pdf_filename(report_meta, username)
     report_id = report_meta.get("id") if report_meta else None
     try:
-        await bot.send_document(chat_id, BufferedInputFile(pdf_bytes, filename=filename))
+        sent = await bot.send_document(
+            chat_id, BufferedInputFile(pdf_bytes, filename=filename)
+        )
     except Exception as exc:
         logger.warning(
             "pdf_send_failed",
             extra={"report_id": report_id, "error": str(exc)},
         )
         return False
+    screen_manager.add_pdf_message_id(user_id, sent.message_id)
     return True
 
 
@@ -1039,8 +1043,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         report_meta,
                         pdf_bytes=pdf_bytes,
                         username=callback.from_user.username,
+                        user_id=callback.from_user.id,
                     ):
-                        await _send_notice(callback, 
+                        await _send_notice(
+                            callback,
                             "PDF уже сформирован ранее. "
                             "Вы можете попробовать кнопку «Выгрузить PDF»."
                         )
@@ -1127,8 +1133,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     report_meta,
                     pdf_bytes=pdf_bytes,
                     username=callback.from_user.username,
+                    user_id=callback.from_user.id,
                 ):
-                    await _send_notice(callback, 
+                    await _send_notice(
+                        callback,
                         "Не удалось сформировать PDF автоматически. "
                         "Вы можете попробовать кнопку «Выгрузить PDF»."
                     )
@@ -1208,8 +1216,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         report_meta,
                         pdf_bytes=pdf_bytes,
                         username=callback.from_user.username,
+                        user_id=callback.from_user.id,
                     ):
-                        await _send_notice(callback, 
+                        await _send_notice(
+                            callback,
                             "PDF уже сформирован ранее. "
                             "Вы можете попробовать кнопку «Выгрузить PDF»."
                         )
@@ -1276,8 +1286,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 report_meta,
                 pdf_bytes=pdf_bytes,
                 username=callback.from_user.username,
+                user_id=callback.from_user.id,
             ):
-                await _send_notice(callback, 
+                await _send_notice(
+                    callback,
                     "Не удалось сформировать PDF автоматически. "
                     "Вы можете попробовать кнопку «Выгрузить PDF»."
                 )
@@ -1389,8 +1401,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             report_meta,
             pdf_bytes=pdf_bytes,
             username=callback.from_user.username,
+            user_id=callback.from_user.id,
         ):
-            await _send_notice(callback, 
+            await _send_notice(
+                callback,
                 "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
             )
         await _safe_callback_answer(callback)
@@ -1418,8 +1432,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             report_meta,
             pdf_bytes=pdf_bytes,
             username=callback.from_user.username,
+            user_id=callback.from_user.id,
         ):
-            await _send_notice(callback, 
+            await _send_notice(
+                callback,
                 "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
             )
         await _safe_callback_answer(callback)

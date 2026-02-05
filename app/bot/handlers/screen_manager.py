@@ -57,6 +57,22 @@ class ScreenStateStore:
         self._persist_state(user_id, state)
         return state
 
+    def add_pdf_message_id(self, user_id: int, message_id: int) -> ScreenState:
+        state = self.get_state(user_id)
+        pdf_message_ids = list(state.data.get("pdf_message_ids") or [])
+        pdf_message_ids.append(message_id)
+        state.data["pdf_message_ids"] = pdf_message_ids
+        self._persist_state(user_id, state)
+        return state
+
+    def pop_pdf_message_ids(self, user_id: int) -> list[int]:
+        state = self.get_state(user_id)
+        pdf_message_ids = list(state.data.get("pdf_message_ids") or [])
+        if "pdf_message_ids" in state.data:
+            state.data.pop("pdf_message_ids", None)
+            self._persist_state(user_id, state)
+        return pdf_message_ids
+
     def clear_message_ids(self, user_id: int) -> None:
         state = self.get_state(user_id)
         if not state.message_ids:
@@ -150,10 +166,25 @@ class ScreenManager:
         image_path = resolve_screen_image_path(screen_id, state.data)
         delivered = False
 
+        pdf_message_ids = self._store.pop_pdf_message_ids(user_id)
+        pdf_notice_required = bool(pdf_message_ids)
         previous_message_ids = list(state.message_ids)
         previous_user_message_ids = list(state.user_message_ids)
         last_question_message_id = state.last_question_message_id
         failed_message_ids: list[int] = []
+        for message_id in pdf_message_ids:
+            try:
+                await bot.delete_message(chat_id=chat_id, message_id=message_id)
+            except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
+                self._logger.info(
+                    "pdf_cleanup_failed",
+                    extra={
+                        "user_id": user_id,
+                        "screen_id": state.screen_id,
+                        "message_id": message_id,
+                        "error": str(exc),
+                    },
+                )
         for message_id in previous_message_ids:
             try:
                 await bot.delete_message(chat_id=chat_id, message_id=message_id)
@@ -278,6 +309,22 @@ class ScreenManager:
         if message_ids:
             self._store.update_screen(user_id, screen_id, message_ids)
             delivered = True
+        if pdf_notice_required:
+            try:
+                sent_notice = await bot.send_message(
+                    chat_id=chat_id,
+                    text="Отчёт сохранён в личном кабинете.",
+                )
+                self._store.add_screen_message_id(user_id, sent_notice.message_id)
+            except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
+                self._logger.info(
+                    "pdf_notice_send_failed",
+                    extra={
+                        "user_id": user_id,
+                        "screen_id": screen_id,
+                        "error": str(exc),
+                    },
+                )
         return delivered
 
     async def _try_edit_placeholder(
@@ -352,6 +399,9 @@ class ScreenManager:
 
     def add_user_message_id(self, user_id: int, message_id: int) -> ScreenState:
         return self._store.add_user_message_id(user_id, message_id)
+
+    def add_pdf_message_id(self, user_id: int, message_id: int) -> ScreenState:
+        return self._store.add_pdf_message_id(user_id, message_id)
 
     def update_last_question_message_id(
         self, user_id: int, message_id: int | None
