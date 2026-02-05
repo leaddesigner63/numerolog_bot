@@ -431,7 +431,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 f"Дата рождения: {profile.get('birth_date')}\n"
                 f"Время рождения: {birth_time}\n"
                 f"Место рождения: {birth_place}\n\n"
-                "Для изменения данных нажмите «Перезаполнить»."
+                "Для изменения данных нажмите «Редактировать»."
             ),
         )
     elif is_t0:
@@ -464,7 +464,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=_with_button_icons("Перезаполнить", "📝"),
+                    text=_with_button_icons("Редактировать", "📝"),
                     callback_data="profile:start",
                 )
             ]
