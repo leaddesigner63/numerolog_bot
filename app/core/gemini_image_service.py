@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import base64
 import logging
+import time
 from dataclasses import dataclass
+from datetime import timezone
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 import httpx
@@ -24,10 +27,12 @@ class GeminiImageError(RuntimeError):
         *,
         status_code: int | None = None,
         category: str = "unknown",
+        retry_after: float | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.category = category
+        self.retry_after = retry_after
 
 
 class GeminiImageService:
@@ -91,10 +96,15 @@ class GeminiImageService:
                 continue
 
             if response.status_code != 200:
+                retry_after = self._retry_after_seconds(response.headers.get("Retry-After"))
+                category = "bad_status"
+                if response.status_code == 429:
+                    category = "rate_limited"
                 last_error = GeminiImageError(
                     f"Gemini image request failed: {response.text}",
                     status_code=response.status_code,
-                    category="bad_status",
+                    category=category,
+                    retry_after=retry_after,
                 )
                 self._logger.warning(
                     "gemini_image_bad_status",
@@ -105,6 +115,8 @@ class GeminiImageService:
                     },
                 )
                 if response.status_code in {401, 403, 429, 500, 502, 503, 504} and idx < len(api_keys):
+                    if response.status_code == 429:
+                        self._sleep_for_rate_limit(retry_after, idx)
                     continue
                 raise last_error
 
@@ -144,6 +156,28 @@ class GeminiImageService:
         if extra:
             keys.extend([item for item in extra.split(",") if item])
         return keys
+
+    def _retry_after_seconds(self, value: str | None) -> float | None:
+        if not value:
+            return None
+        try:
+            return max(float(value), 0.0)
+        except ValueError:
+            try:
+                parsed = parsedate_to_datetime(value)
+            except (TypeError, ValueError):
+                return None
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return max(parsed.timestamp() - time.time(), 0.0)
+
+    def _sleep_for_rate_limit(self, retry_after: float | None, attempt: int) -> None:
+        if retry_after is not None:
+            delay = retry_after
+        else:
+            delay = min(2 ** max(attempt - 1, 0), 8)
+        if delay > 0:
+            time.sleep(delay)
 
 
 gemini_image_service = GeminiImageService()
