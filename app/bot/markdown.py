@@ -3,12 +3,19 @@ from __future__ import annotations
 import re
 from html import escape as html_escape
 
+_HTML_TAG_RE = re.compile(r"</?(b|strong|i|em|u|s|strike|code|pre|a|span)(\s|>|/)", re.IGNORECASE)
+
+
+def _contains_html_tags(text: str) -> bool:
+    return bool(_HTML_TAG_RE.search(text))
+
 
 def render_markdown_to_html(text: str) -> str:
     if not text:
         return ""
 
     placeholders: list[tuple[str, str, str]] = []
+    allow_raw_html = _contains_html_tags(text)
 
     def stash(kind: str, value: str) -> str:
         token = f"§§MD_{len(placeholders)}§§"
@@ -27,7 +34,8 @@ def render_markdown_to_html(text: str) -> str:
         text,
     )
 
-    text = html_escape(text)
+    if not allow_raw_html:
+        text = html_escape(text)
 
     text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", r'<a href="\2">\1</a>', text)
     text = re.sub(
