@@ -27,7 +27,7 @@ def load_db_keys(provider: str) -> list[LLMKeyItem]:
     try:
         from app.db.models import LLMApiKey
         from app.db.session import get_session_factory
-        from sqlalchemy import select
+        from sqlalchemy import func, select
     except Exception:
         return []
 
@@ -40,7 +40,10 @@ def load_db_keys(provider: str) -> list[LLMKeyItem]:
     try:
         rows = session.execute(
             select(LLMApiKey)
-            .where(LLMApiKey.provider == provider, LLMApiKey.is_active.is_(True))
+            .where(
+                func.lower(func.trim(LLMApiKey.provider)) == func.lower(func.trim(provider)),
+                LLMApiKey.is_active.is_(True),
+            )
             .order_by(LLMApiKey.priority.asc(), LLMApiKey.created_at.asc())
         ).scalars()
         return [
