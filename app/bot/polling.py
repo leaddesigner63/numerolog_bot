@@ -12,6 +12,9 @@ from app.core.logging import setup_logging
 async def main() -> None:
     setup_logging(settings.log_level)
     logger = logging.getLogger(__name__)
+    if not settings.bot_token:
+        logger.error("bot_token_missing")
+        return
     bot = Bot(token=settings.bot_token)
     dispatcher = Dispatcher(storage=MemoryStorage())
     setup_bot_router(dispatcher)

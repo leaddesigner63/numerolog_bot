@@ -183,6 +183,12 @@ async def show_cabinet(message: Message) -> None:
         user_id=message.from_user.id,
         screen_id="S11",
     )
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
 
 
 async def start_profile_wizard(
@@ -389,9 +395,15 @@ async def delete_profile_data(callback: CallbackQuery, state: FSMContext) -> Non
 @router.message(Command("cancel"))
 @router.message(F.text.casefold() == "отмена")
 async def cancel_profile(message: Message, state: FSMContext) -> None:
-    if await state.get_state() is None:
-        return
     if not message.from_user:
+        return
+    if await state.get_state() is None:
+        await screen_manager.delete_user_message(
+            bot=message.bot,
+            chat_id=message.chat.id,
+            user_id=message.from_user.id,
+            message_id=message.message_id,
+        )
         return
     screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     await screen_manager.delete_last_question_message(
@@ -402,6 +414,12 @@ async def cancel_profile(message: Message, state: FSMContext) -> None:
     await state.clear()
     await screen_manager.send_ephemeral_message(message, "Ввод данных отменён.")
     await _show_profile_screen(message, message.from_user.id)
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
 
 
 @router.message(ProfileStates.name)
@@ -422,6 +440,12 @@ async def handle_profile_name(message: Message, state: FSMContext) -> None:
         text="Введите дату рождения (в любом формате).",
     )
     screen_manager.update_last_question_message_id(message.from_user.id, sent.message_id)
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
 
 
 @router.message(ProfileStates.birth_date)
@@ -442,6 +466,12 @@ async def handle_profile_birth_date(message: Message, state: FSMContext) -> None
         text="Введите время рождения (в любом формате).",
     )
     screen_manager.update_last_question_message_id(message.from_user.id, sent.message_id)
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
 
 
 @router.message(ProfileStates.birth_time)
@@ -462,6 +492,12 @@ async def handle_profile_birth_time(message: Message, state: FSMContext) -> None
         text="Введите место рождения (в любом формате).",
     )
     screen_manager.update_last_question_message_id(message.from_user.id, sent.message_id)
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
 
 
 @router.message(ProfileStates.birth_place)
@@ -505,6 +541,12 @@ async def handle_profile_birth_place(message: Message, state: FSMContext) -> Non
     await state.clear()
     await screen_manager.send_ephemeral_message(message, "Данные сохранены.")
     await _show_profile_screen(message, message.from_user.id)
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
 
 
 @router.message(ProfileStates.edit_name)
@@ -537,6 +579,12 @@ async def handle_profile_edit_name(message: Message, state: FSMContext) -> None:
     await state.clear()
     await screen_manager.send_ephemeral_message(message, "Данные обновлены.")
     await _show_profile_screen(message, message.from_user.id)
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
 
 
 @router.message(ProfileStates.edit_birth_date)
@@ -569,6 +617,12 @@ async def handle_profile_edit_birth_date(message: Message, state: FSMContext) ->
     await state.clear()
     await screen_manager.send_ephemeral_message(message, "Данные обновлены.")
     await _show_profile_screen(message, message.from_user.id)
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
 
 
 @router.message(ProfileStates.edit_birth_time)
@@ -601,6 +655,12 @@ async def handle_profile_edit_birth_time(message: Message, state: FSMContext) ->
     await state.clear()
     await screen_manager.send_ephemeral_message(message, "Данные обновлены.")
     await _show_profile_screen(message, message.from_user.id)
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
 
 
 @router.message(ProfileStates.edit_birth_place)
@@ -633,3 +693,9 @@ async def handle_profile_edit_birth_place(message: Message, state: FSMContext) -
     await state.clear()
     await screen_manager.send_ephemeral_message(message, "Данные обновлены.")
     await _show_profile_screen(message, message.from_user.id)
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )

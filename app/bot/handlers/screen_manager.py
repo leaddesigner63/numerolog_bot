@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Any
@@ -51,10 +52,24 @@ class ScreenStateStore:
         self._persist_state(user_id, state)
         return state
 
+    def remove_screen_message_id(self, user_id: int, message_id: int) -> ScreenState:
+        state = self.get_state(user_id)
+        if message_id in state.message_ids:
+            state.message_ids = [mid for mid in state.message_ids if mid != message_id]
+            self._persist_state(user_id, state)
+        return state
+
     def add_user_message_id(self, user_id: int, message_id: int) -> ScreenState:
         state = self.get_state(user_id)
         state.user_message_ids.append(message_id)
         self._persist_state(user_id, state)
+        return state
+
+    def remove_user_message_id(self, user_id: int, message_id: int) -> ScreenState:
+        state = self.get_state(user_id)
+        if message_id in state.user_message_ids:
+            state.user_message_ids = [mid for mid in state.user_message_ids if mid != message_id]
+            self._persist_state(user_id, state)
         return state
 
     def add_pdf_message_id(self, user_id: int, message_id: int) -> ScreenState:
@@ -445,6 +460,62 @@ class ScreenManager:
             user_id = message.from_user.id
         sent = await message.answer(text, **kwargs)
         self._store.add_screen_message_id(user_id, sent.message_id)
+        reply_markup = kwargs.get("reply_markup")
+        if reply_markup is None:
+            asyncio.create_task(
+                self.delete_screen_message(
+                    bot=message.bot,
+                    chat_id=message.chat.id,
+                    user_id=user_id,
+                    message_id=sent.message_id,
+                )
+            )
+
+    async def delete_user_message(
+        self,
+        *,
+        bot: Bot,
+        chat_id: int,
+        user_id: int,
+        message_id: int,
+    ) -> None:
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
+            self._logger.info(
+                "user_message_cleanup_failed",
+                extra={
+                    "user_id": user_id,
+                    "screen_id": self._store.get_state(user_id).screen_id,
+                    "message_id": message_id,
+                    "error": str(exc),
+                },
+            )
+            return
+        self._store.remove_user_message_id(user_id, message_id)
+
+    async def delete_screen_message(
+        self,
+        *,
+        bot: Bot,
+        chat_id: int,
+        user_id: int,
+        message_id: int,
+    ) -> None:
+        try:
+            await bot.delete_message(chat_id=chat_id, message_id=message_id)
+        except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
+            self._logger.info(
+                "screen_cleanup_failed",
+                extra={
+                    "user_id": user_id,
+                    "screen_id": self._store.get_state(user_id).screen_id,
+                    "message_id": message_id,
+                    "error": str(exc),
+                },
+            )
+            return
+        self._store.remove_screen_message_id(user_id, message_id)
 
     def clear_state(self, user_id: int) -> None:
         self._store.clear_state(user_id)

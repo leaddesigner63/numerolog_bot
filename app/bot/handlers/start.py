@@ -17,3 +17,9 @@ async def handle_start(message: Message) -> None:
         user_id=message.from_user.id,
         screen_id="S0",
     )
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
