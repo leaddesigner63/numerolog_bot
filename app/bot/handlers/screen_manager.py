@@ -276,61 +276,48 @@ class ScreenManager:
                         continue
                     await self._try_edit_placeholder(bot, chat_id, message_id, user_id, screen_id)
                 return True
-            for message_id in failed_message_ids:
-                await self._try_edit_placeholder(bot, chat_id, message_id, user_id, screen_id)
+        for message_id in failed_message_ids:
+            await self._try_edit_placeholder(bot, chat_id, message_id, user_id, screen_id)
 
         message_ids: list[int] = []
         image_sent = False
         if image_path:
-            try:
-                caption = "\n\n".join(message for message in content.messages if message).strip()
-                if len(caption) > self._telegram_caption_limit:
-                    truncated = caption[: self._telegram_caption_limit - 1].rstrip()
-                    caption = f"{truncated}…"
-                sent_photo = await bot.send_photo(
-                    chat_id=chat_id,
-                    photo=FSInputFile(image_path),
-                    caption=caption or None,
-                    reply_markup=content.keyboard,
-                    parse_mode=content.parse_mode if caption else None,
-                )
+            caption = "\n\n".join(message for message in content.messages if message).strip()
+            if len(caption) > self._telegram_caption_limit:
+                truncated = caption[: self._telegram_caption_limit - 1].rstrip()
+                caption = f"{truncated}…"
+            sent_photo = await self._send_photo_with_fallback(
+                bot=bot,
+                chat_id=chat_id,
+                image_path=image_path,
+                caption=caption or None,
+                keyboard=content.keyboard,
+                parse_mode=content.parse_mode if caption else None,
+                user_id=user_id,
+                screen_id=screen_id,
+            )
+            if sent_photo:
                 message_ids.append(sent_photo.message_id)
                 delivered = True
                 image_sent = True
-            except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
-                self._logger.info(
-                    "screen_image_send_failed",
-                    extra={
-                        "user_id": user_id,
-                        "screen_id": screen_id,
-                        "image_path": str(image_path),
-                        "error": str(exc),
-                    },
-                )
         if not image_path or not image_sent:
             expanded_messages: list[str] = []
             for message in content.messages:
                 expanded_messages.extend(self._split_message(message))
             for index, message in enumerate(expanded_messages):
                 reply_markup = content.keyboard if index == len(expanded_messages) - 1 else None
-                try:
-                    sent = await bot.send_message(
-                        chat_id=chat_id,
-                        text=message,
-                        reply_markup=reply_markup,
-                        parse_mode=content.parse_mode,
-                    )
+                sent = await self._send_message_with_fallback(
+                    bot=bot,
+                    chat_id=chat_id,
+                    text=message,
+                    reply_markup=reply_markup,
+                    parse_mode=content.parse_mode,
+                    user_id=user_id,
+                    screen_id=screen_id,
+                )
+                if sent:
                     message_ids.append(sent.message_id)
                     delivered = True
-                except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
-                    self._logger.info(
-                        "screen_send_failed",
-                        extra={
-                            "user_id": user_id,
-                            "screen_id": screen_id,
-                            "error": str(exc),
-                        },
-                    )
 
         if message_ids:
             self._store.update_screen(user_id, screen_id, message_ids)
@@ -370,15 +357,23 @@ class ScreenManager:
                 reply_markup=None,
             )
         except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
-            self._logger.info(
-                "screen_placeholder_edit_failed",
-                extra={
-                    "user_id": user_id,
-                    "screen_id": screen_id,
-                    "message_id": message_id,
-                    "error": str(exc),
-                },
-            )
+            try:
+                await bot.edit_message_caption(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    caption=placeholder,
+                    reply_markup=None,
+                )
+            except (TelegramBadRequest, TelegramForbiddenError, Exception) as caption_exc:
+                self._logger.info(
+                    "screen_placeholder_edit_failed",
+                    extra={
+                        "user_id": user_id,
+                        "screen_id": screen_id,
+                        "message_id": message_id,
+                        "error": str(caption_exc),
+                    },
+                )
 
     async def _try_edit_screen(
         self,
@@ -402,7 +397,39 @@ class ScreenManager:
                 reply_markup=content.keyboard,
                 parse_mode=content.parse_mode,
             )
-        except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
+        except TelegramBadRequest:
+            if content.parse_mode:
+                try:
+                    await bot.edit_message_text(
+                        chat_id=chat_id,
+                        message_id=message_id,
+                        text=message,
+                        reply_markup=content.keyboard,
+                        parse_mode=None,
+                    )
+                except (TelegramBadRequest, TelegramForbiddenError, Exception) as retry_exc:
+                    self._logger.info(
+                        "screen_edit_failed",
+                        extra={
+                            "user_id": user_id,
+                            "screen_id": screen_id,
+                            "message_id": message_id,
+                            "error": str(retry_exc),
+                        },
+                    )
+                    return False
+            else:
+                self._logger.info(
+                    "screen_edit_failed",
+                    extra={
+                        "user_id": user_id,
+                        "screen_id": screen_id,
+                        "message_id": message_id,
+                        "error": "bad_request",
+                    },
+                )
+                return False
+        except (TelegramForbiddenError, Exception) as exc:
             self._logger.info(
                 "screen_edit_failed",
                 extra={
@@ -502,6 +529,7 @@ class ScreenManager:
                     "error": str(exc),
                 },
             )
+            self._store.remove_user_message_id(user_id, message_id)
             return
         self._store.remove_user_message_id(user_id, message_id)
 
@@ -525,6 +553,10 @@ class ScreenManager:
                     "error": str(exc),
                 },
             )
+            await self._try_edit_placeholder(
+                bot, chat_id, message_id, user_id, self._store.get_state(user_id).screen_id
+            )
+            self._store.remove_screen_message_id(user_id, message_id)
             return
         self._store.remove_screen_message_id(user_id, message_id)
 
@@ -554,6 +586,109 @@ class ScreenManager:
         if not chunks:
             chunks.append(message[:limit])
         return chunks
+
+    async def _send_message_with_fallback(
+        self,
+        *,
+        bot: Bot,
+        chat_id: int,
+        text: str,
+        reply_markup,
+        parse_mode: str | None,
+        user_id: int,
+        screen_id: str,
+    ) -> Message | None:
+        try:
+            return await bot.send_message(
+                chat_id=chat_id,
+                text=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode,
+            )
+        except TelegramBadRequest:
+            if parse_mode:
+                try:
+                    return await bot.send_message(
+                        chat_id=chat_id,
+                        text=text,
+                        reply_markup=reply_markup,
+                        parse_mode=None,
+                    )
+                except (TelegramBadRequest, TelegramForbiddenError, Exception) as retry_exc:
+                    self._logger.info(
+                        "screen_send_failed",
+                        extra={
+                            "user_id": user_id,
+                            "screen_id": screen_id,
+                            "error": str(retry_exc),
+                        },
+                    )
+                    return None
+        except (TelegramForbiddenError, Exception) as exc:
+            self._logger.info(
+                "screen_send_failed",
+                extra={
+                    "user_id": user_id,
+                    "screen_id": screen_id,
+                    "error": str(exc),
+                },
+            )
+            return None
+        return None
+
+    async def _send_photo_with_fallback(
+        self,
+        *,
+        bot: Bot,
+        chat_id: int,
+        image_path,
+        caption: str | None,
+        keyboard,
+        parse_mode: str | None,
+        user_id: int,
+        screen_id: str,
+    ) -> Message | None:
+        try:
+            return await bot.send_photo(
+                chat_id=chat_id,
+                photo=FSInputFile(image_path),
+                caption=caption,
+                reply_markup=keyboard,
+                parse_mode=parse_mode if caption else None,
+            )
+        except TelegramBadRequest:
+            if parse_mode:
+                try:
+                    return await bot.send_photo(
+                        chat_id=chat_id,
+                        photo=FSInputFile(image_path),
+                        caption=caption,
+                        reply_markup=keyboard,
+                        parse_mode=None,
+                    )
+                except (TelegramBadRequest, TelegramForbiddenError, Exception) as retry_exc:
+                    self._logger.info(
+                        "screen_image_send_failed",
+                        extra={
+                            "user_id": user_id,
+                            "screen_id": screen_id,
+                            "image_path": str(image_path),
+                            "error": str(retry_exc),
+                        },
+                    )
+                    return None
+        except (TelegramForbiddenError, Exception) as exc:
+            self._logger.info(
+                "screen_image_send_failed",
+                extra={
+                    "user_id": user_id,
+                    "screen_id": screen_id,
+                    "image_path": str(image_path),
+                    "error": str(exc),
+                },
+            )
+            return None
+        return None
 
 
 screen_manager = ScreenManager()
