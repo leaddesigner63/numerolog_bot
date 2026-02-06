@@ -305,9 +305,18 @@ def admin_ui() -> str:
           Если ключи не добавлены, используются значения из .env.
         </div>
         <div class="row" style="margin-top: 12px; align-items: flex-end;">
-          <div class="field" style="min-width: 180px;">
-            <label for="llmProviderInput">Провайдер</label>
-            <input id="llmProviderInput" type="text" placeholder="gemini/openai или любой текст" />
+          <div class="field" style="min-width: 220px;">
+            <label for="llmProviderSelect">Провайдер</label>
+            <select id="llmProviderSelect" onchange="syncLlmProviderInput()">
+              <option value="">Выберите провайдера</option>
+              <option value="gemini">Gemini</option>
+              <option value="openai">OpenAI</option>
+              <option value="custom">Другой</option>
+            </select>
+          </div>
+          <div class="field" style="min-width: 220px;">
+            <label for="llmProviderInput">Свой провайдер</label>
+            <input id="llmProviderInput" type="text" placeholder="Введите провайдера в любом виде" />
           </div>
           <div class="field" style="flex: 1 1 320px;">
             <label for="llmKeyInput">API-ключ</label>
@@ -495,10 +504,12 @@ def admin_ui() -> str:
 
     function resetLlmKeyForm() {
       llmKeyEditingId = null;
+      document.getElementById("llmProviderSelect").value = "";
       document.getElementById("llmProviderInput").value = "";
       document.getElementById("llmKeyInput").value = "";
       document.getElementById("llmPriorityInput").value = "";
       document.getElementById("llmActiveInput").value = "true";
+      syncLlmProviderInput();
     }
 
     function editLlmKey(keyId) {
@@ -507,15 +518,44 @@ def admin_ui() -> str:
         return;
       }
       llmKeyEditingId = record.id;
-      document.getElementById("llmProviderInput").value = normalizeValue(record.provider);
+      const providerValue = normalizeValue(record.provider);
+      const providerSelect = document.getElementById("llmProviderSelect");
+      const providerLower = providerValue.toLowerCase();
+      if (providerLower === "gemini" || providerLower === "openai") {
+        providerSelect.value = providerLower;
+        document.getElementById("llmProviderInput").value = "";
+      } else {
+        providerSelect.value = "custom";
+        document.getElementById("llmProviderInput").value = providerValue;
+      }
       document.getElementById("llmKeyInput").value = "";
       document.getElementById("llmPriorityInput").value = normalizeValue(record.priority);
       document.getElementById("llmActiveInput").value = record.is_active ? "true" : "false";
+      syncLlmProviderInput();
       showPanel("llm-keys");
     }
 
+    function syncLlmProviderInput() {
+      const selectValue = document.getElementById("llmProviderSelect").value;
+      const input = document.getElementById("llmProviderInput");
+      const isCustom = selectValue === "custom" || selectValue === "";
+      input.disabled = !isCustom;
+      input.style.opacity = isCustom ? "1" : "0.6";
+      if (!isCustom) {
+        input.value = "";
+      }
+    }
+
+    function getLlmProviderValue() {
+      const selectValue = document.getElementById("llmProviderSelect").value;
+      if (selectValue && selectValue !== "custom") {
+        return selectValue;
+      }
+      return document.getElementById("llmProviderInput").value;
+    }
+
     async function saveLlmKey() {
-      const provider = document.getElementById("llmProviderInput").value;
+      const provider = getLlmProviderValue();
       const key = document.getElementById("llmKeyInput").value;
       const priority = document.getElementById("llmPriorityInput").value;
       const is_active = document.getElementById("llmActiveInput").value;
@@ -1005,6 +1045,7 @@ def admin_ui() -> str:
       button.addEventListener("click", () => showPanel(button.dataset.section));
     });
 
+    syncLlmProviderInput();
     showPanel("overview");
   </script>
 </body>
