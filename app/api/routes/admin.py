@@ -192,12 +192,24 @@ def admin_ui() -> str:
       width: 100%;
       border-collapse: collapse;
       font-size: 13px;
+      table-layout: fixed;
     }
     th, td {
       text-align: left;
       padding: 6px 8px;
       border-bottom: 1px solid #2a2f3a;
       vertical-align: top;
+      word-break: break-word;
+    }
+    pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      margin: 0;
+    }
+    .prompt-preview {
+      max-height: 240px;
+      overflow-y: auto;
     }
     th.sortable {
       cursor: pointer;
@@ -506,7 +518,7 @@ def admin_ui() -> str:
             label: "Промпт",
             key: "content",
             sortable: true,
-            render: (prompt) => `<pre class="muted">${normalizeValue(prompt.content)}</pre>`,
+            render: (prompt) => `<pre class="muted prompt-preview">${normalizeValue(prompt.content)}</pre>`,
           },
           {
             label: "Действия",
