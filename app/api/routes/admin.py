@@ -12,6 +12,7 @@ from app.core.config import settings
 from app.db.models import (
     AdminNote,
     FeedbackMessage,
+    LLMApiKey,
     Order,
     OrderStatus,
     Report,
@@ -273,6 +274,7 @@ def admin_ui() -> str:
       <nav>
         <button class="nav-button" data-section="overview">Сводка</button>
         <button class="nav-button" data-section="health">Состояние сервиса</button>
+        <button class="nav-button" data-section="llm-keys">LLM ключи</button>
         <button class="nav-button" data-section="orders">Заказы</button>
         <button class="nav-button" data-section="reports">Отчёты</button>
         <button class="nav-button" data-section="users">Пользователи</button>
@@ -295,6 +297,44 @@ def admin_ui() -> str:
         <div class="row" style="margin-top: 12px;">
           <button class="secondary" onclick="loadHealth()">Обновить</button>
         </div>
+      </section>
+      <section data-panel="llm-keys">
+        <h2>LLM ключи</h2>
+        <div class="muted">
+          Ключи из админки имеют приоритет над переменными окружения.
+          Если ключи не добавлены, используются значения из .env.
+        </div>
+        <div class="row" style="margin-top: 12px; align-items: flex-end;">
+          <div class="field" style="min-width: 180px;">
+            <label for="llmProviderInput">Провайдер</label>
+            <input id="llmProviderInput" type="text" placeholder="gemini/openai или любой текст" />
+          </div>
+          <div class="field" style="flex: 1 1 320px;">
+            <label for="llmKeyInput">API-ключ</label>
+            <input id="llmKeyInput" type="text" placeholder="Введите ключ без ограничений" />
+          </div>
+          <div class="field" style="min-width: 140px;">
+            <label for="llmPriorityInput">Приоритет</label>
+            <input id="llmPriorityInput" type="text" placeholder="100" />
+          </div>
+          <div class="field" style="min-width: 140px;">
+            <label for="llmActiveInput">Активен</label>
+            <select id="llmActiveInput">
+              <option value="true">Да</option>
+              <option value="false">Нет</option>
+            </select>
+          </div>
+          <div class="field">
+            <button onclick="saveLlmKey()">Сохранить</button>
+            <button class="secondary" style="margin-top: 6px;" onclick="resetLlmKeyForm()">Очистить</button>
+          </div>
+        </div>
+        <div class="row table-controls">
+          <input id="llmKeysSearch" class="table-search" type="text" placeholder="Поиск по ключам и статусам" />
+          <button class="secondary" onclick="clearTableFilters('llmKeys')">Сбросить</button>
+          <button class="secondary" onclick="loadLlmKeys()">Обновить</button>
+        </div>
+        <div id="llmKeys" class="muted">Загрузка...</div>
       </section>
       <section data-panel="orders">
         <h2>Заказы</h2>
@@ -441,7 +481,90 @@ def admin_ui() -> str:
       }
     }
 
+    async function loadLlmKeys() {
+      try {
+        const data = await fetchJson("/llm-keys");
+        tableData.llmKeys = data.keys || [];
+        renderTableForKey("llmKeys");
+      } catch (error) {
+        document.getElementById("llmKeys").textContent = error.message;
+      }
+    }
+
+    let llmKeyEditingId = null;
+
+    function resetLlmKeyForm() {
+      llmKeyEditingId = null;
+      document.getElementById("llmProviderInput").value = "";
+      document.getElementById("llmKeyInput").value = "";
+      document.getElementById("llmPriorityInput").value = "";
+      document.getElementById("llmActiveInput").value = "true";
+    }
+
+    function editLlmKey(keyId) {
+      const record = (tableData.llmKeys || []).find((item) => item.id === keyId);
+      if (!record) {
+        return;
+      }
+      llmKeyEditingId = record.id;
+      document.getElementById("llmProviderInput").value = normalizeValue(record.provider);
+      document.getElementById("llmKeyInput").value = "";
+      document.getElementById("llmPriorityInput").value = normalizeValue(record.priority);
+      document.getElementById("llmActiveInput").value = record.is_active ? "true" : "false";
+      showPanel("llm-keys");
+    }
+
+    async function saveLlmKey() {
+      const provider = document.getElementById("llmProviderInput").value;
+      const key = document.getElementById("llmKeyInput").value;
+      const priority = document.getElementById("llmPriorityInput").value;
+      const is_active = document.getElementById("llmActiveInput").value;
+      const payload = {provider, key, priority, is_active};
+      try {
+        if (llmKeyEditingId) {
+          await fetchJson(`/llm-keys/${llmKeyEditingId}`, {
+            method: "PATCH",
+            body: JSON.stringify(payload)
+          });
+        } else {
+          await fetchJson("/llm-keys", {
+            method: "POST",
+            body: JSON.stringify(payload)
+          });
+        }
+        resetLlmKeyForm();
+        await loadLlmKeys();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function toggleLlmKey(keyId, nextState) {
+      try {
+        await fetchJson(`/llm-keys/${keyId}`, {
+          method: "PATCH",
+          body: JSON.stringify({is_active: nextState})
+        });
+        await loadLlmKeys();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function deleteLlmKey(keyId) {
+      if (!confirm("Удалить ключ?")) {
+        return;
+      }
+      try {
+        await fetchJson(`/llm-keys/${keyId}`, {method: "DELETE"});
+        await loadLlmKeys();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
     const tableData = {
+      llmKeys: [],
       orders: [],
       reports: [],
       users: [],
@@ -451,6 +574,7 @@ def admin_ui() -> str:
     };
 
     const tableStates = {
+      llmKeys: {search: "", sortKey: null, sortDir: "asc"},
       orders: {search: "", sortKey: null, sortDir: "asc"},
       reports: {search: "", sortKey: null, sortDir: "asc"},
       users: {search: "", sortKey: null, sortDir: "asc"},
@@ -460,6 +584,34 @@ def admin_ui() -> str:
     };
 
     const tableConfigs = {
+      llmKeys: {
+        targetId: "llmKeys",
+        columns: [
+          {label: "ID", key: "id", sortable: true},
+          {label: "Провайдер", key: "provider", sortable: true},
+          {label: "Приоритет", key: "priority", sortable: true},
+          {label: "Активен", key: "is_active", sortable: true, render: (row) => row.is_active ? "Да" : "Нет"},
+          {label: "Ключ", key: "masked_key", sortable: true},
+          {label: "Последнее использование", key: "last_used_at", sortable: true},
+          {label: "Последний успех", key: "last_success_at", sortable: true},
+          {label: "Статус", key: "last_status_code", sortable: true},
+          {label: "Успехи", key: "success_count", sortable: true},
+          {label: "Ошибки", key: "failure_count", sortable: true},
+          {label: "Ошибка", key: "last_error", sortable: true},
+          {
+            label: "Действия",
+            key: null,
+            sortable: false,
+            render: (row) => `
+              <button class="secondary" onclick="editLlmKey(${row.id})">Изменить</button>
+              <button class="secondary" onclick="toggleLlmKey(${row.id}, ${row.is_active ? "false" : "true"})">
+                ${row.is_active ? "Выключить" : "Включить"}
+              </button>
+              <button class="secondary" onclick="deleteLlmKey(${row.id})">Удалить</button>
+            `,
+          },
+        ],
+      },
       orders: {
         targetId: "orders",
         columns: [
@@ -817,6 +969,7 @@ def admin_ui() -> str:
     const loaders = {
       overview: loadOverview,
       health: loadHealth,
+      "llm-keys": loadLlmKeys,
       orders: loadOrders,
       reports: loadReports,
       users: loadUsers,
@@ -897,6 +1050,128 @@ def admin_health(request: Request) -> dict:
         "admin_api_enabled": bool(settings.admin_api_key),
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+def _mask_key(value: str | None) -> str:
+    if not value:
+        return ""
+    if len(value) <= 6:
+        return "*" * len(value)
+    return f"{value[:2]}***{value[-4:]}"
+
+
+def _coerce_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() == "true"
+    if isinstance(value, (int, float)):
+        return bool(value)
+    return bool(value)
+
+
+@router.get("/api/llm-keys")
+def admin_llm_keys(limit: int = 200, session: Session = Depends(_get_db_session)) -> dict:
+    rows = session.execute(
+        select(LLMApiKey).order_by(
+            LLMApiKey.provider.asc(),
+            LLMApiKey.priority.asc(),
+            LLMApiKey.created_at.desc(),
+        ).limit(limit)
+    ).scalars()
+    keys = []
+    for key in rows:
+        keys.append(
+            {
+                "id": key.id,
+                "provider": key.provider,
+                "priority": key.priority,
+                "is_active": key.is_active,
+                "masked_key": _mask_key(key.key),
+                "key_length": len(key.key) if key.key else 0,
+                "last_used_at": key.last_used_at.isoformat() if key.last_used_at else None,
+                "last_success_at": key.last_success_at.isoformat() if key.last_success_at else None,
+                "last_error": key.last_error,
+                "last_status_code": key.last_status_code,
+                "success_count": key.success_count,
+                "failure_count": key.failure_count,
+                "created_at": key.created_at.isoformat(),
+                "updated_at": key.updated_at.isoformat(),
+            }
+        )
+    return {"keys": keys}
+
+
+@router.post("/api/llm-keys")
+async def admin_create_llm_key(
+    request: Request, session: Session = Depends(_get_db_session)
+) -> dict:
+    payload: dict | None = None
+    body = await request.body()
+    if body:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = None
+    payload = payload if isinstance(payload, dict) else {}
+    provider = payload.get("provider")
+    key_value = payload.get("key")
+    priority = payload.get("priority")
+    is_active = payload.get("is_active")
+    record = LLMApiKey(
+        provider="" if provider is None else str(provider),
+        key="" if key_value is None else (key_value if isinstance(key_value, str) else str(key_value)),
+        priority=None if priority is None else str(priority),
+        is_active=_coerce_bool(is_active) if is_active is not None else True,
+    )
+    session.add(record)
+    session.flush()
+    return {
+        "id": record.id,
+        "created_at": record.created_at.isoformat(),
+        "updated_at": record.updated_at.isoformat(),
+    }
+
+
+@router.patch("/api/llm-keys/{key_id}")
+async def admin_update_llm_key(
+    key_id: int, request: Request, session: Session = Depends(_get_db_session)
+) -> dict:
+    payload: dict | None = None
+    body = await request.body()
+    if body:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = None
+    payload = payload if isinstance(payload, dict) else {}
+    record = session.get(LLMApiKey, key_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="LLM key not found")
+    if "provider" in payload:
+        value = payload.get("provider")
+        record.provider = "" if value is None else str(value)
+    if "key" in payload:
+        value = payload.get("key")
+        record.key = "" if value is None else (value if isinstance(value, str) else str(value))
+    if "priority" in payload:
+        value = payload.get("priority")
+        record.priority = None if value is None else str(value)
+    if "is_active" in payload:
+        record.is_active = _coerce_bool(payload.get("is_active"))
+    session.flush()
+    return {"id": record.id, "updated_at": record.updated_at.isoformat()}
+
+
+@router.delete("/api/llm-keys/{key_id}")
+def admin_delete_llm_key(
+    key_id: int, session: Session = Depends(_get_db_session)
+) -> dict:
+    record = session.get(LLMApiKey, key_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="LLM key not found")
+    session.delete(record)
+    return {"deleted": True}
 
 
 @router.get("/api/orders")
