@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import logging
 
 
 @dataclass(frozen=True)
@@ -9,6 +10,21 @@ class LLMKeyItem:
     key: str
     db_id: int | None = None
     provider: str | None = None
+
+
+logger = logging.getLogger(__name__)
+
+
+def _filter_key_items(items: list[LLMKeyItem]) -> list[LLMKeyItem]:
+    filtered: list[LLMKeyItem] = []
+    for item in items:
+        if item.key is None:
+            continue
+        key_value = item.key
+        if isinstance(key_value, str) and not key_value.strip():
+            continue
+        filtered.append(item)
+    return filtered
 
 
 def parse_env_keys(primary_key: str | None, extra_keys: str | None) -> list[LLMKeyItem]:
@@ -29,12 +45,14 @@ def load_db_keys(provider: str) -> list[LLMKeyItem]:
         from app.db.session import get_session_factory
         from sqlalchemy import func, select
     except Exception:
+        logger.warning("llm_key_store_db_import_failed")
         return []
 
     try:
         session_factory = get_session_factory()
         session = session_factory()
     except Exception:
+        logger.warning("llm_key_store_session_failed")
         return []
 
     try:
@@ -50,6 +68,7 @@ def load_db_keys(provider: str) -> list[LLMKeyItem]:
             LLMKeyItem(key=row.key, db_id=row.id, provider=row.provider) for row in rows
         ]
     except Exception:
+        logger.warning("llm_key_store_query_failed")
         return []
     finally:
         session.close()
@@ -124,17 +143,21 @@ def resolve_llm_keys(
     primary_key: str | None,
     extra_keys: str | None,
 ) -> list[LLMKeyItem]:
-    db_keys = load_db_keys(provider)
+    db_keys = _filter_key_items(load_db_keys(provider))
     if db_keys:
+        env_keys = _filter_key_items(parse_env_keys(primary_key, extra_keys))
+        if env_keys:
+            return db_keys + env_keys
         return db_keys
     synced_keys = ensure_env_keys_in_db(
         provider=provider,
         primary_key=primary_key,
         extra_keys=extra_keys,
     )
+    synced_keys = _filter_key_items(synced_keys)
     if synced_keys:
         return synced_keys
-    return parse_env_keys(primary_key, extra_keys)
+    return _filter_key_items(parse_env_keys(primary_key, extra_keys))
 
 
 def record_llm_key_usage(
