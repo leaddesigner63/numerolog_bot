@@ -216,8 +216,9 @@ class LLMRouter:
                     },
                 )
 
-                # На 401/403/404/429/5xx пробуем следующий ключ (если есть)
-                if self._should_try_next_key(exc.status_code) and idx < len(api_keys):
+                # Требование: fallback допускается только после исчерпания всех ключей основного провайдера.
+                # Поэтому при любой ошибке пытаемся следующий ключ, если он есть.
+                if idx < len(api_keys):
                     continue
 
                 raise
@@ -317,7 +318,8 @@ class LLMRouter:
                     },
                 )
 
-                if self._should_try_next_key(exc.status_code) and idx < len(api_keys):
+                # Для fallback-провайдера также перебираем все ключи до финального отказа.
+                if idx < len(api_keys):
                     continue
                 raise
 
@@ -395,10 +397,6 @@ class LLMRouter:
                 category=self._status_category(status),
                 retry_after=retry_after,
             )
-
-    @staticmethod
-    def _should_try_next_key(status_code: int | None) -> bool:
-        return status_code in {401, 403, 404, 429, 500, 502, 503, 504}
 
     @staticmethod
     def _retry_after_seconds(resp: httpx.Response) -> float | None:
