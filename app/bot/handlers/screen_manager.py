@@ -9,6 +9,7 @@ from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import FSInputFile, Message
 
+from app.bot.markdown import render_markdown_to_html
 from app.bot.screen_images import resolve_screen_image_path
 from app.bot.screens import SCREEN_REGISTRY, ScreenContent
 from app.db.models import ScreenStateRecord
@@ -173,7 +174,17 @@ class ScreenManager:
         screen_fn = SCREEN_REGISTRY.get(screen_id)
         if not screen_fn:
             raise ValueError(f"Unknown screen id: {screen_id}")
-        return screen_fn(state)
+        content = screen_fn(state)
+        rendered_messages = [
+            render_markdown_to_html(message) for message in content.messages if message is not None
+        ]
+        parse_mode = content.parse_mode or "HTML"
+        return ScreenContent(
+            messages=rendered_messages,
+            keyboard=content.keyboard,
+            parse_mode=parse_mode,
+            image_path=content.image_path,
+        )
 
     async def show_screen(self, bot: Bot, chat_id: int, user_id: int, screen_id: str) -> bool:
         state = self._store.get_state(user_id)
