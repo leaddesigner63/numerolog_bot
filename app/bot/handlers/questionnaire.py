@@ -448,10 +448,6 @@ async def edit_questionnaire(callback: CallbackQuery, state: FSMContext) -> None
     await callback.answer()
 
 
-def _validate_answer(question: QuestionnaireQuestion, answer: str) -> tuple[bool, Any, str | None]:
-    return True, answer, None
-
-
 async def _handle_answer(
     *,
     message: Message,
@@ -489,14 +485,9 @@ async def _handle_answer(
             "Не удалось найти текущий вопрос анкеты. Попробуйте начать заполнение заново.",
         )
         return
-    is_valid, normalized, error = _validate_answer(question, answer)
-    if not is_valid:
-        await screen_manager.send_ephemeral_message(message, error or "Некорректный ответ.")
-        return
-
     answers = dict(data.get("answers", {}))
-    answers[current_question_id] = normalized
-    next_question_id = resolve_next_question_id(question, normalized)
+    answers[current_question_id] = answer
+    next_question_id = resolve_next_question_id(question, answer)
 
     completed_at = None
     status = QuestionnaireStatus.IN_PROGRESS
@@ -580,3 +571,9 @@ async def handle_text_answer(message: Message, state: FSMContext) -> None:
         user_id=message.from_user.id,
     )
     await _handle_answer(message=message, state=state, answer=message.text or "")
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )

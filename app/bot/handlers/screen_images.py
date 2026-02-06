@@ -333,6 +333,7 @@ async def handle_fill_screen_images(message: Message, state: FSMContext) -> None
         command_message_id=message.message_id,
         prompt_request_message_id=sent.message_id,
     )
+    await _safe_delete_message(message.bot, message.chat.id, message.message_id)
 
 
 @router.message(FillScreenImagesState.waiting_prompt)
@@ -362,6 +363,7 @@ async def handle_fill_screen_images_prompt(message: Message, state: FSMContext) 
     session.task = asyncio.create_task(
         _run_fill_screen_images(bot=message.bot, session=session, prompt=prompt)
     )
+    await _safe_delete_message(message.bot, message.chat.id, message.message_id)
 
 
 @router.callback_query(F.data == "fill_images:stop")

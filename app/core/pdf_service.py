@@ -143,6 +143,7 @@ class PdfService:
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
         self._storage = self._build_storage()
+        self._fallback_storage = self._build_fallback_storage()
 
     def generate_pdf(self, text: str) -> bytes:
         font_name = _register_font()
@@ -183,6 +184,17 @@ class PdfService:
                 "pdf_store_failed",
                 extra={"report_id": report_id, "error": str(exc)},
             )
+            if self._storage is not self._fallback_storage:
+                try:
+                    return self._fallback_storage.save(key, content)
+                except Exception as fallback_exc:
+                    self._logger.warning(
+                        "pdf_store_fallback_failed",
+                        extra={
+                            "report_id": report_id,
+                            "error": str(fallback_exc),
+                        },
+                    )
             return None
 
     def load_pdf(self, storage_key: str) -> bytes | None:
@@ -235,6 +247,10 @@ class PdfService:
                     extra={"bucket": settings.pdf_storage_bucket},
                 )
         root = Path(settings.pdf_storage_key or "storage/pdfs")
+        return LocalPdfStorage(root)
+
+    def _build_fallback_storage(self) -> PdfStorage:
+        root = Path("storage/pdfs_fallback")
         return LocalPdfStorage(root)
 
 

@@ -28,12 +28,14 @@ class LLMProviderError(RuntimeError):
         retryable: bool = False,
         fallback: bool = False,
         category: str = "unknown",
+        retry_after: float | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.retryable = retryable
         self.fallback = fallback
         self.category = category
+        self.retry_after = retry_after
 
 
 class LLMUnavailableError(RuntimeError):
@@ -62,6 +64,7 @@ class LLMRouter:
         proxy_url = getattr(settings, "llm_proxy_url", None)
 
         self._client = self._build_httpx_client(timeout_seconds=timeout_seconds, proxy_url=proxy_url)
+        self._rate_limit_until: dict[str, float] = {}
 
     def _build_httpx_client(self, *, timeout_seconds: int, proxy_url: str | None) -> httpx.Client:
         timeout = httpx.Timeout(timeout_seconds)
@@ -153,6 +156,20 @@ class LLMRouter:
 
         last_error: LLMProviderError | None = None
         for idx, key_item in enumerate(api_keys, start=1):
+            if self._is_rate_limited(key_item.key):
+                self._logger.info(
+                    "gemini_key_rate_limited_skip",
+                    extra={"key_index": idx, "keys_total": len(api_keys)},
+                )
+                if idx < len(api_keys):
+                    continue
+                raise LLMProviderError(
+                    "Gemini key is rate limited",
+                    status_code=429,
+                    retryable=True,
+                    fallback=True,
+                    category="rate_limited",
+                )
             headers = {
                 # НЕ передаём ключ в URL, чтобы он не попадал в httpx-логи
                 "x-goog-api-key": key_item.key,
@@ -180,6 +197,7 @@ class LLMRouter:
 
             except LLMProviderError as exc:
                 last_error = exc
+                self._mark_rate_limit(key_item.key, exc)
                 record_llm_key_usage(
                     key_item,
                     success=False,
@@ -244,6 +262,20 @@ class LLMRouter:
 
         last_error: LLMProviderError | None = None
         for idx, key_item in enumerate(api_keys, start=1):
+            if self._is_rate_limited(key_item.key):
+                self._logger.info(
+                    "openai_key_rate_limited_skip",
+                    extra={"key_index": idx, "keys_total": len(api_keys)},
+                )
+                if idx < len(api_keys):
+                    continue
+                raise LLMProviderError(
+                    "OpenAI key is rate limited",
+                    status_code=429,
+                    retryable=True,
+                    fallback=False,
+                    category="rate_limited",
+                )
             headers = {
                 "Authorization": f"Bearer {key_item.key}",
                 "Content-Type": "application/json",
@@ -270,6 +302,7 @@ class LLMRouter:
 
             except LLMProviderError as exc:
                 last_error = exc
+                self._mark_rate_limit(key_item.key, exc)
                 record_llm_key_usage(
                     key_item,
                     success=False,
@@ -357,12 +390,14 @@ class LLMRouter:
                 self._sleep_backoff(attempts, retry_after=self._retry_after_seconds(resp))
                 continue
 
+            retry_after = self._retry_after_seconds(resp)
             raise LLMProviderError(
                 self._format_error_message(status, resp),
                 status_code=status,
                 retryable=status in self._retry_statuses or status >= 500,
                 fallback=status in fallback_statuses or status >= 500,
                 category=self._status_category(status),
+                retry_after=retry_after,
             )
 
     @staticmethod
@@ -431,6 +466,21 @@ class LLMRouter:
         if raw:
             return f"LLM provider returned status {status}: {raw[:200]}"
         return f"LLM provider returned status {status}"
+
+    def _is_rate_limited(self, key: str) -> bool:
+        until = self._rate_limit_until.get(key)
+        if not until:
+            return False
+        if time.time() >= until:
+            self._rate_limit_until.pop(key, None)
+            return False
+        return True
+
+    def _mark_rate_limit(self, key: str, exc: LLMProviderError) -> None:
+        if exc.status_code != 429:
+            return
+        retry_after = exc.retry_after or 10.0
+        self._rate_limit_until[key] = time.time() + max(1.0, retry_after)
 
     @staticmethod
     def _extract_gemini_text(data: dict[str, Any]) -> str | None:
