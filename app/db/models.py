@@ -262,6 +262,7 @@ class LLMApiKey(Base):
     last_success_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     last_error: Mapped[str | None] = mapped_column(Text)
     last_status_code: Mapped[int | None] = mapped_column(Integer)
+    disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     success_count: Mapped[int] = mapped_column(Integer, default=0)
     failure_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(

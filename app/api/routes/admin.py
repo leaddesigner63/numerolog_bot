@@ -716,6 +716,17 @@ def admin_ui() -> str:
           {label: "Провайдер", key: "provider", sortable: true},
           {label: "Приоритет", key: "priority", sortable: true},
           {label: "Активен", key: "is_active", sortable: true, render: (row) => row.is_active ? "Да" : "Нет"},
+          {
+            label: "В отключке",
+            key: "disabled_at",
+            sortable: true,
+            sortValue: (row) => {
+              const durationMs = getDisabledDurationMs(row);
+              return durationMs === null ? -1 : durationMs;
+            },
+            searchValue: (row) => renderDisabledDuration(row),
+            render: (row) => renderDisabledDuration(row),
+          },
           {label: "Ключ", key: "masked_key", sortable: true},
           {label: "Последнее использование", key: "last_used_at", sortable: true},
           {label: "Последний успех", key: "last_success_at", sortable: true},
@@ -825,6 +836,58 @@ def admin_ui() -> str:
         return "";
       }
       return String(value);
+    }
+
+    function parseDate(value) {
+      if (!value) {
+        return null;
+      }
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) {
+        return null;
+      }
+      return date;
+    }
+
+    function formatDuration(ms) {
+      if (ms <= 0) {
+        return "только что";
+      }
+      const totalMinutes = Math.floor(ms / 60000);
+      const days = Math.floor(totalMinutes / 1440);
+      const hours = Math.floor((totalMinutes % 1440) / 60);
+      const minutes = totalMinutes % 60;
+      const parts = [];
+      if (days) {
+        parts.push(`${days}д`);
+      }
+      if (hours) {
+        parts.push(`${hours}ч`);
+      }
+      if (minutes || !parts.length) {
+        parts.push(`${minutes}м`);
+      }
+      return parts.join(" ");
+    }
+
+    function getDisabledDurationMs(row) {
+      if (row.is_active) {
+        return null;
+      }
+      const disabledAt = row.disabled_at || row.updated_at;
+      const disabledDate = parseDate(disabledAt);
+      if (!disabledDate) {
+        return null;
+      }
+      return Date.now() - disabledDate.getTime();
+    }
+
+    function renderDisabledDuration(row) {
+      const durationMs = getDisabledDurationMs(row);
+      if (durationMs === null) {
+        return "—";
+      }
+      return formatDuration(durationMs);
     }
 
     function compareValues(aValue, bValue) {
@@ -1244,6 +1307,7 @@ def admin_llm_keys(limit: int = 200, session: Session = Depends(_get_db_session)
                 "last_success_at": key.last_success_at.isoformat() if key.last_success_at else None,
                 "last_error": key.last_error,
                 "last_status_code": key.last_status_code,
+                "disabled_at": key.disabled_at.isoformat() if key.disabled_at else None,
                 "success_count": key.success_count,
                 "failure_count": key.failure_count,
                 "created_at": key.created_at.isoformat(),
@@ -1269,11 +1333,14 @@ async def admin_create_llm_key(
     key_value = payload.get("key")
     priority = payload.get("priority")
     is_active = payload.get("is_active")
+    is_active_value = _coerce_bool(is_active) if is_active is not None else True
+    disabled_at = datetime.now(timezone.utc) if is_active is not None and not is_active_value else None
     record = LLMApiKey(
         provider="" if provider is None else str(provider),
         key="" if key_value is None else (key_value if isinstance(key_value, str) else str(key_value)),
         priority=None if priority is None else str(priority),
-        is_active=_coerce_bool(is_active) if is_active is not None else True,
+        is_active=is_active_value,
+        disabled_at=disabled_at,
     )
     session.add(record)
     session.flush()
@@ -1338,7 +1405,12 @@ async def admin_update_llm_key(
         value = payload.get("priority")
         record.priority = None if value is None else str(value)
     if "is_active" in payload:
-        record.is_active = _coerce_bool(payload.get("is_active"))
+        next_state = _coerce_bool(payload.get("is_active"))
+        if next_state:
+            record.disabled_at = None
+        elif record.is_active or record.disabled_at is None:
+            record.disabled_at = datetime.now(timezone.utc)
+        record.is_active = next_state
     session.flush()
     return {"id": record.id, "updated_at": record.updated_at.isoformat()}
 
