@@ -55,7 +55,8 @@ def _get_db_session(request: Request) -> Session:
 
 @router.get("", response_class=HTMLResponse)
 def admin_ui() -> str:
-    return """
+    auto_refresh_seconds = settings.admin_auto_refresh_seconds or 0
+    html = """
 <!doctype html>
 <html lang="ru">
 <head>
@@ -458,6 +459,7 @@ def admin_ui() -> str:
     </div>
   </main>
   <script>
+    const autoRefreshSeconds = Number("__ADMIN_AUTO_REFRESH_SECONDS__") || 0;
     const apiKeyInput = document.getElementById("apiKey");
     apiKeyInput.value = localStorage.getItem("adminApiKey") || "";
 
@@ -1111,7 +1113,30 @@ def admin_ui() -> str:
       }
     });
 
+    let activePanel = "overview";
+    let autoRefreshTimer = null;
+
+    function startAutoRefresh() {
+      if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+      }
+      if (!autoRefreshSeconds) {
+        return;
+      }
+      autoRefreshTimer = setInterval(() => {
+        if (document.hidden) {
+          return;
+        }
+        const loader = loaders[activePanel];
+        if (loader) {
+          loader();
+        }
+      }, autoRefreshSeconds * 1000);
+    }
+
     function showPanel(name) {
+      activePanel = name;
       panels.forEach((panel) => {
         panel.classList.toggle("active", panel.dataset.panel === name);
       });
@@ -1130,10 +1155,12 @@ def admin_ui() -> str:
 
     syncLlmProviderInput();
     showPanel("overview");
+    startAutoRefresh();
   </script>
 </body>
 </html>
 """
+    return html.replace("__ADMIN_AUTO_REFRESH_SECONDS__", str(auto_refresh_seconds))
 
 
 @router.get("/api/overview")
