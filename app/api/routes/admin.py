@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -343,10 +343,23 @@ def admin_ui() -> str:
             <label for="llmBulkFile">Файл с ключами</label>
             <input id="llmBulkFile" type="file" />
             <div class="message">
-              Формат файла: одна строка = один ключ, поля через <code>|</code> в порядке
-              <code>provider|key|priority|is_active</code>. Любые значения сохраняются как есть, пустые поля допустимы.
-              Пример: <code>gemini|AIza...|100|true</code>
+              Формат файла: одна строка = один ключ. Провайдер выбирается ниже
+              и применяется ко всем строкам файла. Любые значения сохраняются как есть.
+              Пример строки: <code>AIza...</code>
             </div>
+          </div>
+          <div class="field" style="min-width: 220px;">
+            <label for="llmBulkProviderSelect">Провайдер для файла</label>
+            <select id="llmBulkProviderSelect" onchange="syncLlmBulkProviderInput()">
+              <option value="">Выберите провайдера</option>
+              <option value="gemini">Gemini</option>
+              <option value="openai">OpenAI</option>
+              <option value="custom">Другой</option>
+            </select>
+          </div>
+          <div class="field" style="min-width: 220px;">
+            <label for="llmBulkProviderInput">Свой провайдер</label>
+            <input id="llmBulkProviderInput" type="text" placeholder="Введите провайдера в любом виде" />
           </div>
           <div class="field">
             <button class="secondary" onclick="uploadLlmKeysBulk()">Загрузить файл</button>
@@ -585,6 +598,25 @@ def admin_ui() -> str:
       return document.getElementById("llmProviderInput").value;
     }
 
+    function syncLlmBulkProviderInput() {
+      const selectValue = document.getElementById("llmBulkProviderSelect").value;
+      const input = document.getElementById("llmBulkProviderInput");
+      const isCustom = selectValue === "custom" || selectValue === "";
+      input.disabled = !isCustom;
+      input.style.opacity = isCustom ? "1" : "0.6";
+      if (!isCustom) {
+        input.value = "";
+      }
+    }
+
+    function getLlmBulkProviderValue() {
+      const selectValue = document.getElementById("llmBulkProviderSelect").value;
+      if (selectValue && selectValue !== "custom") {
+        return selectValue;
+      }
+      return document.getElementById("llmBulkProviderInput").value;
+    }
+
     async function saveLlmKey() {
       const provider = getLlmProviderValue();
       const key = document.getElementById("llmKeyInput").value;
@@ -619,6 +651,7 @@ def admin_ui() -> str:
       }
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("provider", getLlmBulkProviderValue());
       try {
         const result = await fetchForm("/llm-keys/bulk", formData);
         fileInput.value = "";
@@ -1228,6 +1261,7 @@ async def admin_create_llm_key(
 async def admin_bulk_llm_keys(
     request: Request,
     file: UploadFile | None = File(default=None),
+    provider: str | None = Form(default=None),
     session: Session = Depends(_get_db_session),
 ) -> dict:
     _require_admin(request)
@@ -1237,17 +1271,14 @@ async def admin_bulk_llm_keys(
     payload_text = payload_bytes.decode("utf-8", errors="replace")
     lines = payload_text.split("\n") if payload_text else []
     created = 0
+    provider_value = "" if provider is None else str(provider)
     for line in lines:
-        columns = line.split("|")
-        provider = columns[0] if len(columns) > 0 else ""
-        key_value = columns[1] if len(columns) > 1 else ""
-        priority = columns[2] if len(columns) > 2 else None
-        is_active_value = columns[3] if len(columns) > 3 else None
+        key_value = line
         record = LLMApiKey(
-            provider="" if provider is None else str(provider),
+            provider=provider_value,
             key="" if key_value is None else (key_value if isinstance(key_value, str) else str(key_value)),
-            priority=None if priority is None else str(priority),
-            is_active=_coerce_bool(is_active_value) if is_active_value is not None else True,
+            priority=None,
+            is_active=True,
         )
         session.add(record)
         created += 1
