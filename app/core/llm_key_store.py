@@ -52,6 +52,69 @@ def load_db_keys(provider: str) -> list[LLMKeyItem]:
         session.close()
 
 
+def ensure_env_keys_in_db(
+    *,
+    provider: str,
+    primary_key: str | None,
+    extra_keys: str | None,
+) -> list[LLMKeyItem]:
+    env_keys = parse_env_keys(primary_key, extra_keys)
+    if not env_keys:
+        return []
+
+    try:
+        from app.db.models import LLMApiKey
+        from app.db.session import get_session_factory
+        from sqlalchemy import select
+    except Exception:
+        return []
+
+    try:
+        session_factory = get_session_factory()
+        session = session_factory()
+    except Exception:
+        return []
+
+    try:
+        existing = session.execute(
+            select(LLMApiKey).where(LLMApiKey.provider == provider)
+        ).scalars()
+        existing_map = {record.key: record for record in existing}
+        created_or_updated: list[LLMApiKey] = []
+        for index, key_item in enumerate(env_keys, start=1):
+            record = existing_map.get(key_item.key)
+            if record:
+                record.is_active = True
+                record.priority = str(index * 10)
+                created_or_updated.append(record)
+                continue
+            record = LLMApiKey(
+                provider=provider,
+                key=key_item.key,
+                is_active=True,
+                priority=str(index * 10),
+            )
+            session.add(record)
+            created_or_updated.append(record)
+
+        if created_or_updated:
+            session.commit()
+
+        refreshed = session.execute(
+            select(LLMApiKey)
+            .where(LLMApiKey.provider == provider, LLMApiKey.is_active.is_(True))
+            .order_by(LLMApiKey.priority.asc(), LLMApiKey.created_at.asc())
+        ).scalars()
+        return [
+            LLMKeyItem(key=row.key, db_id=row.id, provider=row.provider) for row in refreshed
+        ]
+    except Exception:
+        session.rollback()
+        return []
+    finally:
+        session.close()
+
+
 def resolve_llm_keys(
     *,
     provider: str,
@@ -61,6 +124,13 @@ def resolve_llm_keys(
     db_keys = load_db_keys(provider)
     if db_keys:
         return db_keys
+    synced_keys = ensure_env_keys_in_db(
+        provider=provider,
+        primary_key=primary_key,
+        extra_keys=extra_keys,
+    )
+    if synced_keys:
+        return synced_keys
     return parse_env_keys(primary_key, extra_keys)
 
 
