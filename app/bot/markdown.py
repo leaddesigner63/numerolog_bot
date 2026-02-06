@@ -39,6 +39,12 @@ def render_markdown_to_html(text: str) -> str:
 
     text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", r'<a href="\2">\1</a>', text)
     text = re.sub(
+        r"^(#{1,6})\s+(.+)$",
+        r"<b>\2</b>",
+        text,
+        flags=re.MULTILINE,
+    )
+    text = re.sub(
         r"\|\|(.+?)\|\|",
         r'<span class="tg-spoiler">\1</span>',
         text,
