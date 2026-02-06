@@ -203,6 +203,33 @@ def admin_ui() -> str:
       vertical-align: top;
       word-break: break-word;
     }
+    td.copyable-cell {
+      cursor: copy;
+      transition: background 0.15s ease-in-out;
+    }
+    td.copyable-cell:hover {
+      background: rgba(59, 130, 246, 0.12);
+    }
+    .copy-toast {
+      position: fixed;
+      right: 24px;
+      bottom: 24px;
+      background: rgba(15, 23, 42, 0.92);
+      color: var(--text);
+      border: 1px solid #2a2f3a;
+      padding: 8px 12px;
+      border-radius: 10px;
+      font-size: 12px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(8px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+      z-index: 20;
+    }
+    .copy-toast.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
     pre {
       white-space: pre-wrap;
       word-break: break-word;
@@ -500,6 +527,7 @@ def admin_ui() -> str:
       </section>
     </div>
   </main>
+  <div id="copyToast" class="copy-toast">Скопировано в буфер обмена</div>
   <script>
     const autoRefreshSeconds = Number("__ADMIN_AUTO_REFRESH_SECONDS__") || 0;
     const apiKeyInput = document.getElementById("apiKey");
@@ -787,6 +815,7 @@ def admin_ui() -> str:
             label: "Действия",
             key: null,
             sortable: false,
+            copyable: false,
             render: (row) => `
               <button class="secondary" onclick="editLlmKey(${row.id})">Изменить</button>
               <button class="secondary" onclick="toggleLlmKey(${row.id}, ${row.is_active ? "false" : "true"})">
@@ -826,6 +855,7 @@ def admin_ui() -> str:
             label: "Действия",
             key: null,
             sortable: false,
+            copyable: false,
             render: (row) => `
               <button class="secondary" onclick="editLlmKey(${row.id})">Изменить</button>
               <button class="secondary" onclick="toggleLlmKey(${row.id}, ${row.is_active ? "false" : "true"})">
@@ -850,7 +880,7 @@ def admin_ui() -> str:
             sortValue: (order) => order.amount,
             render: (order) => `${normalizeValue(order.amount)} ${normalizeValue(order.currency)}`.trim(),
           },
-          {label: "Действия", key: null, sortable: false, render: (order) => `
+          {label: "Действия", key: null, sortable: false, copyable: false, render: (order) => `
             <button class="secondary" onclick="markOrder(${order.id}, 'paid')">Оплачен</button>
             <button class="secondary" onclick="markOrder(${order.id}, 'failed')">Ошибка</button>
           `},
@@ -900,6 +930,7 @@ def admin_ui() -> str:
             label: "Действия",
             key: null,
             sortable: false,
+            copyable: false,
             render: (prompt) => `
               <button class="secondary" onclick="editSystemPrompt(${prompt.id})">Изменить</button>
               <button class="secondary" onclick="deleteSystemPrompt(${prompt.id})">Удалить</button>
@@ -1046,12 +1077,79 @@ def admin_ui() -> str:
           const cellValue = column.render
             ? column.render(row)
             : normalizeValue(row[column.key] ?? "—");
-          return `<td>${cellValue || "—"}</td>`;
+          const isCopyable = column.copyable !== false;
+          const cellClass = isCopyable ? "copyable-cell" : "";
+          return `<td class="${cellClass}">${cellValue || "—"}</td>`;
         }).join("");
         return `<tr>${cells}</tr>`;
       }).join("");
       target.innerHTML = `<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
     }
+
+    const copyToast = document.getElementById("copyToast");
+    let copyToastTimer = null;
+
+    function showCopyToast() {
+      if (!copyToast) {
+        return;
+      }
+      copyToast.classList.add("visible");
+      if (copyToastTimer) {
+        clearTimeout(copyToastTimer);
+      }
+      copyToastTimer = setTimeout(() => {
+        copyToast.classList.remove("visible");
+      }, 1400);
+    }
+
+    async function copyTextToClipboard(text) {
+      if (text === undefined || text === null) {
+        return false;
+      }
+      const value = String(text);
+      if (navigator.clipboard && window.isSecureContext) {
+        try {
+          await navigator.clipboard.writeText(value);
+          return true;
+        } catch (error) {
+          return false;
+        }
+      }
+      const textarea = document.createElement("textarea");
+      textarea.value = value;
+      textarea.style.position = "fixed";
+      textarea.style.top = "-9999px";
+      textarea.setAttribute("readonly", "");
+      document.body.appendChild(textarea);
+      textarea.select();
+      let copied = false;
+      try {
+        copied = document.execCommand("copy");
+      } catch (error) {
+        copied = false;
+      }
+      document.body.removeChild(textarea);
+      return copied;
+    }
+
+    document.addEventListener("click", async (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) {
+        return;
+      }
+      if (target.closest("button, a, input, select, textarea, label")) {
+        return;
+      }
+      const cell = target.closest("td.copyable-cell");
+      if (!cell) {
+        return;
+      }
+      const text = cell.textContent;
+      const copied = await copyTextToClipboard(text);
+      if (copied) {
+        showCopyToast();
+      }
+    });
 
     function toggleSort(tableKey, columnKey) {
       const state = tableStates[tableKey];
