@@ -81,6 +81,8 @@ SCREEN_TITLE_ENABLED=true
 SCREEN_IMAGES_DIR=app/assets/screen_images
 # Ключ доступа к веб-админке (/admin):
 ADMIN_API_KEY=change_me
+# Интервал автообновления админки (секунды, 0 отключает):
+ADMIN_AUTO_REFRESH_SECONDS=0
 # Отключение фильтрации результата (post-фильтр отчёта):
 REPORT_SAFETY_ENABLED=true
 # Отключение проверки оплаты (тестовый режим):
@@ -132,6 +134,7 @@ python -m app.bot.polling
 
 Админка доступна по HTTP на адресе `http://<host>:<port>/admin` после запуска API.  
 Для доступа нужен ключ `ADMIN_API_KEY` из `.env` — введите его в интерфейсе (ключ хранится только в localStorage браузера).  
+Интервал автообновления разделов админки задаётся переменной `ADMIN_AUTO_REFRESH_SECONDS` (0 отключает автообновление).  
 
 Что доступно:
 - сводка по пользователям/заказам/отчётам/обратной связи;
