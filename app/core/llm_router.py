@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.core.llm_key_store import record_llm_key_usage, resolve_llm_keys
 
 
 @dataclass(frozen=True)
@@ -121,7 +122,11 @@ class LLMRouter:
             raise LLMUnavailableError("Both Gemini and OpenAI providers are unavailable") from exc
 
     def _call_gemini(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
-        api_keys = self._parse_keys(settings.gemini_api_key, settings.gemini_api_keys)
+        api_keys = resolve_llm_keys(
+            provider="gemini",
+            primary_key=settings.gemini_api_key,
+            extra_keys=settings.gemini_api_keys,
+        )
         if not api_keys:
             raise LLMProviderError(
                 "Gemini API key is missing",
@@ -147,10 +152,10 @@ class LLMRouter:
         gemini_fallback_statuses = {400, 401, 403, 404, 429, 500, 502, 503, 504}
 
         last_error: LLMProviderError | None = None
-        for idx, key in enumerate(api_keys, start=1):
+        for idx, key_item in enumerate(api_keys, start=1):
             headers = {
                 # НЕ передаём ключ в URL, чтобы он не попадал в httpx-логи
-                "x-goog-api-key": key,
+                "x-goog-api-key": key_item.key,
                 "Content-Type": "application/json",
             }
 
@@ -170,10 +175,17 @@ class LLMRouter:
                         fallback=True,
                         category="empty_response",
                     )
+                record_llm_key_usage(key_item, success=True, status_code=200)
                 return LLMResponse(text=text, provider="gemini", model=settings.gemini_model)
 
             except LLMProviderError as exc:
                 last_error = exc
+                record_llm_key_usage(
+                    key_item,
+                    success=False,
+                    status_code=exc.status_code,
+                    error_message=str(exc),
+                )
                 self._logger.warning(
                     "gemini_key_failed",
                     extra={
@@ -206,7 +218,11 @@ class LLMRouter:
         )
 
     def _call_openai(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
-        api_keys = self._parse_keys(settings.openai_api_key, settings.openai_api_keys)
+        api_keys = resolve_llm_keys(
+            provider="openai",
+            primary_key=settings.openai_api_key,
+            extra_keys=settings.openai_api_keys,
+        )
         if not api_keys:
             raise LLMProviderError(
                 "OpenAI API key is missing",
@@ -227,8 +243,11 @@ class LLMRouter:
         openai_fallback_statuses = {401, 403, 404, 429, 500, 502, 503, 504}
 
         last_error: LLMProviderError | None = None
-        for idx, key in enumerate(api_keys, start=1):
-            headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
+        for idx, key_item in enumerate(api_keys, start=1):
+            headers = {
+                "Authorization": f"Bearer {key_item.key}",
+                "Content-Type": "application/json",
+            }
 
             try:
                 data = self._post_json(
@@ -246,10 +265,17 @@ class LLMRouter:
                         fallback=False,
                         category="empty_response",
                     )
+                record_llm_key_usage(key_item, success=True, status_code=200)
                 return LLMResponse(text=text, provider="openai", model=settings.openai_model)
 
             except LLMProviderError as exc:
                 last_error = exc
+                record_llm_key_usage(
+                    key_item,
+                    success=False,
+                    status_code=exc.status_code,
+                    error_message=str(exc),
+                )
                 self._logger.warning(
                     "openai_key_failed",
                     extra={
@@ -424,18 +450,5 @@ class LLMRouter:
             return None
         message = choices[0].get("message") or {}
         return message.get("content")
-
-    @staticmethod
-    def _parse_keys(primary_key: str | None, extra_keys: str | None) -> list[str]:
-        keys: list[str] = []
-        if primary_key and primary_key.strip():
-            keys.append(primary_key.strip())
-        if extra_keys and extra_keys.strip():
-            for part in extra_keys.split(","):
-                k = part.strip()
-                if k:
-                    keys.append(k)
-        return keys
-
 
 llm_router = LLMRouter()

@@ -12,6 +12,7 @@
 7. Проверьте, что `PAYMENT_WEBHOOK_URL` указывает на внешний HTTPS-адрес вашего backend (например, `https://api.example.com/webhooks/payments`).
 8. Для Prodamus укажите `PRODAMUS_STATUS_URL` (эндпоинт проверки статуса платежа по order_id) и `PRODAMUS_SECRET` из кабинета.
 9. Убедитесь, что в `.env` добавлены ключи LLM: `GEMINI_API_KEY`/`GEMINI_API_KEYS`/`GEMINI_MODEL` и `OPENAI_API_KEY`/`OPENAI_API_KEYS`/`OPENAI_MODEL` (fallback). Для команды `/fill_screen_images` отдельно задайте `GEMINI_IMAGE_MODEL`. При наличии нескольких ключей они перечисляются через запятую и перебираются автоматически.
+   Если планируете управлять ключами через веб-админку, всё равно оставьте минимум один ключ в `.env` на время первого запуска — после добавления ключей в админке они будут иметь приоритет.
 10. Если PDF хранится в bucket, добавьте `PDF_STORAGE_BUCKET`, `PDF_STORAGE_KEY`, а также AWS-переменные (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, при необходимости `AWS_ENDPOINT_URL`).
 11. Для корректной кириллицы в PDF задайте `PDF_FONT_PATH` (например, `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`).
 12. Задайте `COMMUNITY_CHANNEL_URL`, чтобы в отчёте и личном кабинете отображалась кнопка «Сообщество» (ссылка на канал проекта).

@@ -11,6 +11,7 @@ from typing import Any
 import httpx
 
 from app.core.config import settings
+from app.core.llm_key_store import record_llm_key_usage, resolve_llm_keys
 
 
 @dataclass(frozen=True)
@@ -60,7 +61,11 @@ class GeminiImageService:
                 return httpx.Client(timeout=timeout)
 
     def generate_image(self, prompt: str) -> GeminiImageResult:
-        api_keys = self._parse_keys(settings.gemini_api_key, settings.gemini_api_keys)
+        api_keys = resolve_llm_keys(
+            provider="gemini",
+            primary_key=settings.gemini_api_key,
+            extra_keys=settings.gemini_api_keys,
+        )
         if not api_keys:
             raise GeminiImageError("Gemini API key is missing", category="missing_api_key")
 
@@ -83,11 +88,17 @@ class GeminiImageService:
         }
 
         last_error: GeminiImageError | None = None
-        for idx, key in enumerate(api_keys, start=1):
-            headers = {"x-goog-api-key": key, "Content-Type": "application/json"}
+        for idx, key_item in enumerate(api_keys, start=1):
+            headers = {"x-goog-api-key": key_item.key, "Content-Type": "application/json"}
             try:
                 response = self._client.post(endpoint, headers=headers, json=payload)
             except httpx.HTTPError as exc:
+                record_llm_key_usage(
+                    key_item,
+                    success=False,
+                    status_code=None,
+                    error_message=str(exc),
+                )
                 last_error = GeminiImageError(str(exc), category="network_error")
                 self._logger.warning(
                     "gemini_image_request_failed",
@@ -96,6 +107,12 @@ class GeminiImageService:
                 continue
 
             if response.status_code != 200:
+                record_llm_key_usage(
+                    key_item,
+                    success=False,
+                    status_code=response.status_code,
+                    error_message=response.text,
+                )
                 retry_after = self._retry_after_seconds(response.headers.get("Retry-After"))
                 category = "bad_status"
                 if response.status_code == 429:
@@ -123,8 +140,15 @@ class GeminiImageService:
             data = response.json()
             image_bytes, mime_type = self._extract_image(data)
             if not image_bytes:
+                record_llm_key_usage(
+                    key_item,
+                    success=False,
+                    status_code=response.status_code,
+                    error_message="Gemini image response is empty",
+                )
                 last_error = GeminiImageError("Gemini image response is empty", category="empty_response")
                 raise last_error
+            record_llm_key_usage(key_item, success=True, status_code=response.status_code)
             return GeminiImageResult(image_bytes=image_bytes, mime_type=mime_type, model=model)
 
         if last_error:
@@ -148,14 +172,6 @@ class GeminiImageService:
             except (ValueError, TypeError):
                 return None, mime_type
         return None, "image/png"
-
-    def _parse_keys(self, primary: str | None, extra: str | None) -> list[str]:
-        keys: list[str] = []
-        if primary:
-            keys.extend([item for item in primary.split(",") if item])
-        if extra:
-            keys.extend([item for item in extra.split(",") if item])
-        return keys
 
     def _retry_after_seconds(self, value: str | None) -> float | None:
         if not value:
