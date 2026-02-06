@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -338,6 +338,20 @@ def admin_ui() -> str:
             <button class="secondary" style="margin-top: 6px;" onclick="resetLlmKeyForm()">Очистить</button>
           </div>
         </div>
+        <div class="row" style="margin-top: 12px; align-items: flex-end;">
+          <div class="field" style="flex: 1 1 360px;">
+            <label for="llmBulkFile">Файл с ключами</label>
+            <input id="llmBulkFile" type="file" />
+            <div class="message">
+              Формат файла: одна строка = один ключ, поля через <code>|</code> в порядке
+              <code>provider|key|priority|is_active</code>. Любые значения сохраняются как есть, пустые поля допустимы.
+              Пример: <code>gemini|AIza...|100|true</code>
+            </div>
+          </div>
+          <div class="field">
+            <button class="secondary" onclick="uploadLlmKeysBulk()">Загрузить файл</button>
+          </div>
+        </div>
         <div class="row table-controls">
           <input id="llmKeysSearch" class="table-search" type="text" placeholder="Поиск по ключам и статусам" />
           <button class="secondary" onclick="clearTableFilters('llmKeys')">Сбросить</button>
@@ -448,6 +462,23 @@ def admin_ui() -> str:
         ...options,
         headers: {
           "Content-Type": "application/json",
+          ...headers(),
+          ...(options.headers || {})
+        }
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.detail || "Ошибка запроса");
+      }
+      return data;
+    }
+
+    async function fetchForm(path, formData, options = {}) {
+      const response = await fetch(`/admin/api${path}`, {
+        ...options,
+        method: options.method || "POST",
+        body: formData,
+        headers: {
           ...headers(),
           ...(options.headers || {})
         }
@@ -574,6 +605,25 @@ def admin_ui() -> str:
         }
         resetLlmKeyForm();
         await loadLlmKeys();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function uploadLlmKeysBulk() {
+      const fileInput = document.getElementById("llmBulkFile");
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) {
+        alert("Выберите файл с ключами.");
+        return;
+      }
+      const formData = new FormData();
+      formData.append("file", file);
+      try {
+        const result = await fetchForm("/llm-keys/bulk", formData);
+        fileInput.value = "";
+        await loadLlmKeys();
+        alert(`Загружено строк: ${result.lines || 0}. Создано ключей: ${result.created || 0}.`);
       } catch (error) {
         alert(error.message);
       }
@@ -1172,6 +1222,37 @@ async def admin_create_llm_key(
         "created_at": record.created_at.isoformat(),
         "updated_at": record.updated_at.isoformat(),
     }
+
+
+@router.post("/api/llm-keys/bulk")
+async def admin_bulk_llm_keys(
+    request: Request,
+    file: UploadFile | None = File(default=None),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    _require_admin(request)
+    if file is None:
+        return {"created": 0, "lines": 0}
+    payload_bytes = await file.read()
+    payload_text = payload_bytes.decode("utf-8", errors="replace")
+    lines = payload_text.split("\n") if payload_text else []
+    created = 0
+    for line in lines:
+        columns = line.split("|")
+        provider = columns[0] if len(columns) > 0 else ""
+        key_value = columns[1] if len(columns) > 1 else ""
+        priority = columns[2] if len(columns) > 2 else None
+        is_active_value = columns[3] if len(columns) > 3 else None
+        record = LLMApiKey(
+            provider="" if provider is None else str(provider),
+            key="" if key_value is None else (key_value if isinstance(key_value, str) else str(key_value)),
+            priority=None if priority is None else str(priority),
+            is_active=_coerce_bool(is_active_value) if is_active_value is not None else True,
+        )
+        session.add(record)
+        created += 1
+    session.flush()
+    return {"created": created, "lines": len(lines)}
 
 
 @router.patch("/api/llm-keys/{key_id}")
