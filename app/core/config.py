@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     llm_primary: str = "gemini"
     llm_fallback: str = "openai"
     llm_timeout_seconds: int = 35
+    llm_auth_error_block_seconds: int = 3600
     report_safety_enabled: bool = True
     report_delay_seconds: int = 0
 

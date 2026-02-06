@@ -59,6 +59,7 @@ class LLMRouter:
         self._retry_statuses = {429, 500, 502, 503, 504}
 
         timeout_seconds = getattr(settings, "llm_timeout_seconds", 30)
+        self._auth_error_block_seconds = getattr(settings, "llm_auth_error_block_seconds", 3600)
 
         # Прокси применяется ТОЛЬКО тут (в LLMRouter), т.е. только LLM-трафик уйдет через прокси.
         proxy_url = getattr(settings, "llm_proxy_url", None)
@@ -471,10 +472,18 @@ class LLMRouter:
         return True
 
     def _mark_rate_limit(self, key: str, exc: LLMProviderError) -> None:
-        if exc.status_code != 429:
+        if exc.status_code == 429:
+            retry_after = exc.retry_after or 10.0
+            self._rate_limit_until[key] = time.time() + max(1.0, retry_after)
             return
-        retry_after = exc.retry_after or 10.0
-        self._rate_limit_until[key] = time.time() + max(1.0, retry_after)
+        if exc.status_code in {401, 403}:
+            block_for = max(60.0, float(self._auth_error_block_seconds))
+            self._rate_limit_until[key] = time.time() + block_for
+            self._logger.warning(
+                "llm_key_disabled_auth_error",
+                extra={"status_code": exc.status_code, "block_seconds": block_for},
+            )
+            return
 
     @staticmethod
     def _extract_gemini_text(data: dict[str, Any]) -> str | None:
