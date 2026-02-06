@@ -16,6 +16,7 @@ from app.bot.screens import build_report_wait_message
 from app.bot.handlers.profile import start_profile_wizard
 from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
+from app.core.llm_key_store import resolve_llm_keys
 from app.core.pdf_service import pdf_service
 from app.core.monitoring import send_monitoring_event
 from app.core.report_service import report_service
@@ -236,12 +237,17 @@ def _missing_payment_status_config(provider: PaymentProviderEnum) -> list[str]:
 
 
 async def _notify_llm_unavailable(callback: CallbackQuery) -> bool:
-    if (
-        settings.gemini_api_key
-        or settings.openai_api_key
-        or settings.gemini_api_keys
-        or settings.openai_api_keys
-    ):
+    gemini_keys = resolve_llm_keys(
+        provider="gemini",
+        primary_key=settings.gemini_api_key,
+        extra_keys=settings.gemini_api_keys,
+    )
+    openai_keys = resolve_llm_keys(
+        provider="openai",
+        primary_key=settings.openai_api_key,
+        extra_keys=settings.openai_api_keys,
+    )
+    if gemini_keys or openai_keys:
         return True
     logger.warning(
         "llm_keys_missing",
