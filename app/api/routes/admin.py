@@ -254,6 +254,33 @@ def admin_ui() -> str:
       font-size: 12px;
       color: var(--muted);
     }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+    .tab-button {
+      background: transparent;
+      border: 1px solid #3a4150;
+      color: var(--text);
+      padding: 8px 12px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .tab-button.active {
+      background: rgba(59, 130, 246, 0.2);
+      border-color: rgba(59, 130, 246, 0.6);
+      color: #dbeafe;
+    }
+    .tab-panel {
+      display: none;
+      margin-top: 12px;
+    }
+    .tab-panel.active {
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -367,11 +394,26 @@ def admin_ui() -> str:
           </div>
         </div>
         <div class="row table-controls">
-          <input id="llmKeysSearch" class="table-search" type="text" placeholder="Поиск по ключам и статусам" />
-          <button class="secondary" onclick="clearTableFilters('llmKeys')">Сбросить</button>
           <button class="secondary" onclick="loadLlmKeys()">Обновить</button>
         </div>
-        <div id="llmKeys" class="muted">Загрузка...</div>
+        <div class="tabs">
+          <button class="tab-button active" data-llm-tab="active">Активные</button>
+          <button class="tab-button" data-llm-tab="inactive">Неактивные</button>
+        </div>
+        <div class="tab-panel active" data-llm-panel="active">
+          <div class="row table-controls">
+            <input id="llmKeysActiveSearch" class="table-search" type="text" placeholder="Поиск по активным ключам" />
+            <button class="secondary" onclick="clearTableFilters('llmKeysActive')">Сбросить</button>
+          </div>
+          <div id="llmKeysActive" class="muted">Загрузка...</div>
+        </div>
+        <div class="tab-panel" data-llm-panel="inactive">
+          <div class="row table-controls">
+            <input id="llmKeysInactiveSearch" class="table-search" type="text" placeholder="Поиск по неактивным ключам" />
+            <button class="secondary" onclick="clearTableFilters('llmKeysInactive')">Сбросить</button>
+          </div>
+          <div id="llmKeysInactive" class="muted">Загрузка...</div>
+        </div>
       </section>
       <section data-panel="orders">
         <h2>Заказы</h2>
@@ -539,10 +581,14 @@ def admin_ui() -> str:
     async function loadLlmKeys() {
       try {
         const data = await fetchJson("/llm-keys");
-        tableData.llmKeys = data.keys || [];
-        renderTableForKey("llmKeys");
+        tableData.llmKeysAll = data.keys || [];
+        tableData.llmKeysActive = tableData.llmKeysAll.filter((row) => row.is_active);
+        tableData.llmKeysInactive = tableData.llmKeysAll.filter((row) => !row.is_active);
+        renderTableForKey("llmKeysActive");
+        renderTableForKey("llmKeysInactive");
       } catch (error) {
-        document.getElementById("llmKeys").textContent = error.message;
+        document.getElementById("llmKeysActive").textContent = error.message;
+        document.getElementById("llmKeysInactive").textContent = error.message;
       }
     }
 
@@ -559,7 +605,7 @@ def admin_ui() -> str:
     }
 
     function editLlmKey(keyId) {
-      const record = (tableData.llmKeys || []).find((item) => item.id === keyId);
+      const record = (tableData.llmKeysAll || []).find((item) => item.id === keyId);
       if (!record) {
         return;
       }
@@ -689,7 +735,9 @@ def admin_ui() -> str:
     }
 
     const tableData = {
-      llmKeys: [],
+      llmKeysAll: [],
+      llmKeysActive: [],
+      llmKeysInactive: [],
       orders: [],
       reports: [],
       users: [],
@@ -699,7 +747,8 @@ def admin_ui() -> str:
     };
 
     const tableStates = {
-      llmKeys: {search: "", sortKey: null, sortDir: "asc"},
+      llmKeysActive: {search: "", sortKey: null, sortDir: "asc"},
+      llmKeysInactive: {search: "", sortKey: null, sortDir: "asc"},
       orders: {search: "", sortKey: null, sortDir: "asc"},
       reports: {search: "", sortKey: null, sortDir: "asc"},
       users: {search: "", sortKey: null, sortDir: "asc"},
@@ -709,8 +758,47 @@ def admin_ui() -> str:
     };
 
     const tableConfigs = {
-      llmKeys: {
-        targetId: "llmKeys",
+      llmKeysActive: {
+        targetId: "llmKeysActive",
+        columns: [
+          {label: "ID", key: "id", sortable: true},
+          {label: "Провайдер", key: "provider", sortable: true},
+          {label: "Приоритет", key: "priority", sortable: true},
+          {label: "Активен", key: "is_active", sortable: true, render: (row) => row.is_active ? "Да" : "Нет"},
+          {
+            label: "В отключке",
+            key: "disabled_at",
+            sortable: true,
+            sortValue: (row) => {
+              const durationMs = getDisabledDurationMs(row);
+              return durationMs === null ? -1 : durationMs;
+            },
+            searchValue: (row) => renderDisabledDuration(row),
+            render: (row) => renderDisabledDuration(row),
+          },
+          {label: "Ключ", key: "masked_key", sortable: true},
+          {label: "Последнее использование", key: "last_used_at", sortable: true},
+          {label: "Последний успех", key: "last_success_at", sortable: true},
+          {label: "Статус", key: "last_status_code", sortable: true},
+          {label: "Успехи", key: "success_count", sortable: true},
+          {label: "Ошибки", key: "failure_count", sortable: true},
+          {label: "Ошибка", key: "last_error", sortable: true},
+          {
+            label: "Действия",
+            key: null,
+            sortable: false,
+            render: (row) => `
+              <button class="secondary" onclick="editLlmKey(${row.id})">Изменить</button>
+              <button class="secondary" onclick="toggleLlmKey(${row.id}, ${row.is_active ? "false" : "true"})">
+                ${row.is_active ? "Выключить" : "Включить"}
+              </button>
+              <button class="secondary" onclick="deleteLlmKey(${row.id})">Удалить</button>
+            `,
+          },
+        ],
+      },
+      llmKeysInactive: {
+        targetId: "llmKeysInactive",
         columns: [
           {label: "ID", key: "id", sortable: true},
           {label: "Провайдер", key: "provider", sortable: true},
@@ -1176,6 +1264,24 @@ def admin_ui() -> str:
       }
     });
 
+    const llmTabButtons = document.querySelectorAll("[data-llm-tab]");
+    const llmTabPanels = document.querySelectorAll("[data-llm-panel]");
+    let activeLlmTab = "active";
+
+    function showLlmTab(name) {
+      activeLlmTab = name;
+      llmTabPanels.forEach((panel) => {
+        panel.classList.toggle("active", panel.dataset.llmPanel === name);
+      });
+      llmTabButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.llmTab === name);
+      });
+    }
+
+    llmTabButtons.forEach((button) => {
+      button.addEventListener("click", () => showLlmTab(button.dataset.llmTab));
+    });
+
     let activePanel = "overview";
     let autoRefreshTimer = null;
 
@@ -1217,6 +1323,7 @@ def admin_ui() -> str:
     });
 
     syncLlmProviderInput();
+    showLlmTab(activeLlmTab);
     showPanel("overview");
     startAutoRefresh();
   </script>
