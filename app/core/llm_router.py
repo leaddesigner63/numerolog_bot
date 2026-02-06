@@ -216,11 +216,7 @@ class LLMRouter:
                     },
                 )
 
-                # 404 (model not found/disabled) почти всегда не лечится сменой ключа -> сразу уходим в fallback
-                if exc.status_code == 404:
-                    raise
-
-                # На 401/403/429/5xx пробуем следующий ключ (если есть)
+                # На 401/403/404/429/5xx пробуем следующий ключ (если есть)
                 if self._should_try_next_key(exc.status_code) and idx < len(api_keys):
                     continue
 
@@ -402,7 +398,7 @@ class LLMRouter:
 
     @staticmethod
     def _should_try_next_key(status_code: int | None) -> bool:
-        return status_code in {401, 403, 429, 500, 502, 503, 504}
+        return status_code in {401, 403, 404, 429, 500, 502, 503, 504}
 
     @staticmethod
     def _retry_after_seconds(resp: httpx.Response) -> float | None:
