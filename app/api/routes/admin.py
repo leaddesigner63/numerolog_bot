@@ -608,7 +608,7 @@ def admin_ui() -> str:
 
     async function loadLlmKeys() {
       try {
-        const data = await fetchJson("/llm-keys");
+        const data = await fetchJson("/llm-keys?limit=0");
         tableData.llmKeysAll = data.keys || [];
         tableData.llmKeysActive = tableData.llmKeysAll.filter((row) => row.is_active);
         tableData.llmKeysInactive = tableData.llmKeysAll.filter((row) => !row.is_active);
@@ -1490,14 +1490,15 @@ def _coerce_bool(value: object) -> bool:
 
 
 @router.get("/api/llm-keys")
-def admin_llm_keys(limit: int = 200, session: Session = Depends(_get_db_session)) -> dict:
-    rows = session.execute(
-        select(LLMApiKey).order_by(
-            LLMApiKey.provider.asc(),
-            LLMApiKey.priority.asc(),
-            LLMApiKey.created_at.desc(),
-        ).limit(limit)
-    ).scalars()
+def admin_llm_keys(limit: int | None = 0, session: Session = Depends(_get_db_session)) -> dict:
+    query = select(LLMApiKey).order_by(
+        LLMApiKey.provider.asc(),
+        LLMApiKey.priority.asc(),
+        LLMApiKey.created_at.desc(),
+    )
+    if limit is not None and limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars()
     keys = []
     for key in rows:
         keys.append(
