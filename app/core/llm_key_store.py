@@ -147,8 +147,8 @@ def resolve_llm_keys(
     extra_keys: str | None,
 ) -> list[LLMKeyItem]:
     db_keys = _filter_key_items(load_db_keys(provider))
+    env_keys = _filter_key_items(parse_env_keys(primary_key, extra_keys))
     if db_keys:
-        env_keys = _filter_key_items(parse_env_keys(primary_key, extra_keys))
         if env_keys:
             return db_keys + env_keys
         return db_keys
@@ -160,7 +160,31 @@ def resolve_llm_keys(
     synced_keys = _filter_key_items(synced_keys)
     if synced_keys:
         return synced_keys
-    return _filter_key_items(parse_env_keys(primary_key, extra_keys))
+    fallback_env_keys = env_keys
+    resolved_keys = fallback_env_keys
+    if not resolved_keys:
+        database_url_value = None
+        sqlite_fallback = None
+        try:
+            from app.core.config import settings
+
+            database_url_value = settings.database_url
+            sqlite_fallback = not bool(settings.database_url)
+        except Exception:
+            database_url_value = None
+            sqlite_fallback = None
+
+        logger.info(
+            "llm_key_store_empty_keys",
+            extra={
+                "provider": provider,
+                "db_keys_count": len(db_keys),
+                "env_keys_count": len(env_keys),
+                "sqlite_fallback": sqlite_fallback,
+                "database_url": database_url_value or "fallback_sqlite=true",
+            },
+        )
+    return resolved_keys
 
 
 def record_llm_key_usage(
