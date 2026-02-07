@@ -17,12 +17,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    report_job_status_enum = sa.Enum(
+    report_job_status_enum = postgresql.ENUM(
         "pending",
         "in_progress",
         "failed",
         "completed",
         name="reportjobstatus",
+        create_type=False,
     )
     report_job_status_enum.create(op.get_bind(), checkfirst=True)
 
@@ -43,17 +44,7 @@ def upgrade() -> None:
             ),
             nullable=False,
         ),
-        sa.Column(
-            "status",
-            sa.Enum(
-                "pending",
-                "in_progress",
-                "failed",
-                "completed",
-                name="reportjobstatus",
-            ),
-            nullable=False,
-        ),
+        sa.Column("status", report_job_status_enum, nullable=False),
         sa.Column("attempts", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("last_error", sa.Text(), nullable=True),
         sa.Column("chat_id", sa.BigInteger(), nullable=True),
@@ -81,11 +72,12 @@ def downgrade() -> None:
     op.drop_index("ix_report_jobs_order_id", table_name="report_jobs")
     op.drop_index("ix_report_jobs_user_id", table_name="report_jobs")
     op.drop_table("report_jobs")
-    report_job_status_enum = sa.Enum(
+    report_job_status_enum = postgresql.ENUM(
         "pending",
         "in_progress",
         "failed",
         "completed",
         name="reportjobstatus",
+        create_type=False,
     )
     report_job_status_enum.drop(op.get_bind(), checkfirst=True)
