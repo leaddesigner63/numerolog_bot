@@ -7,6 +7,7 @@ Create Date: 2025-09-10 00:00:00.000000
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision = "0014_add_report_jobs"
@@ -32,7 +33,14 @@ def upgrade() -> None:
         sa.Column("order_id", sa.Integer(), nullable=True),
         sa.Column(
             "tariff",
-            sa.Enum("T0", "T1", "T2", "T3", name="tariff", create_type=False),
+            postgresql.ENUM(
+                "T0",
+                "T1",
+                "T2",
+                "T3",
+                name="tariff",
+                create_type=False,
+            ),
             nullable=False,
         ),
         sa.Column(
