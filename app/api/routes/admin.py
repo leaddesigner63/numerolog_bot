@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 from datetime import datetime, timezone
 
@@ -26,30 +28,54 @@ from app.db.session import get_session_factory
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-def _extract_admin_key(request: Request) -> str | None:
-    provided_key = request.headers.get("x-admin-api-key")
-    if not provided_key:
-        auth_header = request.headers.get("authorization")
-        if auth_header:
-            if auth_header.lower().startswith("bearer "):
-                provided_key = auth_header[7:]
-            else:
-                provided_key = auth_header
-    if not provided_key:
-        provided_key = request.cookies.get("admin_api_key")
-    if not provided_key:
-        provided_key = request.query_params.get("key")
-    return provided_key
+def _admin_credentials_ready() -> bool:
+    return bool(settings.admin_login) and bool(settings.admin_password)
+
+
+def _admin_session_token() -> str | None:
+    if not _admin_credentials_ready():
+        return None
+    raw = f"{settings.admin_login}:{settings.admin_password}"
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _extract_basic_auth(request: Request) -> tuple[str | None, str | None]:
+    auth_header = request.headers.get("authorization")
+    if not auth_header:
+        return None, None
+    if not auth_header.lower().startswith("basic "):
+        return None, None
+    payload = auth_header[6:]
+    try:
+        decoded = base64.b64decode(payload).decode("utf-8")
+    except (ValueError, UnicodeDecodeError):
+        return None, None
+    if ":" not in decoded:
+        return None, None
+    login, password = decoded.split(":", 1)
+    return login, password
+
+
+def _is_valid_admin_credentials(login: str | None, password: str | None) -> bool:
+    if not _admin_credentials_ready():
+        return False
+    if login is None or password is None:
+        return False
+    return login == settings.admin_login and password == settings.admin_password
 
 
 def _require_admin(request: Request) -> None:
-    if not settings.admin_api_key:
-        raise HTTPException(status_code=503, detail="ADMIN_API_KEY is not configured")
-    provided_key = _extract_admin_key(request)
-    if not provided_key:
-        raise HTTPException(status_code=401, detail="Missing admin API key")
-    if provided_key != settings.admin_api_key:
-        raise HTTPException(status_code=403, detail="Invalid admin API key")
+    if not _admin_credentials_ready():
+        raise HTTPException(status_code=503, detail="ADMIN_LOGIN or ADMIN_PASSWORD is not configured")
+    expected_token = _admin_session_token()
+    if expected_token:
+        provided_token = request.cookies.get("admin_session")
+        if provided_token and provided_token == expected_token:
+            return
+    login, password = _extract_basic_auth(request)
+    if _is_valid_admin_credentials(login, password):
+        return
+    raise HTTPException(status_code=401, detail="Missing admin credentials")
 
 
 def _get_db_session(request: Request) -> Session:
@@ -141,30 +167,14 @@ def _admin_login_html(message: str | None = None) -> str:
 <body>
   <div class="card">
     <h1>Доступ к админке</h1>
-    <p>Введите ADMIN_API_KEY, чтобы открыть панель управления.</p>
+    <p>Введите логин и пароль для доступа к панели управления.</p>
     {alert}
-    <input id="adminKey" type="password" placeholder="ADMIN_API_KEY" autocomplete="off"/>
-    <button id="submitKey">Открыть</button>
+    <form method="post" action="/admin/login">
+      <input id="adminLogin" name="login" type="text" placeholder="Логин" autocomplete="off"/>
+      <input id="adminPassword" name="password" type="password" placeholder="Пароль" autocomplete="off"/>
+      <button type="submit">Открыть</button>
+    </form>
   </div>
-  <script>
-    const input = document.getElementById("adminKey");
-    const button = document.getElementById("submitKey");
-    function submitKey() {{
-      const key = input.value.trim();
-      if (!key) {{
-        return;
-      }}
-      const url = new URL(window.location.href);
-      url.searchParams.set("key", key);
-      window.location.replace(url.toString());
-    }}
-    button.addEventListener("click", submitKey);
-    input.addEventListener("keydown", (event) => {{
-      if (event.key === "Enter") {{
-        submitKey();
-      }}
-    }});
-  </script>
 </body>
 </html>
 """
@@ -172,20 +182,17 @@ def _admin_login_html(message: str | None = None) -> str:
 
 @router.get("", response_class=HTMLResponse)
 def admin_ui(request: Request) -> HTMLResponse:
-    if not settings.admin_api_key:
+    if not _admin_credentials_ready():
         return HTMLResponse(
-            _admin_login_html("ADMIN_API_KEY не настроен на сервере."),
+            _admin_login_html("ADMIN_LOGIN или ADMIN_PASSWORD не настроены на сервере."),
             status_code=503,
         )
-    provided_key = _extract_admin_key(request)
-    if not provided_key:
+    expected_token = _admin_session_token()
+    if not expected_token:
         return HTMLResponse(_admin_login_html(), status_code=401)
-    if provided_key != settings.admin_api_key:
-        return HTMLResponse(_admin_login_html("Неверный ключ доступа."), status_code=403)
-    if request.query_params.get("key"):
-        response = RedirectResponse(url="/admin", status_code=303)
-        response.set_cookie("admin_api_key", provided_key, httponly=True, samesite="Lax")
-        return response
+    provided_token = request.cookies.get("admin_session")
+    if provided_token != expected_token:
+        return HTMLResponse(_admin_login_html(), status_code=401)
     auto_refresh_seconds = settings.admin_auto_refresh_seconds or 0
     html = """
 <!doctype html>
@@ -457,16 +464,10 @@ def admin_ui(request: Request) -> HTMLResponse:
 <body>
   <header>
     <h1>Админка Numerolog Bot</h1>
-    <div class="row">
-      <div class="field">
-        <label for="apiKey">ADMIN_API_KEY</label>
-        <input id="apiKey" type="password" placeholder="Введите ключ" />
-      </div>
-      <div class="field" style="align-self: flex-end;">
-        <button class="secondary" onclick="saveKey()">Сохранить ключ</button>
-      </div>
+    <div class="row" style="align-items: center;">
+      <div class="muted">Доступ по логину и паролю</div>
+      <button class="secondary" onclick="logout()">Выйти</button>
     </div>
-    <div id="apiKeyStatus" class="api-key-status"></div>
   </header>
   <main>
     <aside class="sidebar">
@@ -675,62 +676,9 @@ def admin_ui(request: Request) -> HTMLResponse:
   <div id="copyToast" class="copy-toast">Скопировано в буфер обмена</div>
   <script>
     const autoRefreshSeconds = Number("__ADMIN_AUTO_REFRESH_SECONDS__") || 0;
-    const apiKeyInput = document.getElementById("apiKey");
-    const apiKeyStatus = document.getElementById("apiKeyStatus");
-
-    function readStoredAdminKey() {
-      try {
-        return localStorage.getItem("adminApiKey") || "";
-      } catch (error) {
-        return "";
-      }
-    }
-
-    function storeAdminKey(value) {
-      try {
-        localStorage.setItem("adminApiKey", value);
-        return true;
-      } catch (error) {
-        return false;
-      }
-    }
-
-    function setApiKeyStatus(message, tone = "") {
-      if (!apiKeyStatus) {
-        return;
-      }
-      apiKeyStatus.textContent = message || "";
-      apiKeyStatus.classList.remove("ok", "danger");
-      if (tone) {
-        apiKeyStatus.classList.add(tone);
-      }
-    }
-
-    apiKeyInput.value = readStoredAdminKey();
-
-    function saveKey() {
-      const keyValue = apiKeyInput.value.trim();
-      const stored = storeAdminKey(keyValue);
-      if (stored) {
-        setApiKeyStatus("Ключ сохранён. Данные обновлены.", "ok");
-      } else {
-        setApiKeyStatus("Не удалось сохранить ключ в localStorage. Ключ действует до перезагрузки.", "danger");
-      }
-      const loader = loaders[activePanel] || loadOverview;
-      if (loader) {
-        loader();
-      }
-    }
-
-    function headers() {
-      const key = apiKeyInput.value.trim();
-      if (!key) {
-        return {};
-      }
-      return {
-        "x-admin-api-key": key,
-        "Authorization": `Bearer ${key}`,
-      };
+    async function logout() {
+      await fetch("/admin/logout", { method: "POST" });
+      window.location.reload();
     }
 
     async function fetchJson(path, options = {}) {
@@ -738,7 +686,6 @@ def admin_ui(request: Request) -> HTMLResponse:
         ...options,
         headers: {
           "Content-Type": "application/json",
-          ...headers(),
           ...(options.headers || {})
         }
       });
@@ -755,7 +702,6 @@ def admin_ui(request: Request) -> HTMLResponse:
         method: options.method || "POST",
         body: formData,
         headers: {
-          ...headers(),
           ...(options.headers || {})
         }
       });
@@ -789,7 +735,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         const status = data.database_ok ? "ok" : "bad";
         document.getElementById("health").innerHTML = `
           <div class="status ${status}">База данных: ${data.database_ok ? "OK" : "ошибка"}</div>
-          <div class="message">ENV: ${data.env} • Admin API: ${data.admin_api_enabled}</div>
+          <div class="message">ENV: ${data.env} • Админ-доступ: ${data.admin_auth_enabled}</div>
           <div class="message">Последняя проверка: ${data.checked_at}</div>
         `;
       } catch (error) {
@@ -1622,8 +1568,29 @@ def admin_ui(request: Request) -> HTMLResponse:
 </html>
 """
     response = HTMLResponse(html.replace("__ADMIN_AUTO_REFRESH_SECONDS__", str(auto_refresh_seconds)))
-    if request.query_params.get("key"):
-        response.set_cookie("admin_api_key", provided_key, httponly=True, samesite="Lax")
+    return response
+
+
+@router.post("/login")
+async def admin_login(login: str = Form(...), password: str = Form(...)) -> HTMLResponse:
+    if not _admin_credentials_ready():
+        return HTMLResponse(
+            _admin_login_html("ADMIN_LOGIN или ADMIN_PASSWORD не настроены на сервере."),
+            status_code=503,
+        )
+    if not _is_valid_admin_credentials(login, password):
+        return HTMLResponse(_admin_login_html("Неверный логин или пароль."), status_code=403)
+    response = RedirectResponse(url="/admin", status_code=303)
+    session_token = _admin_session_token()
+    if session_token:
+        response.set_cookie("admin_session", session_token, httponly=True, samesite="Lax")
+    return response
+
+
+@router.post("/logout")
+async def admin_logout() -> RedirectResponse:
+    response = RedirectResponse(url="/admin", status_code=303)
+    response.delete_cookie("admin_session")
     return response
 
 
@@ -1662,7 +1629,7 @@ def admin_health(request: Request) -> dict:
         "env": settings.env,
         "database_ok": database_ok,
         "database_error": error_detail,
-        "admin_api_enabled": bool(settings.admin_api_key),
+        "admin_auth_enabled": _admin_credentials_ready(),
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
 
