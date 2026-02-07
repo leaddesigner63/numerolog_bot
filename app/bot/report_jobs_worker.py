@@ -26,7 +26,11 @@ class ReportJobWorker:
             try:
                 await self._process_pending_jobs(bot)
             except Exception as exc:
-                self._logger.warning("report_job_worker_failed", extra={"error": str(exc)})
+                self._logger.warning(
+                    "report_job_worker_failed",
+                    extra={"error": str(exc)},
+                    exc_info=True,
+                )
             await asyncio.sleep(poll_interval)
 
     async def _process_pending_jobs(self, bot: Bot) -> None:
@@ -76,26 +80,38 @@ class ReportJobWorker:
 
     async def _handle_job(self, bot: Bot, job_id: int) -> None:
         report = await report_service.generate_report_by_job(job_id=job_id)
+        job_status: ReportJobStatus | None = None
+        chat_id: int | None = None
+        telegram_user_id: int | None = None
+        report_meta = None
+        pdf_bytes = None
+
         with get_session() as session:
             job = session.get(ReportJob, job_id)
             if not job:
                 return
             user = session.get(User, job.user_id)
             telegram_user_id = user.telegram_user_id if user else None
-            job_status = job.status.value
+            chat_id = job.chat_id
+            job_status = job.status
             if job.status in {ReportJobStatus.COMPLETED, ReportJobStatus.FAILED}:
                 job.lock_token = None
                 job.locked_at = None
                 session.add(job)
 
-            if telegram_user_id:
+            if telegram_user_id and job_status:
                 screen_manager.update_state(
                     telegram_user_id,
                     report_job_id=str(job.id),
-                    report_job_status=job_status,
+                    report_job_status=job_status.value,
                 )
 
-            if job.status == ReportJobStatus.COMPLETED and report and telegram_user_id and job.chat_id:
+            if (
+                job_status == ReportJobStatus.COMPLETED
+                and report
+                and telegram_user_id
+                and chat_id
+            ):
                 screen_manager.update_state(
                     telegram_user_id,
                     report_text=report.report_text,
@@ -103,29 +119,26 @@ class ReportJobWorker:
                 )
                 await screen_manager.show_screen(
                     bot=bot,
-                    chat_id=job.chat_id,
+                    chat_id=chat_id,
                     user_id=telegram_user_id,
                     screen_id="S7",
                 )
                 report_meta = screens_handler._get_report_pdf_meta(report)
                 pdf_bytes = screens_handler._get_report_pdf_bytes(session, report)
-            else:
-                report_meta = None
-                pdf_bytes = None
 
-        if job.status == ReportJobStatus.COMPLETED and report and telegram_user_id and job.chat_id:
+        if job_status == ReportJobStatus.COMPLETED and report and telegram_user_id and chat_id:
             await screens_handler._send_report_pdf(
                 bot,
-                job.chat_id,
+                chat_id,
                 report_meta,
                 pdf_bytes=pdf_bytes,
                 username=None,
                 user_id=telegram_user_id,
             )
-        elif job.status == ReportJobStatus.FAILED and telegram_user_id and job.chat_id:
+        elif job_status == ReportJobStatus.FAILED and telegram_user_id and chat_id:
             await screen_manager.show_screen(
                 bot=bot,
-                chat_id=job.chat_id,
+                chat_id=chat_id,
                 user_id=telegram_user_id,
                 screen_id="S6",
             )
