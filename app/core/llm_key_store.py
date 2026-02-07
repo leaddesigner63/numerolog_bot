@@ -43,7 +43,7 @@ def load_db_keys(provider: str) -> list[LLMKeyItem]:
     try:
         from app.db.models import LLMApiKey
         from app.db.session import get_session_factory
-        from sqlalchemy import func, select
+        from sqlalchemy import func, or_, select
     except Exception:
         logger.warning("llm_key_store_db_import_failed")
         return []
@@ -60,7 +60,7 @@ def load_db_keys(provider: str) -> list[LLMKeyItem]:
             select(LLMApiKey)
             .where(
                 func.lower(func.trim(LLMApiKey.provider)) == func.lower(func.trim(provider)),
-                LLMApiKey.is_active.is_(True),
+                or_(LLMApiKey.is_active.is_(True), LLMApiKey.is_active.is_(None)),
             )
             .order_by(LLMApiKey.priority.asc(), LLMApiKey.created_at.asc())
         ).scalars()
@@ -124,7 +124,10 @@ def ensure_env_keys_in_db(
 
         refreshed = session.execute(
             select(LLMApiKey)
-            .where(LLMApiKey.provider == provider, LLMApiKey.is_active.is_(True))
+            .where(
+                LLMApiKey.provider == provider,
+                or_(LLMApiKey.is_active.is_(True), LLMApiKey.is_active.is_(None)),
+            )
             .order_by(LLMApiKey.priority.asc(), LLMApiKey.created_at.asc())
         ).scalars()
         return [
