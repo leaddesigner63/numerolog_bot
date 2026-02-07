@@ -26,40 +26,7 @@ from app.db.session import get_session_factory
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-def _parse_allowed_admin_ips(value: str | None) -> set[str]:
-    if not value:
-        return set()
-    parts = [item.strip() for item in value.replace("\n", ",").split(",")]
-    return {item for item in parts if item}
-
-
-def _extract_client_ip(request: Request) -> str | None:
-    forwarded_for = request.headers.get("x-forwarded-for")
-    if forwarded_for:
-        for part in forwarded_for.split(","):
-            value = part.strip()
-            if value:
-                return value
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip.strip()
-    forwarded = request.headers.get("forwarded")
-    if forwarded:
-        for item in forwarded.split(","):
-            for part in item.split(";"):
-                if "for=" in part:
-                    value = part.split("for=", 1)[1].strip().strip('"')
-                    if value:
-                        return value
-    return request.client.host if request.client else None
-
-
 def _require_admin(request: Request) -> None:
-    allowed_ips = _parse_allowed_admin_ips(settings.admin_allowed_ips)
-    if allowed_ips:
-        client_host = _extract_client_ip(request)
-        if not client_host or client_host not in allowed_ips:
-            raise HTTPException(status_code=403, detail="Admin access denied")
     if not settings.admin_api_key:
         raise HTTPException(status_code=503, detail="ADMIN_API_KEY is not configured")
     provided_key = request.headers.get("x-admin-api-key")
