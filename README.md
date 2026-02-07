@@ -82,6 +82,8 @@ SCREEN_TITLE_ENABLED=true
 SCREEN_IMAGES_DIR=app/assets/screen_images
 # Ключ доступа к веб-админке (/admin):
 ADMIN_API_KEY=change_me
+# (Опционально) IP-адреса, которым разрешён доступ к админке (через запятую):
+ADMIN_ALLOWED_IPS=203.0.113.10,203.0.113.11
 # Интервал автообновления админки (секунды, 0 отключает):
 ADMIN_AUTO_REFRESH_SECONDS=0
 # Отключение фильтрации результата (post-фильтр отчёта):
@@ -137,6 +139,7 @@ python -m app.bot.polling
 
 Админка доступна по HTTP на адресе `http://<host>:<port>/admin` после запуска API.  
 Для доступа нужен ключ `ADMIN_API_KEY` из `.env` — введите его в интерфейсе (ключ хранится только в localStorage браузера).  
+Если задан `ADMIN_ALLOWED_IPS`, доступ разрешается только указанным IP-адресам (например, публичному IP вашей админской сети или IP вашего reverse-proxy).  
 Интервал автообновления разделов админки задаётся переменной `ADMIN_AUTO_REFRESH_SECONDS` (0 отключает автообновление).  
 
 Что доступно:
@@ -437,6 +440,7 @@ sudo systemctl restart numerolog.target
   и в админке, генерация отчёта блокируется и показывается экран “Сервис временно недоступен”).
 - `PRODAMUS_FORM_URL`/`CLOUDPAYMENTS_PUBLIC_ID` — ключи для формирования платёжной ссылки (при отсутствии бот сообщает, что оплата недоступна).
   Если в веб-админке заведены LLM-ключи, значения из `.env` для LLM игнорируются.
+- `ADMIN_API_KEY` — ключ доступа к веб-админке.
 
 Дополнительные параметры (см. `.env.example`):
 
@@ -456,6 +460,7 @@ sudo systemctl restart numerolog.target
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_ENDPOINT_URL` (если используете bucket)
 - `ENV`, `LOG_LEVEL`
 - `MONITORING_WEBHOOK_URL` (вебхук мониторинга для события `report_generate_failed`)
+- `ADMIN_ALLOWED_IPS` (опционально, список IP, которым разрешён доступ к админке, через запятую)
 
 ## Автодеплой
 
