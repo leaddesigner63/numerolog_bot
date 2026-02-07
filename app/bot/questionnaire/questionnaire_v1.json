@@ -1,9 +1,9 @@
 {
   "version": "v1",
-  "start_question_id": "Ваш опыт",
+  "start_question_id": "Расширенная анкета",
   "questions": [
     {
-      "id": "experience",
+      "id": "Ваш опыт",
       "type": "text",
       "text": "Опишите ваш опыт: проекты, роли или задачи, которые давались лучше всего.",
       "required": true,
