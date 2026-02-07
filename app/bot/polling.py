@@ -1,10 +1,12 @@
 import asyncio
+import contextlib
 import logging
 
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.bot.router import setup_bot_router
+from app.bot.report_jobs_worker import report_job_worker
 from app.core.config import settings
 from app.core.logging import setup_logging
 
@@ -20,7 +22,13 @@ async def main() -> None:
     setup_bot_router(dispatcher)
 
     logger.info("Starting bot polling")
-    await dispatcher.start_polling(bot)
+    worker_task = asyncio.create_task(report_job_worker.run(bot))
+    try:
+        await dispatcher.start_polling(bot)
+    finally:
+        worker_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await worker_task
 
 
 if __name__ == "__main__":

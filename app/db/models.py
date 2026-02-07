@@ -50,6 +50,13 @@ class ReportModel(enum.StrEnum):
     CHATGPT = "chatgpt"
 
 
+class ReportJobStatus(enum.StrEnum):
+    PENDING = "pending"
+    IN_PROGRESS = "in_progress"
+    FAILED = "failed"
+    COMPLETED = "completed"
+
+
 class FeedbackStatus(enum.StrEnum):
     SENT = "sent"
     FAILED = "failed"
@@ -81,6 +88,7 @@ class User(Base):
     profile: Mapped["UserProfile"] = relationship(back_populates="user", uselist=False)
     orders: Mapped[list["Order"]] = relationship(back_populates="user")
     reports: Mapped[list["Report"]] = relationship(back_populates="user")
+    report_jobs: Mapped[list["ReportJob"]] = relationship(back_populates="user")
     free_limit: Mapped["FreeLimit"] = relationship(back_populates="user", uselist=False)
     feedback_messages: Mapped[list["FeedbackMessage"]] = relationship(
         back_populates="user"
@@ -164,6 +172,40 @@ class Report(Base):
 
     user: Mapped[User] = relationship(back_populates="reports")
     order: Mapped[Order | None] = relationship(back_populates="report")
+
+
+class ReportJob(Base):
+    __tablename__ = "report_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    order_id: Mapped[int | None] = mapped_column(
+        ForeignKey("orders.id", ondelete="SET NULL"), index=True
+    )
+    tariff: Mapped[Tariff] = mapped_column(
+        Enum(Tariff, values_callable=_enum_values, name="tariff"), index=True
+    )
+    status: Mapped[ReportJobStatus] = mapped_column(
+        Enum(ReportJobStatus, values_callable=_enum_values, name="reportjobstatus"),
+        index=True,
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    last_error: Mapped[str | None] = mapped_column(Text)
+    chat_id: Mapped[int | None] = mapped_column(BigInteger)
+    lock_token: Mapped[str | None] = mapped_column(String(64), index=True)
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user: Mapped[User] = relationship(back_populates="report_jobs")
 
 
 class FreeLimit(Base):

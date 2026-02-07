@@ -16,10 +16,7 @@ from app.bot.screens import build_report_wait_message
 from app.bot.handlers.profile import start_profile_wizard
 from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
-from app.core.llm_key_store import resolve_llm_keys
 from app.core.pdf_service import pdf_service
-from app.core.monitoring import send_monitoring_event
-from app.core.report_service import report_service
 from app.db.models import (
     FreeLimit,
     Order,
@@ -28,6 +25,8 @@ from app.db.models import (
     QuestionnaireResponse,
     QuestionnaireStatus,
     Report,
+    ReportJob,
+    ReportJobStatus,
     Tariff,
     User,
     UserProfile,
@@ -205,69 +204,6 @@ async def _ensure_report_delivery(callback: CallbackQuery, screen_id: str) -> bo
     return delivered
 
 
-def _resolve_report_attempts() -> int:
-    min_attempts = 2
-    try:
-        gemini_keys = resolve_llm_keys(
-            provider="gemini",
-            primary_key=settings.gemini_api_key,
-            extra_keys=settings.gemini_api_keys,
-        )
-        openai_keys = resolve_llm_keys(
-            provider="openai",
-            primary_key=settings.openai_api_key,
-            extra_keys=settings.openai_api_keys,
-        )
-        total_keys = len(gemini_keys) + len(openai_keys)
-    except Exception as exc:
-        logger.warning("llm_attempts_calc_failed", extra={"error": str(exc)})
-        return min_attempts
-    if total_keys <= 0:
-        return min_attempts
-    return max(min_attempts, total_keys)
-
-
-async def _generate_report_with_retry(
-    callback: CallbackQuery,
-    *,
-    user_id: int,
-    state: dict[str, Any],
-    attempts: int | None = None,
-) -> Any | None:
-    resolved_attempts = attempts or _resolve_report_attempts()
-    for attempt in range(1, max(resolved_attempts, 1) + 1):
-        try:
-            report = await report_service.generate_report(user_id=user_id, state=state)
-        except Exception as exc:
-            logger.warning(
-                "report_generate_failed",
-                extra={
-                    "user_id": callback.from_user.id,
-                    "attempt": attempt,
-                    "error": str(exc),
-                },
-            )
-            report = None
-        if report:
-            return report
-        if attempt < resolved_attempts and callback.message:
-            await screen_manager.send_ephemeral_message(
-                callback.message,
-                "Извините, произошла техническая заминка при подготовке отчёта. Сейчас повторю запрос.",
-                user_id=callback.from_user.id,
-            )
-            await asyncio.sleep(1)
-    await send_monitoring_event(
-        "report_generate_failed",
-        {
-            "user_id": callback.from_user.id,
-            "attempts": resolved_attempts,
-            "screen_id": screen_manager.update_state(callback.from_user.id).screen_id,
-        },
-    )
-    return None
-
-
 async def _send_notice(callback: CallbackQuery, text: str, **kwargs: Any) -> None:
     await screen_manager.send_ephemeral_message(
         callback.message,
@@ -301,34 +237,6 @@ def _missing_payment_status_config(provider: PaymentProviderEnum) -> list[str]:
         if not settings.cloudpayments_api_secret:
             missing.append("CLOUDPAYMENTS_API_SECRET")
     return missing
-
-
-async def _notify_llm_unavailable(callback: CallbackQuery) -> bool:
-    gemini_keys = resolve_llm_keys(
-        provider="gemini",
-        primary_key=settings.gemini_api_key,
-        extra_keys=settings.gemini_api_keys,
-    )
-    openai_keys = resolve_llm_keys(
-        provider="openai",
-        primary_key=settings.openai_api_key,
-        extra_keys=settings.openai_api_keys,
-    )
-    if gemini_keys or openai_keys:
-        return True
-    logger.warning(
-        "llm_keys_missing",
-        extra={
-            "user_id": callback.from_user.id,
-            "keys": [
-                "GEMINI_API_KEY",
-                "GEMINI_API_KEYS",
-                "OPENAI_API_KEY",
-                "OPENAI_API_KEYS",
-            ],
-        },
-    )
-    return False
 
 
 def _get_payment_provider() -> PaymentProviderEnum:
@@ -453,6 +361,110 @@ def _refresh_report_state(
             report_text=report.report_text,
             report_model=report.model_used.value if report.model_used else None,
         )
+
+
+def _refresh_report_job_state(
+    session,
+    telegram_user_id: int,
+    *,
+    job_id: int | None = None,
+) -> ReportJob | None:
+    user = _get_or_create_user(session, telegram_user_id)
+    resolved_job_id = job_id
+    if resolved_job_id is None:
+        state_snapshot = screen_manager.update_state(telegram_user_id)
+        resolved_job_id = _safe_int(state_snapshot.data.get("report_job_id"))
+    if not resolved_job_id:
+        screen_manager.update_state(telegram_user_id, report_job_status=None)
+        return None
+    job = session.get(ReportJob, resolved_job_id)
+    if not job or job.user_id != user.id:
+        screen_manager.update_state(telegram_user_id, report_job_status=None)
+        return None
+    screen_manager.update_state(
+        telegram_user_id,
+        report_job_id=str(job.id),
+        report_job_status=job.status.value,
+        report_job_attempts=job.attempts,
+    )
+    return job
+
+
+def _create_report_job(
+    session,
+    *,
+    user: User,
+    tariff_value: str | None,
+    order_id: int | None,
+    chat_id: int | None,
+) -> ReportJob | None:
+    if not tariff_value:
+        return None
+    try:
+        tariff = Tariff(tariff_value)
+    except ValueError:
+        return None
+    query = select(ReportJob).where(
+        ReportJob.user_id == user.id,
+        ReportJob.tariff == tariff,
+        ReportJob.status.in_([ReportJobStatus.PENDING, ReportJobStatus.IN_PROGRESS]),
+    )
+    if order_id is None:
+        query = query.where(ReportJob.order_id.is_(None))
+    else:
+        query = query.where(ReportJob.order_id == order_id)
+    existing_job = (
+        session.execute(query.order_by(ReportJob.created_at.desc()).limit(1))
+        .scalars()
+        .first()
+    )
+    if existing_job:
+        existing_job.chat_id = chat_id
+        session.add(existing_job)
+        screen_manager.update_state(
+            user.telegram_user_id,
+            report_job_id=str(existing_job.id),
+            report_job_status=existing_job.status.value,
+            report_job_attempts=existing_job.attempts,
+        )
+        return existing_job
+    job = ReportJob(
+        user_id=user.id,
+        order_id=order_id,
+        tariff=tariff,
+        status=ReportJobStatus.PENDING,
+        attempts=0,
+        chat_id=chat_id,
+    )
+    session.add(job)
+    session.flush()
+    screen_manager.update_state(
+        user.telegram_user_id,
+        report_job_id=str(job.id),
+        report_job_status=job.status.value,
+        report_job_attempts=job.attempts,
+    )
+    return job
+
+
+def _requeue_report_job(
+    session,
+    *,
+    telegram_user_id: int,
+    job: ReportJob,
+) -> ReportJob:
+    job.status = ReportJobStatus.PENDING
+    job.last_error = None
+    job.lock_token = None
+    job.locked_at = None
+    session.add(job)
+    screen_manager.update_state(
+        telegram_user_id,
+        report_job_id=str(job.id),
+        report_job_status=job.status.value,
+        report_job_attempts=job.attempts,
+    )
+    return job
 
 
 def _get_latest_report(
@@ -861,14 +873,20 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     await _safe_callback_answer(callback)
                     return
                 _refresh_questionnaire_state(session, callback.from_user.id)
-        if screen_id == "S7":
+        if screen_id in {"S6", "S7"}:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             with get_session() as session:
-                _refresh_report_state(
-                    session,
-                    callback.from_user.id,
-                    tariff_value=state_snapshot.data.get("selected_tariff"),
-                )
+                job = _refresh_report_job_state(session, callback.from_user.id)
+                if job and job.status == ReportJobStatus.COMPLETED and screen_id == "S6":
+                    screen_id = "S7"
+                if job and job.status != ReportJobStatus.COMPLETED and screen_id == "S7":
+                    screen_id = "S6"
+                if screen_id == "S7":
+                    _refresh_report_state(
+                        session,
+                        callback.from_user.id,
+                        tariff_value=state_snapshot.data.get("selected_tariff"),
+                    )
         await screen_manager.show_screen(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
@@ -1150,76 +1168,26 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         screen_manager.update_state(callback.from_user.id, profile_flow=None)
         next_screen = "S5" if tariff in {Tariff.T2.value, Tariff.T3.value} else "S6"
         if next_screen == "S6":
+            with get_session() as session:
+                user = _get_or_create_user(session, callback.from_user.id)
+                order_id = _safe_int(screen_manager.update_state(callback.from_user.id).data.get("order_id"))
+                job = _create_report_job(
+                    session,
+                    user=user,
+                    tariff_value=tariff,
+                    order_id=order_id,
+                    chat_id=callback.message.chat.id if callback.message else None,
+                )
+                if not job:
+                    await _send_notice(callback, "Не удалось создать задание на генерацию.")
+                    await _safe_callback_answer(callback)
+                    return
             await screen_manager.show_screen(
                 bot=callback.bot,
                 chat_id=callback.message.chat.id,
                 user_id=callback.from_user.id,
                 screen_id="S6",
             )
-            await _safe_callback_answer(callback)
-            if not await _notify_llm_unavailable(callback):
-                await screen_manager.show_screen(
-                    bot=callback.bot,
-                    chat_id=callback.message.chat.id,
-                    user_id=callback.from_user.id,
-                    screen_id="S10",
-                )
-                await _safe_callback_answer(callback)
-                return
-            with get_session() as session:
-                user = _get_or_create_user(session, callback.from_user.id)
-                user_id = user.id
-            report = await _generate_report_with_retry(
-                callback,
-                user_id=user_id,
-                state=screen_manager.update_state(callback.from_user.id).data,
-            )
-            if report:
-                screen_manager.update_state(
-                    callback.from_user.id,
-                    report_text=report.text,
-                    report_provider=report.provider,
-                    report_model=report.model,
-                )
-                await _run_report_delay(
-                    callback.bot,
-                    callback.message.chat.id,
-                    callback.from_user.id,
-                )
-                await _ensure_report_delivery(callback, "S7")
-                with get_session() as session:
-                    latest_report = _get_latest_report(
-                        session,
-                        callback.from_user.id,
-                        tariff_value=tariff,
-                    )
-                    report_meta = _get_report_pdf_meta(latest_report)
-                    latest_report_id = report_meta.get("id") if report_meta else None
-                    pdf_bytes = (
-                        _get_report_pdf_bytes(session, latest_report)
-                        if latest_report
-                        else None
-                    )
-                if latest_report_id and not await _send_report_pdf(
-                    callback.bot,
-                    callback.message.chat.id,
-                    report_meta,
-                    pdf_bytes=pdf_bytes,
-                    username=callback.from_user.username,
-                    user_id=callback.from_user.id,
-                ):
-                    await _send_notice(
-                        callback,
-                        "Не удалось сформировать PDF автоматически. "
-                        "Вы можете попробовать кнопку «Выгрузить PDF»."
-                    )
-            else:
-                await screen_manager.show_screen(
-                    bot=callback.bot,
-                    chat_id=callback.message.chat.id,
-                    user_id=callback.from_user.id,
-                    screen_id="S10",
-                )
         else:
             with get_session() as session:
                 _refresh_questionnaire_state(session, callback.from_user.id)
@@ -1309,70 +1277,91 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             user_id=callback.from_user.id,
             screen_id="S6",
         )
-        await _safe_callback_answer(callback)
-        if not await _notify_llm_unavailable(callback):
-            await screen_manager.show_screen(
-                bot=callback.bot,
-                chat_id=callback.message.chat.id,
-                user_id=callback.from_user.id,
-                screen_id="S10",
-            )
-            await _safe_callback_answer(callback)
-            return
         with get_session() as session:
             user = _get_or_create_user(session, callback.from_user.id)
-            user_id = user.id
-        report = await _generate_report_with_retry(
-            callback,
-            user_id=user_id,
-            state=screen_manager.update_state(callback.from_user.id).data,
-        )
-        if report:
-            screen_manager.update_state(
-                callback.from_user.id,
-                report_text=report.text,
-                report_provider=report.provider,
-                report_model=report.model,
+            order_id = _safe_int(state_snapshot.data.get("order_id"))
+            job = _create_report_job(
+                session,
+                user=user,
+                tariff_value=tariff,
+                order_id=order_id,
+                chat_id=callback.message.chat.id if callback.message else None,
             )
-            await _run_report_delay(
-                callback.bot,
-                callback.message.chat.id,
-                callback.from_user.id,
-            )
-            await _ensure_report_delivery(callback, "S7")
+            if not job:
+                await _send_notice(callback, "Не удалось создать задание на генерацию.")
+                await _safe_callback_answer(callback)
+                return
+        await _safe_callback_answer(callback)
+        return
+
+    if callback.data == "report:retry":
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        tariff = state_snapshot.data.get("selected_tariff")
+        if not tariff:
+            await _send_notice(callback, "Сначала выберите тариф.")
+            await _safe_callback_answer(callback)
+            return
+        if tariff in {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}:
+            order_id = _safe_int(state_snapshot.data.get("order_id"))
+            if not order_id:
+                await _send_notice(callback, "Сначала выберите тариф и завершите оплату.")
+                await _safe_callback_answer(callback)
+                return
             with get_session() as session:
-                latest_report = _get_latest_report(
+                order = session.get(Order, order_id)
+                if not order or order.status != OrderStatus.PAID:
+                    if order:
+                        screen_manager.update_state(
+                            callback.from_user.id, **_refresh_order_state(order)
+                        )
+                    await _send_notice(callback, "Оплата ещё не подтверждена.")
+                    await screen_manager.show_screen(
+                        bot=callback.bot,
+                        chat_id=callback.message.chat.id,
+                        user_id=callback.from_user.id,
+                        screen_id="S3",
+                    )
+                    await _safe_callback_answer(callback)
+                    return
+        if tariff in {Tariff.T2.value, Tariff.T3.value}:
+            questionnaire = state_snapshot.data.get("questionnaire") or {}
+            if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
+                await _send_notice(callback, "Анкета ещё не заполнена.")
+                await _safe_callback_answer(callback)
+                return
+        with get_session() as session:
+            user = _get_or_create_user(session, callback.from_user.id)
+            job = _refresh_report_job_state(session, callback.from_user.id)
+            if job and job.status == ReportJobStatus.COMPLETED:
+                _refresh_report_state(
                     session,
                     callback.from_user.id,
                     tariff_value=tariff,
                 )
-                report_meta = _get_report_pdf_meta(latest_report)
-                latest_report_id = report_meta.get("id") if report_meta else None
-                pdf_bytes = (
-                    _get_report_pdf_bytes(session, latest_report)
-                    if latest_report
-                    else None
+                await screen_manager.show_screen(
+                    bot=callback.bot,
+                    chat_id=callback.message.chat.id,
+                    user_id=callback.from_user.id,
+                    screen_id="S7",
                 )
-            if latest_report_id and not await _send_report_pdf(
-                callback.bot,
-                callback.message.chat.id,
-                report_meta,
-                pdf_bytes=pdf_bytes,
-                username=callback.from_user.username,
-                user_id=callback.from_user.id,
-            ):
-                await _send_notice(
-                    callback,
-                    "Не удалось сформировать PDF автоматически. "
-                    "Вы можете попробовать кнопку «Выгрузить PDF»."
+                await _safe_callback_answer(callback)
+                return
+            if job and job.status == ReportJobStatus.FAILED:
+                _requeue_report_job(session, telegram_user_id=callback.from_user.id, job=job)
+            if not job:
+                _create_report_job(
+                    session,
+                    user=user,
+                    tariff_value=tariff,
+                    order_id=_safe_int(state_snapshot.data.get("order_id")),
+                    chat_id=callback.message.chat.id if callback.message else None,
                 )
-        else:
-            await screen_manager.show_screen(
-                bot=callback.bot,
-                chat_id=callback.message.chat.id,
-                user_id=callback.from_user.id,
-                screen_id="S10",
-            )
+        await screen_manager.show_screen(
+            bot=callback.bot,
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+            screen_id="S6",
+        )
         await _safe_callback_answer(callback)
         return
 
