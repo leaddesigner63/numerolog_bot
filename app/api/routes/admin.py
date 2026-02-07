@@ -126,6 +126,8 @@ def admin_ui() -> str:
       justify-content: space-between;
       padding: 24px;
       border-bottom: 1px solid #2a2f3a;
+      flex-wrap: wrap;
+      gap: 12px;
     }
     header h1 {
       margin: 0;
@@ -325,6 +327,17 @@ def admin_ui() -> str:
       font-size: 12px;
       color: var(--muted);
     }
+    .api-key-status {
+      margin-top: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .api-key-status.ok {
+      color: var(--ok);
+    }
+    .api-key-status.danger {
+      color: var(--danger);
+    }
     .tabs {
       display: flex;
       gap: 8px;
@@ -366,6 +379,7 @@ def admin_ui() -> str:
         <button class="secondary" onclick="saveKey()">Сохранить ключ</button>
       </div>
     </div>
+    <div id="apiKeyStatus" class="api-key-status"></div>
   </header>
   <main>
     <aside class="sidebar">
@@ -575,11 +589,50 @@ def admin_ui() -> str:
   <script>
     const autoRefreshSeconds = Number("__ADMIN_AUTO_REFRESH_SECONDS__") || 0;
     const apiKeyInput = document.getElementById("apiKey");
-    apiKeyInput.value = localStorage.getItem("adminApiKey") || "";
+    const apiKeyStatus = document.getElementById("apiKeyStatus");
+
+    function readStoredAdminKey() {
+      try {
+        return localStorage.getItem("adminApiKey") || "";
+      } catch (error) {
+        return "";
+      }
+    }
+
+    function storeAdminKey(value) {
+      try {
+        localStorage.setItem("adminApiKey", value);
+        return true;
+      } catch (error) {
+        return false;
+      }
+    }
+
+    function setApiKeyStatus(message, tone = "") {
+      if (!apiKeyStatus) {
+        return;
+      }
+      apiKeyStatus.textContent = message || "";
+      apiKeyStatus.classList.remove("ok", "danger");
+      if (tone) {
+        apiKeyStatus.classList.add(tone);
+      }
+    }
+
+    apiKeyInput.value = readStoredAdminKey();
 
     function saveKey() {
-      localStorage.setItem("adminApiKey", apiKeyInput.value.trim());
-      alert("Ключ сохранён локально в браузере.");
+      const keyValue = apiKeyInput.value.trim();
+      const stored = storeAdminKey(keyValue);
+      if (stored) {
+        setApiKeyStatus("Ключ сохранён. Данные обновлены.", "ok");
+      } else {
+        setApiKeyStatus("Не удалось сохранить ключ в localStorage. Ключ действует до перезагрузки.", "danger");
+      }
+      const loader = loaders[activePanel] || loadOverview;
+      if (loader) {
+        loader();
+      }
     }
 
     function headers() {
