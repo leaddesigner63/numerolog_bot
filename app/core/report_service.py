@@ -165,6 +165,7 @@ class ReportService:
                     job.status = ReportJobStatus.COMPLETED
                     job.last_error = None
                     session.add(job)
+                    session.expunge(existing_report)
                     return existing_report
             user = session.get(User, job.user_id)
             if not user:
@@ -244,6 +245,7 @@ class ReportService:
             job.status = ReportJobStatus.COMPLETED
             job.last_error = None
             session.add(job)
+            session.expunge(report)
             return report
 
     def _build_system_prompt(self, state: dict[str, Any]) -> str:
