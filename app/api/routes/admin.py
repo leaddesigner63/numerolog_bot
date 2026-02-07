@@ -26,7 +26,19 @@ from app.db.session import get_session_factory
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
+def _parse_allowed_admin_ips(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    parts = [item.strip() for item in value.replace("\n", ",").split(",")]
+    return {item for item in parts if item}
+
+
 def _require_admin(request: Request) -> None:
+    allowed_ips = _parse_allowed_admin_ips(settings.admin_allowed_ips)
+    if allowed_ips:
+        client_host = request.client.host if request.client else None
+        if not client_host or client_host not in allowed_ips:
+            raise HTTPException(status_code=403, detail="Admin access denied")
     if not settings.admin_api_key:
         raise HTTPException(status_code=503, detail="ADMIN_API_KEY is not configured")
     provided_key = request.headers.get("x-admin-api-key")
