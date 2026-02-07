@@ -99,6 +99,8 @@ LLM_AUTH_ERROR_BLOCK_SECONDS=3600
 GEMINI_IMAGE_MODEL=gemini-2.0-flash-exp-image-generation
 ```
 
+> Примечание: лишние переменные в `.env` безопасно игнорируются и не ломают запуск.
+
 5. Выполните миграции:
 
 ```bash
