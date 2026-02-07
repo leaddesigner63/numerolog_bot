@@ -35,7 +35,7 @@ def render_markdown_to_html(text: str) -> str:
     )
 
     if not allow_raw_html:
-        text = html_escape(text)
+        text = html_escape(text, quote=False)
 
     text = re.sub(r"\[([^\]]+)\]\(([^)\s]+)\)", r'<a href="\2">\1</a>', text)
     text = re.sub(
@@ -62,7 +62,7 @@ def render_markdown_to_html(text: str) -> str:
     text = re.sub(r"_(.+?)_", r"<i>\1</i>", text, flags=re.DOTALL)
 
     for token, kind, value in placeholders:
-        escaped_value = html_escape(value)
+        escaped_value = html_escape(value, quote=False)
         if kind == "block":
             replacement = f"<pre><code>{escaped_value}</code></pre>"
         else:
