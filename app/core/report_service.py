@@ -9,7 +9,17 @@ from app.core.config import settings
 from app.core.llm_router import LLMResponse, LLMUnavailableError, llm_router
 from app.core.prompt_settings import resolve_tariff_prompt
 from app.core.report_safety import report_safety
-from app.db.models import Order, OrderStatus, Report, ReportModel, Tariff
+from app.db.models import (
+    Order,
+    OrderStatus,
+    Report,
+    ReportJob,
+    ReportJobStatus,
+    ReportModel,
+    ScreenStateRecord,
+    Tariff,
+    User,
+)
 from app.db.session import get_session
 from sqlalchemy import select
 
@@ -134,6 +144,102 @@ class ReportService:
             )
             return fallback_response
         return None
+
+    async def generate_report_by_job(self, *, job_id: int) -> Report | None:
+        with get_session() as session:
+            job = session.get(ReportJob, job_id)
+            if not job:
+                self._logger.warning("report_job_missing", extra={"job_id": job_id})
+                return None
+            if job.order_id:
+                existing_report = (
+                    session.execute(
+                        select(Report).where(Report.order_id == job.order_id).limit(1)
+                    )
+                    .scalars()
+                    .first()
+                )
+                if existing_report:
+                    job.status = ReportJobStatus.COMPLETED
+                    job.last_error = None
+                    session.add(job)
+                    return existing_report
+            user = session.get(User, job.user_id)
+            if not user:
+                job.status = ReportJobStatus.FAILED
+                job.last_error = "user_missing"
+                session.add(job)
+                return None
+            telegram_user_id = user.telegram_user_id
+            state_record = session.get(ScreenStateRecord, telegram_user_id)
+            state_data = dict(state_record.data or {}) if state_record else {}
+            if not state_data or not state_data.get("selected_tariff"):
+                job.status = ReportJobStatus.FAILED
+                job.last_error = "state_missing"
+                session.add(job)
+                return None
+            job.status = ReportJobStatus.IN_PROGRESS
+            job.attempts = (job.attempts or 0) + 1
+            job.last_error = None
+            session.add(job)
+            session.flush()
+
+        try:
+            response = await self.generate_report(user_id=user.id, state=state_data)
+        except Exception as exc:
+            with get_session() as session:
+                job = session.get(ReportJob, job_id)
+                if job:
+                    job.status = ReportJobStatus.FAILED
+                    job.last_error = str(exc)
+                    session.add(job)
+            return None
+
+        if not response:
+            with get_session() as session:
+                job = session.get(ReportJob, job_id)
+                if job:
+                    job.status = ReportJobStatus.FAILED
+                    job.last_error = "report_generation_failed"
+                    session.add(job)
+            return None
+
+        with get_session() as session:
+            job = session.get(ReportJob, job_id)
+            if not job:
+                return None
+            report = None
+            if job.order_id:
+                report = (
+                    session.execute(
+                        select(Report).where(Report.order_id == job.order_id).limit(1)
+                    )
+                    .scalars()
+                    .first()
+                )
+            if not report:
+                report = (
+                    session.execute(
+                        select(Report)
+                        .where(
+                            Report.user_id == job.user_id,
+                            Report.tariff == job.tariff,
+                        )
+                        .order_by(Report.created_at.desc())
+                        .limit(1)
+                    )
+                    .scalars()
+                    .first()
+                )
+            if not report:
+                job.status = ReportJobStatus.FAILED
+                job.last_error = "report_not_saved"
+                session.add(job)
+                return None
+            job.status = ReportJobStatus.COMPLETED
+            job.last_error = None
+            session.add(job)
+            return report
 
     def _build_system_prompt(self, state: dict[str, Any]) -> str:
         tariff_value = state.get("selected_tariff")

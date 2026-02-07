@@ -702,23 +702,41 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
-def screen_s6(_: dict[str, Any]) -> ScreenContent:
-    text = build_report_wait_message()
-    rows = [
+def screen_s6(state: dict[str, Any]) -> ScreenContent:
+    job_status = state.get("report_job_status")
+    if job_status == "failed":
+        text = _with_screen_prefix(
+            "S6",
+            "Не удалось сформировать отчёт. Нажмите «Повторить генерацию», чтобы попробовать ещё раз.",
+        )
+    else:
+        text = build_report_wait_message()
+    rows = []
+    if job_status in {"failed", "pending", "in_progress"}:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Повторить генерацию", "🔁"),
+                    callback_data="report:retry",
+                )
+            ]
+        )
+    rows.append(
         [
             InlineKeyboardButton(
                 text=_with_button_icons("Назад в тарифы", "↩️"),
                 callback_data="screen:S1",
             )
-        ],
-        *_global_menu(),
-    ]
+        ]
+    )
+    rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
 def screen_s7(state: dict[str, Any]) -> ScreenContent:
     report_text = (state.get("report_text") or "").strip()
+    job_status = state.get("report_job_status")
     disclaimer = (
         "Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
         "Все выводы носят аналитический и описательный характер.\n"
@@ -728,6 +746,16 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
     )
     if report_text:
         text = _with_screen_prefix("S7", f"{report_text}\n\n{disclaimer}")
+    elif job_status == "failed":
+        text = _with_screen_prefix(
+            "S7",
+            "Не удалось сформировать отчёт. Нажмите «Повторить генерацию».",
+        )
+    elif job_status in {"pending", "in_progress"}:
+        text = _with_screen_prefix(
+            "S7",
+            "Отчёт ещё готовится. Пожалуйста, подождите или нажмите «Повторить генерацию».",
+        )
     else:
         text = _with_screen_prefix(
             "S7",
@@ -748,6 +776,15 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
             )
         ],
     ]
+    if job_status in {"failed", "pending", "in_progress"}:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Повторить генерацию", "🔁"),
+                    callback_data="report:retry",
+                )
+            ]
+        )
     if settings.community_channel_url:
         rows.append(
             [

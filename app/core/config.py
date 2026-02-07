@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     llm_auth_error_block_seconds: int = 3600
     report_safety_enabled: bool = True
     report_delay_seconds: int = 0
+    report_job_poll_interval_seconds: int = 5
+    report_job_lock_timeout_seconds: int = 600
 
     # Прокси ТОЛЬКО для LLM-запросов (Gemini/OpenAI). Берется из .env:
     # LLM_PROXY_URL=http://user:pass@host:3128
