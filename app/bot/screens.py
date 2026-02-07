@@ -268,11 +268,11 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
         (
             f"{meta['title']}\n"
             f"Стоимость: {price}\n\n"
-            "──────────────────────────────────\n"
+            "──────────\n"
             f"{bullets_text}"
             f"{note_text}"
             "\n\n"
-            "──────────────────────────────────\n"
+            "──────────\n"
         ),
     )
     if price and price in text:
