@@ -240,6 +240,68 @@ def _check_pdf_redownload(database_url: str, storage_root: Path) -> None:
     assert stored_files
 
 
+def _check_report_job_generation(database_url: str) -> None:
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+
+    from app.core.llm_router import LLMResponse
+    from app.core.report_service import report_service
+    from app.db.models import Report, ReportJob, ReportJobStatus, ScreenStateRecord, Tariff, User
+
+    engine = create_engine(database_url)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as session:
+        user = User(telegram_user_id=4004)
+        session.add(user)
+        session.flush()
+        session.add(
+            ScreenStateRecord(
+                telegram_user_id=user.telegram_user_id,
+                data={"selected_tariff": Tariff.T0.value},
+            )
+        )
+        job = ReportJob(
+            user_id=user.id,
+            tariff=Tariff.T0,
+            status=ReportJobStatus.PENDING,
+            attempts=0,
+            chat_id=user.telegram_user_id,
+        )
+        session.add(job)
+        session.commit()
+        job_id = job.id
+
+    original_generate_report = report_service.generate_report
+
+    async def fake_generate_report(*, user_id: int, state: dict):
+        response = LLMResponse(text="ok", provider="openai", model="stub")
+        report_service._persist_report(
+            user_id=user_id,
+            state=state,
+            response=response,
+            safety_flags={"attempts": 0},
+            force_store=True,
+        )
+        return response
+
+    report_service.generate_report = fake_generate_report
+    try:
+        import asyncio
+
+        result = asyncio.run(report_service.generate_report_by_job(job_id=job_id))
+        assert result is not None
+    finally:
+        report_service.generate_report = original_generate_report
+
+    with Session() as session:
+        report = session.execute(select(Report).where(Report.user_id.is_not(None))).scalars().first()
+        assert report is not None
+        job = session.get(ReportJob, job_id)
+        assert job is not None
+        assert job.status == ReportJobStatus.COMPLETED
+
+
 def main() -> None:
     with TemporaryDirectory() as temp_dir:
         base = Path(temp_dir)
@@ -254,6 +316,7 @@ def main() -> None:
         _check_llm_fallback()
         _check_webhook_validation()
         _check_pdf_redownload(database_url, storage_root)
+        _check_report_job_generation(database_url)
 
     print("OK: fast checks passed")
 
