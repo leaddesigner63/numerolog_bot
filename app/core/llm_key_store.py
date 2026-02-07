@@ -55,11 +55,11 @@ def load_db_keys(provider: str) -> list[LLMKeyItem]:
         logger.warning("llm_key_store_session_failed")
         return []
 
-    try:
+    def _fetch_keys(provider_filter) -> list[LLMKeyItem]:
         rows = session.execute(
             select(LLMApiKey)
             .where(
-                func.lower(func.trim(LLMApiKey.provider)) == func.lower(func.trim(provider)),
+                provider_filter,
                 or_(LLMApiKey.is_active.is_(True), LLMApiKey.is_active.is_(None)),
             )
             .order_by(LLMApiKey.priority.asc(), LLMApiKey.created_at.asc())
@@ -67,6 +67,16 @@ def load_db_keys(provider: str) -> list[LLMKeyItem]:
         return [
             LLMKeyItem(key=row.key, db_id=row.id, provider=row.provider) for row in rows
         ]
+
+    try:
+        provider_match = func.lower(func.trim(LLMApiKey.provider)) == func.lower(
+            func.trim(provider)
+        )
+        keys = _fetch_keys(provider_match)
+        if keys:
+            return keys
+        provider_fallback = or_(LLMApiKey.provider.is_(None), func.trim(LLMApiKey.provider) == "")
+        return _fetch_keys(provider_fallback)
     except Exception:
         logger.warning("llm_key_store_query_failed")
         return []
