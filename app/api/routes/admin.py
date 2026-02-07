@@ -26,9 +26,7 @@ from app.db.session import get_session_factory
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-def _require_admin(request: Request) -> None:
-    if not settings.admin_api_key:
-        raise HTTPException(status_code=503, detail="ADMIN_API_KEY is not configured")
+def _extract_admin_key(request: Request) -> str | None:
     provided_key = request.headers.get("x-admin-api-key")
     if not provided_key:
         auth_header = request.headers.get("authorization")
@@ -37,6 +35,17 @@ def _require_admin(request: Request) -> None:
                 provided_key = auth_header[7:]
             else:
                 provided_key = auth_header
+    if not provided_key:
+        provided_key = request.cookies.get("admin_api_key")
+    if not provided_key:
+        provided_key = request.query_params.get("key")
+    return provided_key
+
+
+def _require_admin(request: Request) -> None:
+    if not settings.admin_api_key:
+        raise HTTPException(status_code=503, detail="ADMIN_API_KEY is not configured")
+    provided_key = _extract_admin_key(request)
     if not provided_key:
         raise HTTPException(status_code=401, detail="Missing admin API key")
     if provided_key != settings.admin_api_key:
@@ -60,8 +69,119 @@ def _get_db_session(request: Request) -> Session:
         session.close()
 
 
+def _admin_login_html(message: str | None = None) -> str:
+    alert = f"<div class='alert'>{message}</div>" if message else ""
+    return f"""
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Numerolog Bot Admin</title>
+  <style>
+    body {{
+      margin: 0;
+      font-family: "Inter", system-ui, sans-serif;
+      background: #0f1115;
+      color: #e6e9ef;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }}
+    .card {{
+      background: #1a1d24;
+      padding: 24px;
+      border-radius: 16px;
+      max-width: 420px;
+      width: 100%;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+    }}
+    h1 {{
+      margin: 0 0 12px;
+      font-size: 20px;
+    }}
+    p {{
+      margin: 0 0 16px;
+      color: #94a3b8;
+      line-height: 1.4;
+    }}
+    input {{
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid #2a2f3a;
+      background: #11151c;
+      color: #e6e9ef;
+      padding: 10px 12px;
+      font-size: 14px;
+      margin-bottom: 12px;
+    }}
+    button {{
+      width: 100%;
+      border-radius: 10px;
+      border: none;
+      background: #3b82f6;
+      color: white;
+      padding: 10px 12px;
+      font-size: 14px;
+      cursor: pointer;
+    }}
+    .alert {{
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fecaca;
+      padding: 10px 12px;
+      border-radius: 10px;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Доступ к админке</h1>
+    <p>Введите ADMIN_API_KEY, чтобы открыть панель управления.</p>
+    {alert}
+    <input id="adminKey" type="password" placeholder="ADMIN_API_KEY" autocomplete="off"/>
+    <button id="submitKey">Открыть</button>
+  </div>
+  <script>
+    const input = document.getElementById("adminKey");
+    const button = document.getElementById("submitKey");
+    function submitKey() {{
+      const key = input.value.trim();
+      if (!key) {{
+        return;
+      }}
+      const url = new URL(window.location.href);
+      url.searchParams.set("key", key);
+      window.location.replace(url.toString());
+    }}
+    button.addEventListener("click", submitKey);
+    input.addEventListener("keydown", (event) => {{
+      if (event.key === "Enter") {{
+        submitKey();
+      }}
+    }});
+  </script>
+</body>
+</html>
+"""
+
+
 @router.get("", response_class=HTMLResponse)
-def admin_ui() -> str:
+def admin_ui(request: Request) -> HTMLResponse:
+    if not settings.admin_api_key:
+        return HTMLResponse(
+            _admin_login_html("ADMIN_API_KEY не настроен на сервере."),
+            status_code=503,
+        )
+    provided_key = _extract_admin_key(request)
+    if not provided_key:
+        return HTMLResponse(_admin_login_html(), status_code=401)
+    if provided_key != settings.admin_api_key:
+        return HTMLResponse(_admin_login_html("Неверный ключ доступа."), status_code=403)
     auto_refresh_seconds = settings.admin_auto_refresh_seconds or 0
     html = """
 <!doctype html>
@@ -1518,7 +1638,10 @@ def admin_ui() -> str:
 </body>
 </html>
 """
-    return html.replace("__ADMIN_AUTO_REFRESH_SECONDS__", str(auto_refresh_seconds))
+    response = HTMLResponse(html.replace("__ADMIN_AUTO_REFRESH_SECONDS__", str(auto_refresh_seconds)))
+    if request.query_params.get("key"):
+        response.set_cookie("admin_api_key", provided_key, httponly=True, samesite="Lax")
+    return response
 
 
 @router.get("/api/overview")
