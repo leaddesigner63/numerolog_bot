@@ -161,14 +161,37 @@ async def _ensure_report_delivery(callback: CallbackQuery, screen_id: str) -> bo
     return delivered
 
 
+def _resolve_report_attempts() -> int:
+    min_attempts = 2
+    try:
+        gemini_keys = resolve_llm_keys(
+            provider="gemini",
+            primary_key=settings.gemini_api_key,
+            extra_keys=settings.gemini_api_keys,
+        )
+        openai_keys = resolve_llm_keys(
+            provider="openai",
+            primary_key=settings.openai_api_key,
+            extra_keys=settings.openai_api_keys,
+        )
+        total_keys = len(gemini_keys) + len(openai_keys)
+    except Exception as exc:
+        logger.warning("llm_attempts_calc_failed", extra={"error": str(exc)})
+        return min_attempts
+    if total_keys <= 0:
+        return min_attempts
+    return max(min_attempts, total_keys)
+
+
 async def _generate_report_with_retry(
     callback: CallbackQuery,
     *,
     user_id: int,
     state: dict[str, Any],
-    attempts: int = 2,
+    attempts: int | None = None,
 ) -> Any | None:
-    for attempt in range(1, max(attempts, 1) + 1):
+    resolved_attempts = attempts or _resolve_report_attempts()
+    for attempt in range(1, max(resolved_attempts, 1) + 1):
         try:
             report = await report_service.generate_report(user_id=user_id, state=state)
         except Exception as exc:
@@ -183,7 +206,7 @@ async def _generate_report_with_retry(
             report = None
         if report:
             return report
-        if attempt < attempts and callback.message:
+        if attempt < resolved_attempts and callback.message:
             await screen_manager.send_ephemeral_message(
                 callback.message,
                 "Извините, произошла техническая заминка при подготовке отчёта. Сейчас повторю запрос.",
@@ -194,7 +217,7 @@ async def _generate_report_with_retry(
         "report_generate_failed",
         {
             "user_id": callback.from_user.id,
-            "attempts": attempts,
+            "attempts": resolved_attempts,
             "screen_id": screen_manager.update_state(callback.from_user.id).screen_id,
         },
     )
