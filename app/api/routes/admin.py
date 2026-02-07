@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -182,6 +182,10 @@ def admin_ui(request: Request) -> HTMLResponse:
         return HTMLResponse(_admin_login_html(), status_code=401)
     if provided_key != settings.admin_api_key:
         return HTMLResponse(_admin_login_html("Неверный ключ доступа."), status_code=403)
+    if request.query_params.get("key"):
+        response = RedirectResponse(url="/admin", status_code=303)
+        response.set_cookie("admin_api_key", provided_key, httponly=True, samesite="Lax")
+        return response
     auto_refresh_seconds = settings.admin_auto_refresh_seconds or 0
     html = """
 <!doctype html>
