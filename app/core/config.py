@@ -56,7 +56,6 @@ class Settings(BaseSettings):
 
     monitoring_webhook_url: str | None = None
     admin_api_key: str | None = None
-    admin_allowed_ips: str | None = None
     admin_auto_refresh_seconds: int = 0
 
     env: str = "dev"
