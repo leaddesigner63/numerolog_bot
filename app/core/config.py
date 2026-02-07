@@ -1,4 +1,3 @@
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -56,23 +55,11 @@ class Settings(BaseSettings):
     pdf_font_path: str | None = None
 
     monitoring_webhook_url: str | None = None
-    admin_api_key: str | None = None
+    admin_login: str | None = None
+    admin_password: str | None = None
     admin_auto_refresh_seconds: int = 0
 
     env: str = "dev"
     log_level: str = "info"
-
-    @field_validator("admin_api_key", mode="before")
-    @classmethod
-    def _normalize_admin_api_key(cls, value: str | None) -> str | None:
-        if value is None:
-            return None
-        if not isinstance(value, str):
-            return value
-        normalized = value.strip()
-        if len(normalized) >= 2 and normalized[0] == normalized[-1] and normalized[0] in {"'", '"'}:
-            normalized = normalized[1:-1]
-        return normalized
-
 
 settings = Settings()
