@@ -1569,11 +1569,13 @@ async def admin_bulk_llm_keys(
         return {"created": 0, "lines": 0}
     payload_bytes = await file.read()
     payload_text = payload_bytes.decode("utf-8", errors="replace")
-    lines = payload_text.split("\n") if payload_text else []
+    lines = payload_text.splitlines() if payload_text else []
     created = 0
     provider_value = "" if provider is None else str(provider)
     for line in lines:
         key_value = line
+        if key_value == "":
+            continue
         record = LLMApiKey(
             provider=provider_value,
             key="" if key_value is None else (key_value if isinstance(key_value, str) else str(key_value)),
