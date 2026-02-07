@@ -1,37 +1,37 @@
 {
   "version": "v1",
-  "start_question_id": "experience",
+  "start_question_id": "Ваш опыт",
   "questions": [
     {
       "id": "experience",
       "type": "text",
       "text": "Опишите ваш опыт: проекты, роли или задачи, которые давались лучше всего.",
       "required": true,
-      "next": "skills"
+      "next": "Уровень уверенности в навыках"
     },
     {
-      "id": "skills",
+      "id": "Уровень уверенности в навыках",
       "type": "text",
       "text": "Опишите уровень уверенности в ключевых навыках в свободной форме (любые формулировки).",
       "required": true,
-      "next": "interests"
+      "next": "Мотивация"
     },
     {
-      "id": "interests",
+      "id": "Мотивация",
       "type": "text",
       "text": "Что для вас важно и что мотивирует действовать? Ответ в свободной форме",
       "required": true,
-      "next": "constraints"
+      "next": "Ограничения"
     },
     {
-      "id": "constraints",
+      "id": "Ограничения",
       "type": "text",
       "text": "Какие ограничения по времени или ресурсам для вас сейчас ключевые?",
       "required": false,
-      "next": "goals"
+      "next": "Цели"
     },
     {
-      "id": "goals",
+      "id": "Цели",
       "type": "text",
       "text": "Сформулируйте ваши цели на ближайшие 6–12 месяцев.",
       "required": true,
