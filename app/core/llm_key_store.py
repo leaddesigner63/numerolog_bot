@@ -84,6 +84,53 @@ def load_db_keys(provider: str) -> list[LLMKeyItem]:
         session.close()
 
 
+def load_db_key_activity(provider: str) -> dict[str, bool | None]:
+    try:
+        from app.db.models import LLMApiKey
+        from app.db.session import get_session_factory
+        from sqlalchemy import func, or_, select
+    except Exception:
+        logger.warning("llm_key_store_activity_import_failed")
+        return {}
+
+    try:
+        session_factory = get_session_factory()
+        session = session_factory()
+    except Exception:
+        logger.warning("llm_key_store_activity_session_failed")
+        return {}
+
+    def _fetch_activity(provider_filter) -> dict[str, bool | None]:
+        rows = session.execute(
+            select(LLMApiKey.key, LLMApiKey.is_active).where(provider_filter)
+        ).all()
+        return {row.key: row.is_active for row in rows}
+
+    try:
+        provider_match = func.lower(func.trim(LLMApiKey.provider)) == func.lower(
+            func.trim(provider)
+        )
+        activity = _fetch_activity(provider_match)
+        if activity:
+            return activity
+        provider_fallback = or_(LLMApiKey.provider.is_(None), func.trim(LLMApiKey.provider) == "")
+        return _fetch_activity(provider_fallback)
+    except Exception:
+        logger.warning("llm_key_store_activity_query_failed")
+        return {}
+    finally:
+        session.close()
+
+
+def _filter_env_keys_by_activity(
+    env_keys: list[LLMKeyItem],
+    db_activity: dict[str, bool | None],
+) -> list[LLMKeyItem]:
+    if not db_activity:
+        return env_keys
+    return [item for item in env_keys if db_activity.get(item.key, True) is not False]
+
+
 def ensure_env_keys_in_db(
     *,
     provider: str,
@@ -158,10 +205,14 @@ def resolve_llm_keys(
 ) -> list[LLMKeyItem]:
     db_keys = _filter_key_items(load_db_keys(provider))
     env_keys = _filter_key_items(parse_env_keys(primary_key, extra_keys))
+    db_activity = load_db_key_activity(provider)
+    env_keys = _filter_env_keys_by_activity(env_keys, db_activity)
     if db_keys:
         if env_keys:
             return db_keys + env_keys
         return db_keys
+    if db_activity and env_keys:
+        return env_keys
     synced_keys = ensure_env_keys_in_db(
         provider=provider,
         primary_key=primary_key,
