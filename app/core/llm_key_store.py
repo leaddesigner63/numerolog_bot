@@ -15,26 +15,42 @@ class LLMKeyItem:
 logger = logging.getLogger(__name__)
 
 
-def _normalize_key_value(value: str) -> str:
+def _normalize_env_key_value(value: str) -> str:
     return value.replace("\r", "").replace("\n", "").strip()
 
 
-def _filter_key_items(items: list[LLMKeyItem]) -> list[LLMKeyItem]:
+def _filter_key_items(
+    items: list[LLMKeyItem],
+    *,
+    normalize: bool,
+    drop_empty: bool,
+) -> list[LLMKeyItem]:
     filtered: list[LLMKeyItem] = []
     for item in items:
         if item.key is None:
             continue
         key_value = item.key
         if isinstance(key_value, str):
-            normalized = _normalize_key_value(key_value)
-            if not normalized:
-                continue
-            if normalized != key_value:
-                filtered.append(
-                    LLMKeyItem(key=normalized, db_id=item.db_id, provider=item.provider)
-                )
+            if normalize:
+                normalized = _normalize_env_key_value(key_value)
+                if drop_empty and not normalized:
+                    continue
+                if normalized != key_value:
+                    filtered.append(
+                        LLMKeyItem(
+                            key=normalized,
+                            db_id=item.db_id,
+                            provider=item.provider,
+                        )
+                    )
+                else:
+                    filtered.append(item)
             else:
+                if drop_empty and not key_value:
+                    continue
                 filtered.append(item)
+            continue
+        if drop_empty and not key_value:
             continue
         filtered.append(item)
     return filtered
@@ -43,12 +59,12 @@ def _filter_key_items(items: list[LLMKeyItem]) -> list[LLMKeyItem]:
 def parse_env_keys(primary_key: str | None, extra_keys: str | None) -> list[LLMKeyItem]:
     keys: list[LLMKeyItem] = []
     if primary_key and primary_key.strip():
-        normalized = _normalize_key_value(primary_key)
+        normalized = _normalize_env_key_value(primary_key)
         if normalized:
             keys.append(LLMKeyItem(key=normalized))
     if extra_keys and extra_keys.strip():
         for part in extra_keys.split(","):
-            value = _normalize_key_value(part)
+            value = _normalize_env_key_value(part)
             if value:
                 keys.append(LLMKeyItem(key=value))
     return keys
@@ -87,11 +103,8 @@ def load_db_keys(provider: str) -> list[LLMKeyItem]:
         provider_match = func.lower(func.trim(LLMApiKey.provider)) == func.lower(
             func.trim(provider)
         )
-        keys = _fetch_keys(provider_match)
-        if keys:
-            return keys
         provider_fallback = or_(LLMApiKey.provider.is_(None), func.trim(LLMApiKey.provider) == "")
-        return _fetch_keys(provider_fallback)
+        return _fetch_keys(provider_match) + _fetch_keys(provider_fallback)
     except Exception:
         logger.warning("llm_key_store_query_failed")
         return []
@@ -123,10 +136,7 @@ def load_db_key_activity(provider: str) -> dict[str, bool | None]:
         for row in rows:
             if row.key is None:
                 continue
-            normalized = _normalize_key_value(row.key)
-            if not normalized:
-                continue
-            activity[normalized] = row.is_active
+            activity[row.key] = row.is_active
         return activity
 
     try:
@@ -134,10 +144,13 @@ def load_db_key_activity(provider: str) -> dict[str, bool | None]:
             func.trim(provider)
         )
         activity = _fetch_activity(provider_match)
-        if activity:
-            return activity
         provider_fallback = or_(LLMApiKey.provider.is_(None), func.trim(LLMApiKey.provider) == "")
-        return _fetch_activity(provider_fallback)
+        fallback_activity = _fetch_activity(provider_fallback)
+        if fallback_activity:
+            for key, value in fallback_activity.items():
+                if key not in activity:
+                    activity[key] = value
+        return activity
     except Exception:
         logger.warning("llm_key_store_activity_query_failed")
         return {}
@@ -186,8 +199,7 @@ def ensure_env_keys_in_db(
             if record.key is None:
                 existing_map[record.key] = record
                 continue
-            normalized = _normalize_key_value(record.key)
-            existing_map[normalized] = record
+            existing_map[record.key] = record
         created_or_updated: list[LLMApiKey] = []
         for index, key_item in enumerate(env_keys, start=1):
             record = existing_map.get(key_item.key)
@@ -232,8 +244,16 @@ def resolve_llm_keys(
     primary_key: str | None,
     extra_keys: str | None,
 ) -> list[LLMKeyItem]:
-    db_keys = _filter_key_items(load_db_keys(provider))
-    env_keys = _filter_key_items(parse_env_keys(primary_key, extra_keys))
+    db_keys = _filter_key_items(
+        load_db_keys(provider),
+        normalize=False,
+        drop_empty=False,
+    )
+    env_keys = _filter_key_items(
+        parse_env_keys(primary_key, extra_keys),
+        normalize=True,
+        drop_empty=True,
+    )
     db_activity = load_db_key_activity(provider)
     env_keys = _filter_env_keys_by_activity(env_keys, db_activity)
     if db_keys:
@@ -247,7 +267,11 @@ def resolve_llm_keys(
         primary_key=primary_key,
         extra_keys=extra_keys,
     )
-    synced_keys = _filter_key_items(synced_keys)
+    synced_keys = _filter_key_items(
+        synced_keys,
+        normalize=False,
+        drop_empty=False,
+    )
     if synced_keys:
         return synced_keys
     fallback_env_keys = env_keys
