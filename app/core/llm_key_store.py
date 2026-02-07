@@ -242,7 +242,7 @@ def resolve_llm_keys(
                 "db_keys_count": len(db_keys),
                 "env_keys_count": len(env_keys),
                 "sqlite_fallback": sqlite_fallback,
-                "database_url": database_url_value or "fallback_sqlite=true",
+                "database_url": database_url_value or "missing",
             },
         )
     return resolved_keys
