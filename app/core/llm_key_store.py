@@ -15,13 +15,26 @@ class LLMKeyItem:
 logger = logging.getLogger(__name__)
 
 
+def _normalize_key_value(value: str) -> str:
+    return value.replace("\r", "").replace("\n", "").strip()
+
+
 def _filter_key_items(items: list[LLMKeyItem]) -> list[LLMKeyItem]:
     filtered: list[LLMKeyItem] = []
     for item in items:
         if item.key is None:
             continue
         key_value = item.key
-        if isinstance(key_value, str) and not key_value.strip():
+        if isinstance(key_value, str):
+            normalized = _normalize_key_value(key_value)
+            if not normalized:
+                continue
+            if normalized != key_value:
+                filtered.append(
+                    LLMKeyItem(key=normalized, db_id=item.db_id, provider=item.provider)
+                )
+            else:
+                filtered.append(item)
             continue
         filtered.append(item)
     return filtered
@@ -30,10 +43,12 @@ def _filter_key_items(items: list[LLMKeyItem]) -> list[LLMKeyItem]:
 def parse_env_keys(primary_key: str | None, extra_keys: str | None) -> list[LLMKeyItem]:
     keys: list[LLMKeyItem] = []
     if primary_key and primary_key.strip():
-        keys.append(LLMKeyItem(key=primary_key.strip()))
+        normalized = _normalize_key_value(primary_key)
+        if normalized:
+            keys.append(LLMKeyItem(key=normalized))
     if extra_keys and extra_keys.strip():
         for part in extra_keys.split(","):
-            value = part.strip()
+            value = _normalize_key_value(part)
             if value:
                 keys.append(LLMKeyItem(key=value))
     return keys
@@ -104,7 +119,15 @@ def load_db_key_activity(provider: str) -> dict[str, bool | None]:
         rows = session.execute(
             select(LLMApiKey.key, LLMApiKey.is_active).where(provider_filter)
         ).all()
-        return {row.key: row.is_active for row in rows}
+        activity: dict[str, bool | None] = {}
+        for row in rows:
+            if row.key is None:
+                continue
+            normalized = _normalize_key_value(row.key)
+            if not normalized:
+                continue
+            activity[normalized] = row.is_active
+        return activity
 
     try:
         provider_match = func.lower(func.trim(LLMApiKey.provider)) == func.lower(
@@ -158,7 +181,13 @@ def ensure_env_keys_in_db(
         existing = session.execute(
             select(LLMApiKey).where(LLMApiKey.provider == provider)
         ).scalars()
-        existing_map = {record.key: record for record in existing}
+        existing_map: dict[str | None, LLMApiKey] = {}
+        for record in existing:
+            if record.key is None:
+                existing_map[record.key] = record
+                continue
+            normalized = _normalize_key_value(record.key)
+            existing_map[normalized] = record
         created_or_updated: list[LLMApiKey] = []
         for index, key_item in enumerate(env_keys, start=1):
             record = existing_map.get(key_item.key)
