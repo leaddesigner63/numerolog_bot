@@ -59,6 +59,50 @@ def _safe_int(value: str | int | None) -> int | None:
         return None
 
 
+def _parse_admin_ids(value: str | None) -> list[int]:
+    if not value:
+        return []
+    admin_ids: list[int] = []
+    for raw_id in value.split(","):
+        candidate = raw_id.strip()
+        if not candidate:
+            continue
+        try:
+            admin_ids.append(int(candidate))
+        except ValueError:
+            logger.warning("admin_id_parse_failed", extra={"value": candidate})
+    return admin_ids
+
+
+async def _send_feedback_to_admins(
+    bot: Bot,
+    *,
+    feedback_text: str,
+    user_id: int,
+    username: str | None,
+) -> bool:
+    admin_ids = _parse_admin_ids(settings.admin_ids)
+    if not admin_ids:
+        return False
+    username_label = f"@{username}" if username else "без username"
+    message = (
+        "Новая обратная связь\n"
+        f"Пользователь: {user_id} ({username_label})\n"
+        f"{feedback_text}"
+    )
+    delivered = False
+    for admin_id in admin_ids:
+        try:
+            await bot.send_message(chat_id=admin_id, text=message)
+            delivered = True
+        except Exception as exc:
+            logger.warning(
+                "feedback_admin_send_failed",
+                extra={"admin_id": admin_id, "user_id": user_id, "error": str(exc)},
+            )
+    return delivered
+
+
 async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
     delay_seconds = settings.report_delay_seconds
     if delay_seconds <= 0:
@@ -1475,40 +1519,62 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         feedback_text = state_snapshot.data.get("feedback_text") or ""
 
         feedback_mode = (settings.feedback_mode or "native").lower()
-        status = FeedbackStatus.SENT
-        sent_at = datetime.now(timezone.utc)
+        delivered = False
+        status = FeedbackStatus.FAILED
+        sent_at: datetime | None = None
+        admin_delivered = await _send_feedback_to_admins(
+            callback.bot,
+            feedback_text=feedback_text,
+            user_id=callback.from_user.id,
+            username=callback.from_user.username,
+        )
+        if admin_delivered:
+            delivered = True
         if feedback_mode != "native":
-            status = FeedbackStatus.FAILED
-            sent_at = None
             if settings.feedback_group_url:
-                await _send_notice(callback, 
-                    "Обратная связь настроена через livegram. "
-                    "Нажмите «Перейти в группу», чтобы отправить сообщение."
-                )
+                if delivered:
+                    await _send_notice(
+                        callback,
+                        "Сообщение отправлено в админку. "
+                        "Нажмите «Перейти в группу», чтобы опубликовать его в группе."
+                    )
+                else:
+                    await _send_notice(
+                        callback,
+                        "Обратная связь настроена через livegram. "
+                        "Нажмите «Перейти в группу», чтобы отправить сообщение."
+                    )
             else:
-                await _send_notice(callback, 
-                    "Обратная связь настроена через livegram, но ссылка на группу не указана."
-                )
+                if delivered:
+                    await _send_notice(callback, "Сообщение отправлено в админку.")
+                else:
+                    await _send_notice(
+                        callback,
+                        "Обратная связь настроена через livegram, но ссылка на группу не указана."
+                    )
         elif not settings.feedback_group_chat_id:
-            status = FeedbackStatus.FAILED
-            sent_at = None
-            await _send_notice(callback, 
-                "Чат для обратной связи не настроен. "
-                "Добавьте FEEDBACK_GROUP_CHAT_ID или используйте livegram."
-            )
+            if not delivered:
+                await _send_notice(
+                    callback,
+                    "Чат для обратной связи не настроен. "
+                    "Добавьте FEEDBACK_GROUP_CHAT_ID или используйте livegram."
+                )
         else:
             try:
                 await callback.bot.send_message(
                     chat_id=settings.feedback_group_chat_id,
                     text=f"Сообщение от пользователя {callback.from_user.id}:\n{feedback_text}",
                 )
+                delivered = True
             except Exception as exc:
-                status = FeedbackStatus.FAILED
-                sent_at = None
                 logger.warning(
                     "feedback_send_failed",
                     extra={"user_id": callback.from_user.id, "error": str(exc)},
                 )
+
+        if delivered:
+            status = FeedbackStatus.SENT
+            sent_at = datetime.now(timezone.utc)
 
         try:
             with get_session() as session:
@@ -1528,12 +1594,15 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             )
 
         if status == FeedbackStatus.SENT:
-            await _send_notice(callback, "Сообщение отправлено. Спасибо за обратную связь!")
+            if feedback_mode == "native":
+                await _send_notice(callback, "Сообщение отправлено. Спасибо за обратную связь!")
             screen_manager.update_state(callback.from_user.id, feedback_text=None)
         else:
-            await _send_notice(callback, 
-                "Не удалось отправить сообщение. Попробуйте позже или используйте «Перейти в группу»."
-            )
+            if feedback_mode == "native":
+                await _send_notice(
+                    callback,
+                    "Не удалось отправить сообщение. Попробуйте позже или используйте «Перейти в группу»."
+                )
         await _safe_callback_answer(callback)
         return
 

@@ -345,7 +345,7 @@ def admin_ui() -> str:
         <button class="nav-button" data-section="orders">Заказы</button>
         <button class="nav-button" data-section="reports">Отчёты</button>
         <button class="nav-button" data-section="users">Пользователи</button>
-        <button class="nav-button" data-section="feedback">Обратная связь</button>
+        <button class="nav-button" data-section="feedback-inbox">Обратная связь</button>
         <button class="nav-button" data-section="system-prompts">Системные промпты</button>
         <button class="nav-button" data-section="notes">Админ-заметки</button>
       </nav>
@@ -481,14 +481,14 @@ def admin_ui() -> str:
         </div>
         <div id="users" class="muted">Загрузка...</div>
       </section>
-      <section data-panel="feedback">
+      <section data-panel="feedback-inbox">
         <h2>Обратная связь</h2>
         <div class="row table-controls">
-          <input id="feedbackSearch" class="table-search" type="text" placeholder="Поиск по любому столбцу" />
-          <button class="secondary" onclick="clearTableFilters('feedback')">Сбросить</button>
-          <button class="secondary" onclick="loadFeedback()">Обновить</button>
+          <input id="feedbackInboxSearch" class="table-search" type="text" placeholder="Поиск по любому столбцу" />
+          <button class="secondary" onclick="clearTableFilters('feedbackInbox')">Сбросить</button>
+          <button class="secondary" onclick="loadFeedbackInbox()">Обновить</button>
         </div>
-        <div id="feedback" class="muted">Загрузка...</div>
+        <div id="feedbackInbox" class="muted">Загрузка...</div>
       </section>
       <section data-panel="system-prompts">
         <h2>Системные промпты</h2>
@@ -781,7 +781,7 @@ def admin_ui() -> str:
       orders: [],
       reports: [],
       users: [],
-      feedback: [],
+      feedbackInbox: [],
       systemPrompts: [],
       notes: [],
     };
@@ -792,7 +792,7 @@ def admin_ui() -> str:
       orders: {search: "", sortKey: null, sortDir: "asc"},
       reports: {search: "", sortKey: null, sortDir: "asc"},
       users: {search: "", sortKey: null, sortDir: "asc"},
-      feedback: {search: "", sortKey: null, sortDir: "asc"},
+      feedbackInbox: {search: "", sortKey: null, sortDir: "asc"},
       systemPrompts: {search: "", sortKey: null, sortDir: "asc"},
       notes: {search: "", sortKey: null, sortDir: "asc"},
     };
@@ -917,13 +917,15 @@ def admin_ui() -> str:
           {label: "Дата рождения", key: "birth_date", sortable: true},
         ],
       },
-      feedback: {
-        targetId: "feedback",
+      feedbackInbox: {
+        targetId: "feedbackInbox",
         columns: [
           {label: "ID", key: "id", sortable: true},
           {label: "Пользователь", key: "telegram_user_id", sortable: true},
+          {label: "User ID", key: "user_id", sortable: true},
           {label: "Статус", key: "status", sortable: true},
           {label: "Сообщение", key: "text", sortable: true},
+          {label: "Отправлено", key: "sent_at", sortable: true},
         ],
       },
       systemPrompts: {
@@ -1225,13 +1227,13 @@ def admin_ui() -> str:
       }
     }
 
-    async function loadFeedback() {
+    async function loadFeedbackInbox() {
       try {
-        const data = await fetchJson("/feedback");
-        tableData.feedback = data.feedback || [];
-        renderTableForKey("feedback");
+        const data = await fetchJson("/feedback/inbox");
+        tableData.feedbackInbox = data.feedback || [];
+        renderTableForKey("feedbackInbox");
       } catch (error) {
-        document.getElementById("feedback").textContent = error.message;
+        document.getElementById("feedbackInbox").textContent = error.message;
       }
     }
 
@@ -1359,7 +1361,7 @@ def admin_ui() -> str:
       orders: loadOrders,
       reports: loadReports,
       users: loadUsers,
-      feedback: loadFeedback,
+      "feedback-inbox": loadFeedbackInbox,
       "system-prompts": loadSystemPrompts,
       notes: loadNotes,
     };
@@ -1753,8 +1755,7 @@ def admin_users(limit: int = 50, session: Session = Depends(_get_db_session)) ->
     return {"users": users}
 
 
-@router.get("/api/feedback")
-def admin_feedback(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
+def _load_feedback_messages(session: Session, *, limit: int) -> list[dict]:
     rows = session.execute(
         select(FeedbackMessage, User)
         .join(User, User.id == FeedbackMessage.user_id)
@@ -1773,7 +1774,17 @@ def admin_feedback(limit: int = 50, session: Session = Depends(_get_db_session))
                 "sent_at": message.sent_at.isoformat() if message.sent_at else None,
             }
         )
-    return {"feedback": feedback}
+    return feedback
+
+
+@router.get("/api/feedback")
+def admin_feedback(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
+    return {"feedback": _load_feedback_messages(session, limit=limit)}
+
+
+@router.get("/api/feedback/inbox")
+def admin_feedback_inbox(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
+    return {"feedback": _load_feedback_messages(session, limit=limit)}
 
 
 @router.get("/api/system-prompts")
