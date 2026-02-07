@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def _normalize_env_key_value(value: str) -> str:
-    return value.replace("\r", "").replace("\n", "").strip()
+    return value.replace("\ufeff", "").replace("\r", "").replace("\n", "").strip()
 
 
 def _filter_key_items(
@@ -246,7 +246,7 @@ def resolve_llm_keys(
 ) -> list[LLMKeyItem]:
     db_keys = _filter_key_items(
         load_db_keys(provider),
-        normalize=False,
+        normalize=True,
         drop_empty=False,
     )
     env_keys = _filter_key_items(
