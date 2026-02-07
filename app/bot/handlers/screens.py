@@ -1113,18 +1113,6 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         if existing_report.model_used
                         else None,
                     )
-                    if settings.report_delay_seconds > 0:
-                        await screen_manager.show_screen(
-                            bot=callback.bot,
-                            chat_id=callback.message.chat.id,
-                            user_id=callback.from_user.id,
-                            screen_id="S6",
-                        )
-                        await _run_report_delay(
-                            callback.bot,
-                            callback.message.chat.id,
-                            callback.from_user.id,
-                        )
                     await _ensure_report_delivery(callback, "S7")
                     report_meta = _get_report_pdf_meta(existing_report)
                     pdf_bytes = _get_report_pdf_bytes(session, existing_report)
@@ -1236,18 +1224,6 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         if existing_report.model_used
                         else None,
                     )
-                    if settings.report_delay_seconds > 0:
-                        await screen_manager.show_screen(
-                            bot=callback.bot,
-                            chat_id=callback.message.chat.id,
-                            user_id=callback.from_user.id,
-                            screen_id="S6",
-                        )
-                        await _run_report_delay(
-                            callback.bot,
-                            callback.message.chat.id,
-                            callback.from_user.id,
-                        )
                     await _ensure_report_delivery(callback, "S7")
                     report_meta = _get_report_pdf_meta(existing_report)
                     pdf_bytes = _get_report_pdf_bytes(session, existing_report)
