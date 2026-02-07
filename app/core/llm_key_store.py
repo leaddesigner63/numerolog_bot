@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import logging
+from urllib.parse import urlsplit, urlunsplit
 
 
 @dataclass(frozen=True)
@@ -13,6 +14,20 @@ class LLMKeyItem:
 
 
 logger = logging.getLogger(__name__)
+
+
+def _redact_database_url(database_url: str | None) -> str | None:
+    if not database_url:
+        return None
+    parts = urlsplit(database_url)
+    if not parts.scheme:
+        return None
+    if not parts.hostname:
+        return parts.scheme
+    netloc = parts.hostname
+    if parts.port:
+        netloc = f"{netloc}:{parts.port}"
+    return urlunsplit((parts.scheme, netloc, "", "", ""))
 
 
 def _filter_key_items(items: list[LLMKeyItem]) -> list[LLMKeyItem]:
@@ -174,6 +189,7 @@ def resolve_llm_keys(
             database_url_value = None
             sqlite_fallback = None
 
+        safe_database_url = _redact_database_url(database_url_value)
         logger.info(
             "llm_key_store_empty_keys",
             extra={
@@ -181,7 +197,7 @@ def resolve_llm_keys(
                 "db_keys_count": len(db_keys),
                 "env_keys_count": len(env_keys),
                 "sqlite_fallback": sqlite_fallback,
-                "database_url": database_url_value or "fallback_sqlite=true",
+                "database_url": safe_database_url or "fallback_sqlite=true",
             },
         )
     return resolved_keys
