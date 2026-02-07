@@ -876,6 +876,12 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
                 callback_data="screen:S4",
             )
         ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Обратная связь", "💬"),
+                callback_data="screen:S8",
+            )
+        ],
     ]
     if settings.community_channel_url:
         rows.append(
