@@ -369,10 +369,6 @@ def admin_ui(request: Request) -> HTMLResponse:
       overflow-wrap: anywhere;
       margin: 0;
     }
-    .feedback-text {
-      max-height: 220px;
-      overflow-y: auto;
-    }
     .prompt-preview {
       max-height: 240px;
       overflow-y: auto;
@@ -1107,7 +1103,7 @@ def admin_ui(request: Request) -> HTMLResponse:
           {label: "Пользователь", key: "telegram_user_id", sortable: true},
           {label: "User ID", key: "user_id", sortable: true},
           {label: "Статус", key: "status", sortable: true},
-          {label: "Сообщение", key: "text", sortable: true, render: renderFeedbackText},
+          {label: "Сообщение", key: "text", sortable: true},
           {label: "Отправлено", key: "sent_at", sortable: true},
         ],
       },
@@ -1121,7 +1117,7 @@ def admin_ui(request: Request) -> HTMLResponse:
             label: "Промпт",
             key: "content",
             sortable: true,
-            render: (prompt) => `<pre class="muted prompt-preview">${escapeHtml(prompt.content)}</pre>`,
+            render: (prompt) => `<pre class="muted prompt-preview">${normalizeValue(prompt.content)}</pre>`,
           },
           {
             label: "Действия",
@@ -1141,7 +1137,7 @@ def admin_ui(request: Request) -> HTMLResponse:
           {label: "ID", key: "id", sortable: true},
           {label: "Создано", key: "created_at", sortable: true},
           {label: "Содержимое", key: "payload", sortable: true, render: (note) => `
-            <pre class="muted">${escapeHtml(note.payload)}</pre>
+            <pre class="muted">${note.payload}</pre>
           `},
         ],
       },
@@ -1152,23 +1148,6 @@ def admin_ui(request: Request) -> HTMLResponse:
         return "";
       }
       return String(value);
-    }
-
-    function escapeHtml(value) {
-      return normalizeValue(value)
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll("\"", "&quot;")
-        .replaceAll("'", "&#39;");
-    }
-
-    function renderFeedbackText(row) {
-      const text = normalizeValue(row.text);
-      if (!text) {
-        return "—";
-      }
-      return `<pre class="muted feedback-text">${escapeHtml(text)}</pre>`;
     }
 
     function parseDate(value) {
@@ -1290,7 +1269,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         const cells = config.columns.map((column) => {
           const cellValue = column.render
             ? column.render(row)
-            : escapeHtml(row[column.key] ?? "—");
+            : normalizeValue(row[column.key] ?? "—");
           const isCopyable = column.copyable !== false;
           const cellClass = isCopyable ? "copyable-cell" : "";
           return `<td class="${cellClass}">${cellValue || "—"}</td>`;
