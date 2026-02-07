@@ -87,6 +87,18 @@ class LLMRouter:
                 # Если вдруг версия совсем древняя/нестандартная — работаем без прокси, но логируем.
                 self._logger.warning("llm_proxy_not_supported_by_httpx")
                 return httpx.Client(timeout=timeout)
+            except Exception as exc:
+                self._logger.warning(
+                    "llm_proxy_init_failed",
+                    extra={"error": str(exc)},
+                )
+                return httpx.Client(timeout=timeout)
+        except Exception as exc:
+            self._logger.warning(
+                "llm_proxy_init_failed",
+                extra={"error": str(exc)},
+            )
+            return httpx.Client(timeout=timeout)
 
     def generate(self, facts_pack: dict[str, Any], system_prompt: str) -> LLMResponse:
         # 1) Gemini (primary)
@@ -364,7 +376,7 @@ class LLMRouter:
                     self._sleep_backoff(attempts)
                     continue
                 raise LLMProviderError(
-                    "LLM request failed",
+                    f"LLM request failed: {exc.__class__.__name__}: {exc}",
                     retryable=True,
                     fallback=True,
                     category="request_error",
