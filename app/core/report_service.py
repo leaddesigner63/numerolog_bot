@@ -146,6 +146,8 @@ class ReportService:
         return None
 
     async def generate_report_by_job(self, *, job_id: int) -> Report | None:
+        user_id: int | None = None
+        state_data: dict[str, Any] = {}
         with get_session() as session:
             job = session.get(ReportJob, job_id)
             if not job:
@@ -170,6 +172,7 @@ class ReportService:
                 job.last_error = "user_missing"
                 session.add(job)
                 return None
+            user_id = user.id
             telegram_user_id = user.telegram_user_id
             state_record = session.get(ScreenStateRecord, telegram_user_id)
             state_data = dict(state_record.data or {}) if state_record else {}
@@ -185,7 +188,9 @@ class ReportService:
             session.flush()
 
         try:
-            response = await self.generate_report(user_id=user.id, state=state_data)
+            if user_id is None:
+                raise RuntimeError("report_job_user_id_missing")
+            response = await self.generate_report(user_id=user_id, state=state_data)
         except Exception as exc:
             with get_session() as session:
                 job = session.get(ReportJob, job_id)
