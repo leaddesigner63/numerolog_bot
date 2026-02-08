@@ -102,6 +102,42 @@ async def _send_feedback_to_admins(
     return delivered
 
 
+async def _submit_feedback(
+    bot: Bot,
+    *,
+    user_id: int,
+    username: str | None,
+    feedback_text: str,
+) -> FeedbackStatus:
+    delivered = await _send_feedback_to_admins(
+        bot,
+        feedback_text=feedback_text,
+        user_id=user_id,
+        username=username,
+    )
+    status = FeedbackStatus.SENT if delivered else FeedbackStatus.FAILED
+    sent_at = datetime.now(timezone.utc)
+
+    try:
+        with get_session() as session:
+            user = _get_or_create_user(session, user_id)
+            session.add(
+                FeedbackMessage(
+                    user_id=user.id,
+                    text=feedback_text,
+                    status=status,
+                    sent_at=sent_at,
+                )
+            )
+    except Exception as exc:
+        logger.warning(
+            "feedback_store_failed",
+            extra={"user_id": user_id, "error": str(exc)},
+        )
+
+    return status
+
+
 async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
     delay_seconds = settings.report_delay_seconds
     if delay_seconds <= 0:
@@ -1478,42 +1514,19 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         state_snapshot = screen_manager.update_state(callback.from_user.id)
         feedback_text = state_snapshot.data.get("feedback_text") or ""
 
-        delivered = False
-        status = FeedbackStatus.FAILED
-        sent_at = datetime.now(timezone.utc)
-        admin_delivered = await _send_feedback_to_admins(
+        status = await _submit_feedback(
             callback.bot,
-            feedback_text=feedback_text,
             user_id=callback.from_user.id,
             username=callback.from_user.username,
+            feedback_text=feedback_text,
         )
-        delivered = admin_delivered
-        if delivered:
+
+        if status == FeedbackStatus.SENT:
             await _send_notice(callback, "Сообщение отправлено в админку. Спасибо за обратную связь!")
         else:
             await _send_notice(
                 callback,
                 "Не удалось отправить сообщение в админку. Попробуйте позже.",
-            )
-
-        if delivered:
-            status = FeedbackStatus.SENT
-
-        try:
-            with get_session() as session:
-                user = _get_or_create_user(session, callback.from_user.id)
-                session.add(
-                    FeedbackMessage(
-                        user_id=user.id,
-                        text=feedback_text,
-                        status=status,
-                        sent_at=sent_at,
-                    )
-                )
-        except Exception as exc:
-            logger.warning(
-                "feedback_store_failed",
-                extra={"user_id": callback.from_user.id, "error": str(exc)},
             )
 
         if status == FeedbackStatus.SENT:

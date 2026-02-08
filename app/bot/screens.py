@@ -803,16 +803,10 @@ def screen_s8(_: dict[str, Any]) -> ScreenContent:
     text = _with_screen_prefix(
         "S8",
         (
-            "Напишите сообщение. Нажмите «Отправить», чтобы передать его в админку."
+            "Напишите сообщение — оно отправится в админку автоматически."
         ),
     )
     rows = [
-        [
-            InlineKeyboardButton(
-                text=_with_button_icons("Отправить", "📤"),
-                callback_data="feedback:send",
-            )
-        ],
         [
             InlineKeyboardButton(
                 text=_with_button_icons("Тарифы", "🧾"),

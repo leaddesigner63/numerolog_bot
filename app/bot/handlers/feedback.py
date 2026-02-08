@@ -5,6 +5,7 @@ from aiogram.filters import BaseFilter
 from aiogram.types import Message
 
 from app.bot.handlers.screen_manager import screen_manager
+from app.bot.handlers.screens import _submit_feedback
 router = Router()
 
 
@@ -23,9 +24,23 @@ async def handle_feedback_text(message: Message) -> None:
     screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     feedback_text = message.text or ""
     screen_manager.update_state(message.from_user.id, feedback_text=feedback_text)
-    await screen_manager.send_ephemeral_message(
-        message, "Сообщение сохранено. Нажмите «Отправить», чтобы передать его в админку."
+    status = await _submit_feedback(
+        message.bot,
+        user_id=message.from_user.id,
+        username=message.from_user.username,
+        feedback_text=feedback_text,
     )
+    if status.name == "SENT":
+        screen_manager.update_state(message.from_user.id, feedback_text=None)
+        await screen_manager.send_ephemeral_message(
+            message,
+            "Сообщение отправлено в админку автоматически. Спасибо за обратную связь!",
+        )
+    else:
+        await screen_manager.send_ephemeral_message(
+            message,
+            "Не удалось отправить сообщение в админку. Попробуйте позже.",
+        )
     await screen_manager.delete_user_message(
         bot=message.bot,
         chat_id=message.chat.id,
