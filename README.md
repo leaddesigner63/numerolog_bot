@@ -30,7 +30,7 @@ app/
     report_safety.py  # фильтрация запрещённых слов, гарантий и красных зон
     report_service.py # сервис генерации отчёта и каркаса T0-T3
   db/                 # модели и подключение к БД
-    models.py         # включает report_jobs и support_dialog_messages (история диалога поддержки)
+    models.py         # включает report_jobs, support_dialog_messages и screen_transition_events (аналитика переходов экранов)
   payments/           # платёжные провайдеры и проверки webhook
 scripts/              # вспомогательные скрипты
   deploy.sh           # серверный деплой-скрипт (используется GitHub Actions)

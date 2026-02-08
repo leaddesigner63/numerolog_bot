@@ -1,5 +1,6 @@
 import enum
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import (
     Boolean,
@@ -70,6 +71,22 @@ class SupportMessageDirection(enum.StrEnum):
 class QuestionnaireStatus(enum.StrEnum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
+
+
+class ScreenTransitionTriggerType(enum.StrEnum):
+    CALLBACK = "callback"
+    MESSAGE = "message"
+    SYSTEM = "system"
+    JOB = "job"
+    ADMIN = "admin"
+    UNKNOWN = "unknown"
+
+
+class ScreenTransitionStatus(enum.StrEnum):
+    SUCCESS = "success"
+    BLOCKED = "blocked"
+    ERROR = "error"
+    UNKNOWN = "unknown"
 
 
 def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
@@ -369,3 +386,100 @@ class ScreenStateRecord(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class ScreenTransitionEvent(Base):
+    __tablename__ = "screen_transition_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, index=True, default=0)
+    from_screen_id: Mapped[str | None] = mapped_column(String(32), index=True)
+    to_screen_id: Mapped[str] = mapped_column(String(32), index=True, default="unknown")
+    trigger_type: Mapped[ScreenTransitionTriggerType] = mapped_column(
+        Enum(
+            ScreenTransitionTriggerType,
+            values_callable=_enum_values,
+            name="screentransitiontriggertype",
+        ),
+        default=ScreenTransitionTriggerType.UNKNOWN,
+    )
+    trigger_value: Mapped[str] = mapped_column(String(128), default="unknown")
+    transition_status: Mapped[ScreenTransitionStatus] = mapped_column(
+        Enum(
+            ScreenTransitionStatus,
+            values_callable=_enum_values,
+            name="screentransitionstatus",
+        ),
+        default=ScreenTransitionStatus.UNKNOWN,
+    )
+    metadata_json: Mapped[dict | None] = mapped_column(
+        "metadata",
+        JSON,
+        default=lambda: {
+            "tariff": None,
+            "report_job_status": None,
+            "provider": None,
+            "reason": None,
+        },
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+
+    @classmethod
+    def build_fail_safe(
+        cls,
+        telegram_user_id: int | None = None,
+        from_screen_id: str | None = None,
+        to_screen_id: str | None = None,
+        trigger_type: ScreenTransitionTriggerType | str | None = None,
+        trigger_value: str | None = None,
+        transition_status: ScreenTransitionStatus | str | None = None,
+        metadata_json: dict[str, Any] | None = None,
+    ) -> "ScreenTransitionEvent":
+        safe_trigger_type = cls._coerce_trigger_type(trigger_type)
+        safe_transition_status = cls._coerce_transition_status(transition_status)
+        return cls(
+            telegram_user_id=telegram_user_id or 0,
+            from_screen_id=from_screen_id,
+            to_screen_id=to_screen_id or "unknown",
+            trigger_type=safe_trigger_type,
+            trigger_value=trigger_value or "unknown",
+            transition_status=safe_transition_status,
+            metadata_json=metadata_json
+            or {
+                "tariff": None,
+                "report_job_status": None,
+                "provider": None,
+                "reason": None,
+            },
+        )
+
+    @staticmethod
+    def _coerce_trigger_type(
+        value: ScreenTransitionTriggerType | str | None,
+    ) -> ScreenTransitionTriggerType:
+        if isinstance(value, ScreenTransitionTriggerType):
+            return value
+        if isinstance(value, str):
+            try:
+                return ScreenTransitionTriggerType(value)
+            except ValueError:
+                return ScreenTransitionTriggerType.UNKNOWN
+        return ScreenTransitionTriggerType.UNKNOWN
+
+    @staticmethod
+    def _coerce_transition_status(
+        value: ScreenTransitionStatus | str | None,
+    ) -> ScreenTransitionStatus:
+        if isinstance(value, ScreenTransitionStatus):
+            return value
+        if isinstance(value, str):
+            try:
+                return ScreenTransitionStatus(value)
+            except ValueError:
+                return ScreenTransitionStatus.UNKNOWN
+        return ScreenTransitionStatus.UNKNOWN
