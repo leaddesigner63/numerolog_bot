@@ -5,9 +5,6 @@ from aiogram.filters import BaseFilter
 from aiogram.types import Message
 
 from app.bot.handlers.screen_manager import screen_manager
-from app.core.config import settings
-
-
 router = Router()
 
 
@@ -26,22 +23,9 @@ async def handle_feedback_text(message: Message) -> None:
     screen_manager.add_user_message_id(message.from_user.id, message.message_id)
     feedback_text = message.text or ""
     screen_manager.update_state(message.from_user.id, feedback_text=feedback_text)
-    if (settings.feedback_mode or "native").lower() == "livegram":
-        if settings.feedback_group_url:
-            await screen_manager.send_ephemeral_message(
-                message,
-                "Сообщение сохранено. В режиме livegram нажмите «Перейти в группу», "
-                "чтобы отправить его."
-            )
-        else:
-            await screen_manager.send_ephemeral_message(
-                message,
-                "Сообщение сохранено, но ссылка на группу для livegram не настроена."
-            )
-    else:
-        await screen_manager.send_ephemeral_message(
-            message, "Сообщение сохранено. Нажмите «Отправить», чтобы опубликовать его."
-        )
+    await screen_manager.send_ephemeral_message(
+        message, "Сообщение сохранено. Нажмите «Отправить», чтобы передать его в админку."
+    )
     await screen_manager.delete_user_message(
         bot=message.bot,
         chat_id=message.chat.id,
