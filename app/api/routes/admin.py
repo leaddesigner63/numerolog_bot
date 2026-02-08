@@ -224,6 +224,9 @@ def admin_ui(request: Request) -> HTMLResponse:
       --muted: #94a3b8;
       --danger: #ef4444;
       --ok: #22c55e;
+      --table-font-size: 12px;
+      --table-cell-padding-y: 4px;
+      --table-cell-padding-x: 6px;
     }
     body {
       margin: 0;
@@ -311,10 +314,13 @@ def admin_ui(request: Request) -> HTMLResponse:
     }
     .table-controls {
       align-items: center;
+      gap: 6px;
+      margin-bottom: 6px;
     }
     .table-search {
-      min-width: 240px;
-      flex: 1 1 240px;
+      min-width: 180px;
+      flex: 1 1 180px;
+      max-width: 340px;
     }
     .field {
       display: flex;
@@ -346,15 +352,19 @@ def admin_ui(request: Request) -> HTMLResponse:
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 13px;
+      font-size: var(--table-font-size);
       table-layout: fixed;
     }
     th, td {
       text-align: left;
-      padding: 6px 8px;
+      padding: var(--table-cell-padding-y) var(--table-cell-padding-x);
       border-bottom: 1px solid #2a2f3a;
       vertical-align: top;
       word-break: break-word;
+      line-height: 1.3;
+    }
+    th {
+      font-weight: 600;
     }
     td.copyable-cell {
       cursor: copy;
