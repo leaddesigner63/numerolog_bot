@@ -5,7 +5,6 @@ import hashlib
 import json
 import logging
 from datetime import datetime, timezone
-
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from aiogram import Bot
@@ -19,6 +18,7 @@ from app.services.admin_analytics import (
     build_screen_transition_analytics,
     parse_trigger_type,
 )
+from pydantic import BaseModel
 from app.db.models import (
     AdminNote,
     FeedbackMessage,
@@ -2125,6 +2125,155 @@ def admin_health(request: Request) -> dict:
     }
 
 
+class TransitionSummaryItem(BaseModel):
+    events: int
+    users: int
+
+
+class TransitionMatrixItem(BaseModel):
+    from_screen: str
+    to_screen: str
+    count: int
+    share: float
+
+
+class TransitionFunnelItem(BaseModel):
+    step: str
+    users: int
+    conversion_from_start: float
+    conversion_from_previous: float
+
+
+class TransitionTimingItem(BaseModel):
+    from_screen: str
+    to_screen: str
+    samples: int
+    median_seconds: float
+    p95_seconds: float
+
+
+class TransitionFiltersApplied(BaseModel):
+    from_dt: datetime | None
+    to_dt: datetime | None
+    tariff: str | None
+    trigger_type: str | None
+    unique_users_only: bool
+    dropoff_window_minutes: int
+    limit: int
+    top_n: int
+    screen_ids: list[str]
+
+
+class TransitionAnalyticsEnvelope(BaseModel):
+    generated_at: datetime
+    filters_applied: TransitionFiltersApplied
+    data: dict
+    warnings: list[str]
+
+
+_TRANSITION_SCREEN_WHITELIST: frozenset[str] = frozenset(
+    {
+        "S0",
+        "S1",
+        "S2",
+        "S3",
+        "S4",
+        "S5",
+        "S6",
+        "S7",
+        "S8",
+        "S9",
+        "S10",
+        "S11",
+        "S12",
+        "S13",
+        "S14",
+    }
+)
+_TRANSITION_TIMING_MIN_SAMPLES = 2
+
+
+def _normalize_screen_filter(screen_ids: list[str] | None) -> tuple[list[str], frozenset[str] | None]:
+    if not screen_ids:
+        return [], None
+    cleaned: list[str] = []
+    for raw in screen_ids:
+        candidate = str(raw or "").strip().upper()
+        if not candidate:
+            continue
+        if candidate not in _TRANSITION_SCREEN_WHITELIST:
+            raise HTTPException(status_code=422, detail=f"screen_id '{candidate}' is not allowed")
+        if candidate not in cleaned:
+            cleaned.append(candidate)
+    return cleaned, (frozenset(cleaned) if cleaned else None)
+
+
+def _build_transition_filters(
+    *,
+    from_dt: datetime | None,
+    to_dt: datetime | None,
+    tariff: str | None,
+    trigger_type: str | None,
+    unique_users_only: bool,
+    dropoff_window_minutes: int,
+    limit: int,
+    screen_ids: list[str] | None,
+) -> tuple[AnalyticsFilters, TransitionFiltersApplied]:
+    if from_dt and to_dt and from_dt > to_dt:
+        raise HTTPException(status_code=422, detail="Parameter 'from' must be less than or equal to 'to'")
+
+    normalized_trigger_type = parse_trigger_type(trigger_type)
+    normalized_screen_ids, screen_set = _normalize_screen_filter(screen_ids)
+
+    filters = AnalyticsFilters(
+        from_dt=from_dt,
+        to_dt=to_dt,
+        tariff=tariff,
+        trigger_type=normalized_trigger_type,
+        unique_users_only=unique_users_only,
+        dropoff_window_minutes=dropoff_window_minutes,
+        limit=limit,
+        screen_ids=screen_set,
+    )
+    filters_applied = TransitionFiltersApplied(
+        from_dt=from_dt,
+        to_dt=to_dt,
+        tariff=tariff,
+        trigger_type=normalized_trigger_type,
+        unique_users_only=unique_users_only,
+        dropoff_window_minutes=dropoff_window_minutes,
+        limit=limit,
+        top_n=0,
+        screen_ids=normalized_screen_ids,
+    )
+    return filters, filters_applied
+
+
+def _build_transition_envelope(
+    *,
+    data: dict,
+    filters_applied: TransitionFiltersApplied,
+    top_n: int,
+) -> dict:
+    warnings: list[str] = []
+    if data.get("summary", {}).get("events", 0) < 5:
+        warnings.append("Недостаточно данных за период")
+
+    filters_payload = filters_applied.model_copy(update={"top_n": top_n})
+    return TransitionAnalyticsEnvelope(
+        generated_at=datetime.now(timezone.utc),
+        filters_applied=filters_payload,
+        data=data,
+        warnings=warnings,
+    ).model_dump(mode="json")
+
+
+def _slice_top_n(items: list[dict], top_n: int) -> list[dict]:
+    if top_n <= 0:
+        return items
+    return items[:top_n]
+
+
 @router.get("/api/analytics/screen-transitions")
 def admin_screen_transition_analytics(
     from_dt: datetime | None = Query(default=None, alias="from"),
@@ -2132,18 +2281,155 @@ def admin_screen_transition_analytics(
     tariff: str | None = Query(default=None),
     trigger_type: str | None = Query(default=None),
     unique_users_only: bool = Query(default=False),
-    dropoff_window_minutes: int = Query(default=60, ge=1),
+    dropoff_window_minutes: int = Query(default=60, ge=1, le=1440),
+    limit: int = Query(default=5000, ge=1, le=50000),
+    top_n: int = Query(default=50, ge=1, le=500),
+    screen_ids: list[str] | None = Query(default=None, alias="screen_id"),
     session: Session = Depends(_get_db_session),
 ) -> dict:
-    filters = AnalyticsFilters(
+    filters, filters_applied = _build_transition_filters(
         from_dt=from_dt,
         to_dt=to_dt,
         tariff=tariff,
-        trigger_type=parse_trigger_type(trigger_type),
+        trigger_type=trigger_type,
         unique_users_only=unique_users_only,
         dropoff_window_minutes=dropoff_window_minutes,
+        limit=limit,
+        screen_ids=screen_ids,
     )
-    return build_screen_transition_analytics(session, filters)
+    result = build_screen_transition_analytics(session, filters)
+    payload = {
+        "summary": result["summary"],
+        "transition_matrix": _slice_top_n(result["transition_matrix"], top_n),
+        "funnel": _slice_top_n(result["funnel"], top_n),
+        "dropoff": _slice_top_n(result["dropoff"], top_n),
+        "transition_durations": _slice_top_n(result["transition_durations"], top_n),
+    }
+    return _build_transition_envelope(data=payload, filters_applied=filters_applied, top_n=top_n)
+
+
+@router.get("/api/analytics/transitions/summary")
+def admin_transitions_summary(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    tariff: str | None = Query(default=None),
+    trigger_type: str | None = Query(default=None),
+    unique_users_only: bool = Query(default=False),
+    dropoff_window_minutes: int = Query(default=60, ge=1, le=1440),
+    limit: int = Query(default=5000, ge=1, le=50000),
+    screen_ids: list[str] | None = Query(default=None, alias="screen_id"),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters, filters_applied = _build_transition_filters(
+        from_dt=from_dt,
+        to_dt=to_dt,
+        tariff=tariff,
+        trigger_type=trigger_type,
+        unique_users_only=unique_users_only,
+        dropoff_window_minutes=dropoff_window_minutes,
+        limit=limit,
+        screen_ids=screen_ids,
+    )
+    result = build_screen_transition_analytics(session, filters)
+    summary = TransitionSummaryItem.model_validate(result["summary"]).model_dump(mode="json")
+    return _build_transition_envelope(data={"summary": summary}, filters_applied=filters_applied, top_n=0)
+
+
+@router.get("/api/analytics/transitions/matrix")
+def admin_transitions_matrix(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    tariff: str | None = Query(default=None),
+    trigger_type: str | None = Query(default=None),
+    unique_users_only: bool = Query(default=False),
+    dropoff_window_minutes: int = Query(default=60, ge=1, le=1440),
+    limit: int = Query(default=5000, ge=1, le=50000),
+    top_n: int = Query(default=50, ge=1, le=500),
+    screen_ids: list[str] | None = Query(default=None, alias="screen_id"),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters, filters_applied = _build_transition_filters(
+        from_dt=from_dt,
+        to_dt=to_dt,
+        tariff=tariff,
+        trigger_type=trigger_type,
+        unique_users_only=unique_users_only,
+        dropoff_window_minutes=dropoff_window_minutes,
+        limit=limit,
+        screen_ids=screen_ids,
+    )
+    result = build_screen_transition_analytics(session, filters)
+    matrix_items = [
+        TransitionMatrixItem.model_validate(item).model_dump(mode="json")
+        for item in _slice_top_n(result["transition_matrix"], top_n)
+    ]
+    return _build_transition_envelope(data={"transition_matrix": matrix_items}, filters_applied=filters_applied, top_n=top_n)
+
+
+@router.get("/api/analytics/transitions/funnel")
+def admin_transitions_funnel(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    tariff: str | None = Query(default=None),
+    trigger_type: str | None = Query(default=None),
+    unique_users_only: bool = Query(default=False),
+    dropoff_window_minutes: int = Query(default=60, ge=1, le=1440),
+    limit: int = Query(default=5000, ge=1, le=50000),
+    top_n: int = Query(default=50, ge=1, le=500),
+    screen_ids: list[str] | None = Query(default=None, alias="screen_id"),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters, filters_applied = _build_transition_filters(
+        from_dt=from_dt,
+        to_dt=to_dt,
+        tariff=tariff,
+        trigger_type=trigger_type,
+        unique_users_only=unique_users_only,
+        dropoff_window_minutes=dropoff_window_minutes,
+        limit=limit,
+        screen_ids=screen_ids,
+    )
+    result = build_screen_transition_analytics(session, filters)
+    funnel_items = [
+        TransitionFunnelItem.model_validate(item).model_dump(mode="json")
+        for item in _slice_top_n(result["funnel"], top_n)
+    ]
+    return _build_transition_envelope(data={"funnel": funnel_items}, filters_applied=filters_applied, top_n=top_n)
+
+
+@router.get("/api/analytics/transitions/timing")
+def admin_transitions_timing(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    tariff: str | None = Query(default=None),
+    trigger_type: str | None = Query(default=None),
+    unique_users_only: bool = Query(default=False),
+    dropoff_window_minutes: int = Query(default=60, ge=1, le=1440),
+    limit: int = Query(default=5000, ge=1, le=50000),
+    top_n: int = Query(default=50, ge=1, le=500),
+    screen_ids: list[str] | None = Query(default=None, alias="screen_id"),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters, filters_applied = _build_transition_filters(
+        from_dt=from_dt,
+        to_dt=to_dt,
+        tariff=tariff,
+        trigger_type=trigger_type,
+        unique_users_only=unique_users_only,
+        dropoff_window_minutes=dropoff_window_minutes,
+        limit=limit,
+        screen_ids=screen_ids,
+    )
+    result = build_screen_transition_analytics(session, filters)
+    timing_raw = [row for row in result["transition_durations"] if int(row.get("samples", 0)) >= _TRANSITION_TIMING_MIN_SAMPLES]
+    timing_items = [
+        TransitionTimingItem.model_validate(item).model_dump(mode="json")
+        for item in _slice_top_n(timing_raw, top_n)
+    ]
+    envelope = _build_transition_envelope(data={"transition_timing": timing_items}, filters_applied=filters_applied, top_n=top_n)
+    if not timing_items:
+        envelope["warnings"].append("Недостаточно данных за период")
+    return envelope
 
 
 def _mask_key(value: str | None) -> str:

@@ -256,20 +256,28 @@ python -m unittest discover -s tests -p "test_*.py"
 
 ## Админ-аналитика переходов экранов
 
-Доступен API-эндпоинт: `GET /admin/api/analytics/screen-transitions`.
+Доступны API-эндпоинты:
+- `GET /admin/api/analytics/screen-transitions` (совместимый агрегированный ответ),
+- `GET /admin/api/analytics/transitions/summary`,
+- `GET /admin/api/analytics/transitions/matrix`,
+- `GET /admin/api/analytics/transitions/funnel`,
+- `GET /admin/api/analytics/transitions/timing`.
 
-Параметры фильтрации:
+Общие query-параметры и ограничения:
 - `from`, `to` — период (ISO datetime),
 - `tariff` — тариф (например, `T0`...`T3`),
 - `trigger_type` — тип триггера (`callback|message|system|job|admin|unknown`),
 - `unique_users_only` — считать только уникальных пользователей,
-- `dropoff_window_minutes` — окно для drop-off в минутах.
+- `dropoff_window_minutes` — окно для drop-off в минутах (`1..1440`),
+- `limit` — верхняя граница выбираемых событий (`1..50000`),
+- `top_n` — ограничение длины выдачи для списков (`1..500`),
+- `screen_id` — повторяемый фильтр по whitelist экранов (`S0..S14`).
 
-Срезы в ответе:
-- `transition_matrix` — переходы `from -> to` с количеством и долей,
-- `funnel` — воронка `S0→S1→S3→S5→S6/S7` с conversion rate,
-- `dropoff` — экран, после которого нет следующего шага в заданном окне,
-- `transition_durations` — `median`/`p95` времени перехода между парами экранов.
+Стабильный контракт ответа для фронта:
+- `generated_at`,
+- `filters_applied`,
+- `data` (строго типизированные поля выбранного среза),
+- `warnings` (например, при малом объёме данных).
 
 Неизвестные экраны нормализуются в `UNKNOWN`, пустые выборки возвращаются как корректные пустые JSON-массивы.
 
@@ -499,20 +507,28 @@ sudo systemctl restart numerolog.target
 
 ## Админ-аналитика переходов экранов
 
-Доступен API-эндпоинт: `GET /admin/api/analytics/screen-transitions`.
+Доступны API-эндпоинты:
+- `GET /admin/api/analytics/screen-transitions` (совместимый агрегированный ответ),
+- `GET /admin/api/analytics/transitions/summary`,
+- `GET /admin/api/analytics/transitions/matrix`,
+- `GET /admin/api/analytics/transitions/funnel`,
+- `GET /admin/api/analytics/transitions/timing`.
 
-Параметры фильтрации:
+Общие query-параметры и ограничения:
 - `from`, `to` — период (ISO datetime),
 - `tariff` — тариф (например, `T0`...`T3`),
 - `trigger_type` — тип триггера (`callback|message|system|job|admin|unknown`),
 - `unique_users_only` — считать только уникальных пользователей,
-- `dropoff_window_minutes` — окно для drop-off в минутах.
+- `dropoff_window_minutes` — окно для drop-off в минутах (`1..1440`),
+- `limit` — верхняя граница выбираемых событий (`1..50000`),
+- `top_n` — ограничение длины выдачи для списков (`1..500`),
+- `screen_id` — повторяемый фильтр по whitelist экранов (`S0..S14`).
 
-Срезы в ответе:
-- `transition_matrix` — переходы `from -> to` с количеством и долей,
-- `funnel` — воронка `S0→S1→S3→S5→S6/S7` с conversion rate,
-- `dropoff` — экран, после которого нет следующего шага в заданном окне,
-- `transition_durations` — `median`/`p95` времени перехода между парами экранов.
+Стабильный контракт ответа для фронта:
+- `generated_at`,
+- `filters_applied`,
+- `data` (строго типизированные поля выбранного среза),
+- `warnings` (например, при малом объёме данных).
 
 Неизвестные экраны нормализуются в `UNKNOWN`, пустые выборки возвращаются как корректные пустые JSON-массивы.
 
