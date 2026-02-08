@@ -12,7 +12,12 @@ from aiogram.types import FSInputFile, Message
 from app.bot.markdown import render_markdown_to_html
 from app.bot.screen_images import resolve_screen_image_path
 from app.bot.screens import SCREEN_REGISTRY, ScreenContent
-from app.db.models import ScreenStateRecord
+from app.db.models import (
+    ScreenStateRecord,
+    ScreenTransitionEvent,
+    ScreenTransitionStatus,
+    ScreenTransitionTriggerType,
+)
 from app.db.session import get_session
 
 
@@ -40,7 +45,9 @@ class ScreenStateStore:
         self._persist_state(user_id, state)
         return state
 
-    def update_screen(self, user_id: int, screen_id: str, message_ids: list[int]) -> ScreenState:
+    def update_screen(
+        self, user_id: int, screen_id: str, message_ids: list[int]
+    ) -> ScreenState:
         state = self.get_state(user_id)
         state.screen_id = screen_id
         state.message_ids = message_ids
@@ -69,7 +76,9 @@ class ScreenStateStore:
     def remove_user_message_id(self, user_id: int, message_id: int) -> ScreenState:
         state = self.get_state(user_id)
         if message_id in state.user_message_ids:
-            state.user_message_ids = [mid for mid in state.user_message_ids if mid != message_id]
+            state.user_message_ids = [
+                mid for mid in state.user_message_ids if mid != message_id
+            ]
             self._persist_state(user_id, state)
         return state
 
@@ -170,13 +179,17 @@ class ScreenManager:
         self._store = store or ScreenStateStore()
         self._logger = logging.getLogger(__name__)
 
-    def render_screen(self, screen_id: str, user_id: int, state: dict[str, Any]) -> ScreenContent:
+    def render_screen(
+        self, screen_id: str, user_id: int, state: dict[str, Any]
+    ) -> ScreenContent:
         screen_fn = SCREEN_REGISTRY.get(screen_id)
         if not screen_fn:
             raise ValueError(f"Unknown screen id: {screen_id}")
         content = screen_fn(state)
         rendered_messages = [
-            render_markdown_to_html(message) for message in content.messages if message is not None
+            render_markdown_to_html(message)
+            for message in content.messages
+            if message is not None
         ]
         parse_mode = content.parse_mode or "HTML"
         return ScreenContent(
@@ -186,9 +199,41 @@ class ScreenManager:
             image_path=content.image_path,
         )
 
-    async def show_screen(self, bot: Bot, chat_id: int, user_id: int, screen_id: str) -> bool:
+    async def show_screen(
+        self,
+        bot: Bot,
+        chat_id: int,
+        user_id: int,
+        screen_id: str,
+        *,
+        trigger_type: ScreenTransitionTriggerType | str | None = None,
+        trigger_value: str | None = None,
+        metadata_json: dict[str, Any] | None = None,
+    ) -> bool:
         state = self._store.get_state(user_id)
-        content = self.render_screen(screen_id, user_id, state.data)
+        from_screen = state.screen_id
+        to_screen = screen_id
+        safe_metadata = dict(metadata_json or {})
+
+        try:
+            content = self.render_screen(screen_id, user_id, state.data)
+        except Exception as exc:
+            safe_metadata.setdefault("reason", "screen_render_failed")
+            safe_metadata.setdefault("error", str(exc))
+            self._record_transition_event(
+                user_id=user_id,
+                from_screen=from_screen,
+                to_screen=to_screen,
+                trigger_type=trigger_type,
+                trigger_value=trigger_value,
+                transition_status=ScreenTransitionStatus.ERROR,
+                metadata_json=safe_metadata,
+            )
+            self._logger.warning(
+                "screen_render_failed",
+                extra={"user_id": user_id, "screen_id": to_screen, "error": str(exc)},
+            )
+            return False
         image_path = resolve_screen_image_path(screen_id, state.data)
         delivered = False
 
@@ -245,7 +290,9 @@ class ScreenManager:
             and last_question_message_id not in previous_user_message_ids
         ):
             try:
-                await bot.delete_message(chat_id=chat_id, message_id=last_question_message_id)
+                await bot.delete_message(
+                    chat_id=chat_id, message_id=last_question_message_id
+                )
             except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
                 self._logger.info(
                     "last_question_cleanup_failed",
@@ -265,24 +312,53 @@ class ScreenManager:
             self._store.clear_message_ids(user_id)
         if previous_user_message_ids:
             self._store.clear_user_message_ids(user_id)
-        if last_question_message_id and last_question_message_id in previous_message_ids:
+        if (
+            last_question_message_id
+            and last_question_message_id in previous_message_ids
+        ):
             self._store.clear_last_question_message_id(user_id)
 
         if failed_message_ids and previous_message_ids and not image_path:
             first_message_id = previous_message_ids[0]
-            if await self._try_edit_screen(bot, chat_id, first_message_id, content, user_id, screen_id):
+            if await self._try_edit_screen(
+                bot, chat_id, first_message_id, content, user_id, screen_id
+            ):
                 for message_id in failed_message_ids:
                     if message_id == first_message_id:
                         continue
-                    await self._try_edit_placeholder(bot, chat_id, message_id, user_id, screen_id)
+                    await self._try_edit_placeholder(
+                        bot, chat_id, message_id, user_id, screen_id
+                    )
+                self._record_transition_event(
+                    user_id=user_id,
+                    from_screen=from_screen,
+                    to_screen=to_screen,
+                    trigger_type=trigger_type,
+                    trigger_value=trigger_value,
+                    transition_status=ScreenTransitionStatus.SUCCESS,
+                    metadata_json=safe_metadata,
+                )
+                self._record_funnel_events(
+                    user_id=user_id,
+                    from_screen=from_screen,
+                    to_screen=to_screen,
+                    trigger_type=trigger_type,
+                    trigger_value=trigger_value,
+                    transition_status=ScreenTransitionStatus.SUCCESS,
+                    metadata_json=safe_metadata,
+                )
                 return True
         for message_id in failed_message_ids:
-            await self._try_edit_placeholder(bot, chat_id, message_id, user_id, screen_id)
+            await self._try_edit_placeholder(
+                bot, chat_id, message_id, user_id, screen_id
+            )
 
         message_ids: list[int] = []
         image_sent = False
         if image_path:
-            caption = "\n\n".join(message for message in content.messages if message).strip()
+            caption = "\n\n".join(
+                message for message in content.messages if message
+            ).strip()
             if len(caption) > self._telegram_caption_limit:
                 truncated = caption[: self._telegram_caption_limit - 1].rstrip()
                 caption = f"{truncated}…"
@@ -305,7 +381,9 @@ class ScreenManager:
             for message in content.messages:
                 expanded_messages.extend(self._split_message(message))
             for index, message in enumerate(expanded_messages):
-                reply_markup = content.keyboard if index == len(expanded_messages) - 1 else None
+                reply_markup = (
+                    content.keyboard if index == len(expanded_messages) - 1 else None
+                )
                 sent = await self._send_message_with_fallback(
                     bot=bot,
                     chat_id=chat_id,
@@ -338,7 +416,118 @@ class ScreenManager:
                         "error": str(exc),
                     },
                 )
+        transition_status = (
+            ScreenTransitionStatus.SUCCESS
+            if delivered
+            else ScreenTransitionStatus.BLOCKED
+        )
+        if not delivered:
+            safe_metadata.setdefault("reason", "screen_delivery_blocked")
+        self._record_transition_event(
+            user_id=user_id,
+            from_screen=from_screen,
+            to_screen=to_screen,
+            trigger_type=trigger_type,
+            trigger_value=trigger_value,
+            transition_status=transition_status,
+            metadata_json=safe_metadata,
+        )
+        self._record_funnel_events(
+            user_id=user_id,
+            from_screen=from_screen,
+            to_screen=to_screen,
+            trigger_type=trigger_type,
+            trigger_value=trigger_value,
+            transition_status=transition_status,
+            metadata_json=safe_metadata,
+        )
         return delivered
+
+    def _record_transition_event(
+        self,
+        *,
+        user_id: int,
+        from_screen: str | None,
+        to_screen: str,
+        trigger_type: ScreenTransitionTriggerType | str | None,
+        trigger_value: str | None,
+        transition_status: ScreenTransitionStatus | str | None,
+        metadata_json: dict[str, Any] | None = None,
+    ) -> None:
+        try:
+            with get_session() as session:
+                event = ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=user_id,
+                    from_screen_id=from_screen,
+                    to_screen_id=to_screen,
+                    trigger_type=trigger_type,
+                    trigger_value=trigger_value,
+                    transition_status=transition_status,
+                    metadata_json=dict(metadata_json or {}),
+                )
+                session.add(event)
+                session.flush()
+        except Exception as exc:
+            self._logger.warning(
+                "screen_transition_event_store_failed",
+                extra={
+                    "user_id": user_id,
+                    "from_screen": from_screen,
+                    "to_screen": to_screen,
+                    "error": str(exc),
+                },
+            )
+
+    def _record_funnel_events(
+        self,
+        *,
+        user_id: int,
+        from_screen: str | None,
+        to_screen: str,
+        trigger_type: ScreenTransitionTriggerType | str | None,
+        trigger_value: str | None,
+        transition_status: ScreenTransitionStatus | str | None,
+        metadata_json: dict[str, Any] | None,
+    ) -> None:
+        safe_metadata = dict(metadata_json or {})
+        if from_screen is None and to_screen == "S1":
+            safe_metadata.setdefault("reason", "funnel_entry")
+            self._record_transition_event(
+                user_id=user_id,
+                from_screen=from_screen,
+                to_screen=to_screen,
+                trigger_type=trigger_type,
+                trigger_value=trigger_value,
+                transition_status=transition_status,
+                metadata_json=safe_metadata,
+            )
+            return
+
+        if to_screen == "S7" and transition_status == ScreenTransitionStatus.SUCCESS:
+            safe_metadata.setdefault("reason", "funnel_exit_report_completed")
+            self._record_transition_event(
+                user_id=user_id,
+                from_screen=from_screen,
+                to_screen=to_screen,
+                trigger_type=trigger_type,
+                trigger_value=trigger_value,
+                transition_status=transition_status,
+                metadata_json=safe_metadata,
+            )
+            return
+
+        reason = str((safe_metadata or {}).get("reason") or "")
+        if "timeout" in reason.lower():
+            safe_metadata.setdefault("reason", "funnel_exit_timeout")
+            self._record_transition_event(
+                user_id=user_id,
+                from_screen=from_screen,
+                to_screen=to_screen,
+                trigger_type=trigger_type,
+                trigger_value=trigger_value,
+                transition_status=ScreenTransitionStatus.BLOCKED,
+                metadata_json=safe_metadata,
+            )
 
     async def _try_edit_placeholder(
         self,
@@ -364,7 +553,11 @@ class ScreenManager:
                     caption=placeholder,
                     reply_markup=None,
                 )
-            except (TelegramBadRequest, TelegramForbiddenError, Exception) as caption_exc:
+            except (
+                TelegramBadRequest,
+                TelegramForbiddenError,
+                Exception,
+            ) as caption_exc:
                 self._logger.info(
                     "screen_placeholder_edit_failed",
                     extra={
@@ -407,7 +600,11 @@ class ScreenManager:
                         reply_markup=content.keyboard,
                         parse_mode=None,
                     )
-                except (TelegramBadRequest, TelegramForbiddenError, Exception) as retry_exc:
+                except (
+                    TelegramBadRequest,
+                    TelegramForbiddenError,
+                    Exception,
+                ) as retry_exc:
                     self._logger.info(
                         "screen_edit_failed",
                         extra={
@@ -554,7 +751,11 @@ class ScreenManager:
                 },
             )
             await self._try_edit_placeholder(
-                bot, chat_id, message_id, user_id, self._store.get_state(user_id).screen_id
+                bot,
+                chat_id,
+                message_id,
+                user_id,
+                self._store.get_state(user_id).screen_id,
             )
             self._store.remove_screen_message_id(user_id, message_id)
             return
@@ -614,7 +815,11 @@ class ScreenManager:
                         reply_markup=reply_markup,
                         parse_mode=None,
                     )
-                except (TelegramBadRequest, TelegramForbiddenError, Exception) as retry_exc:
+                except (
+                    TelegramBadRequest,
+                    TelegramForbiddenError,
+                    Exception,
+                ) as retry_exc:
                     self._logger.info(
                         "screen_send_failed",
                         extra={
@@ -666,7 +871,11 @@ class ScreenManager:
                         reply_markup=keyboard,
                         parse_mode=None,
                     )
-                except (TelegramBadRequest, TelegramForbiddenError, Exception) as retry_exc:
+                except (
+                    TelegramBadRequest,
+                    TelegramForbiddenError,
+                    Exception,
+                ) as retry_exc:
                     self._logger.info(
                         "screen_image_send_failed",
                         extra={

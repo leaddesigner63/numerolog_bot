@@ -39,9 +39,11 @@ class ReportJobWorker:
             job_ids = (
                 session.execute(
                     select(ReportJob.id)
-                    .where(ReportJob.status.in_(
-                        [ReportJobStatus.PENDING, ReportJobStatus.IN_PROGRESS]
-                    ))
+                    .where(
+                        ReportJob.status.in_(
+                            [ReportJobStatus.PENDING, ReportJobStatus.IN_PROGRESS]
+                        )
+                    )
                     .order_by(ReportJob.created_at.asc())
                 )
                 .scalars()
@@ -122,11 +124,22 @@ class ReportJobWorker:
                     chat_id=chat_id,
                     user_id=telegram_user_id,
                     screen_id="S7",
+                    trigger_type="job",
+                    trigger_value=f"report_job:{job.id}:completed",
+                    metadata_json={
+                        "report_job_status": job.status.value,
+                        "reason": "report_completed",
+                    },
                 )
                 report_meta = screens_handler._get_report_pdf_meta(report)
                 pdf_bytes = screens_handler._get_report_pdf_bytes(session, report)
 
-        if job_status == ReportJobStatus.COMPLETED and report and telegram_user_id and chat_id:
+        if (
+            job_status == ReportJobStatus.COMPLETED
+            and report
+            and telegram_user_id
+            and chat_id
+        ):
             await screens_handler._send_report_pdf(
                 bot,
                 chat_id,
@@ -141,6 +154,12 @@ class ReportJobWorker:
                 chat_id=chat_id,
                 user_id=telegram_user_id,
                 screen_id="S6",
+                trigger_type="job",
+                trigger_value=f"report_job:{job_id}:failed",
+                metadata_json={
+                    "report_job_status": ReportJobStatus.FAILED.value,
+                    "reason": "report_job_failed",
+                },
             )
 
 

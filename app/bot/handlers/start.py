@@ -16,4 +16,6 @@ async def handle_start(message: Message) -> None:
         chat_id=message.chat.id,
         user_id=message.from_user.id,
         screen_id="S0",
+        trigger_type="message",
+        trigger_value="command:/start",
     )
