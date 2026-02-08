@@ -23,6 +23,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run checks
+        run: bash scripts/test.sh
+
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
         with:

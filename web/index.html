@@ -14,21 +14,12 @@
     <div class="page-bg" aria-hidden="true"></div>
     <header class="hero section" id="top">
       <div class="container hero-card">
-        <p class="eyebrow">One-screen landing</p>
-        <h1>Откройте карту своих сильных сторон</h1>
-        <p class="subtitle">
-          Короткий путь к личному разбору: выберите уровень отчёта и начните в Telegram.
-        </p>
+        <p class="eyebrow" data-content="hero.eyebrow"></p>
+        <h1 data-content="hero.title"></h1>
+        <p class="subtitle" data-content="hero.subtitle"></p>
         <div class="hero-actions">
-          <a
-            class="btn btn-primary js-telegram-cta"
-            href="https://t.me/your_bot_username"
-            data-placement="hero_primary"
-            target="_blank"
-            rel="noopener noreferrer"
-            >Перейти в Telegram</a
-          >
-          <a class="btn btn-secondary" href="#tariffs">Смотреть тарифы</a>
+          <a class="btn btn-primary js-telegram-cta" href="https://t.me/your_bot_username" data-placement="hero_primary" target="_blank" rel="noopener noreferrer" data-content="hero.primaryCta"></a>
+          <a class="btn btn-secondary" href="#tariffs" data-content="hero.secondaryCta"></a>
         </div>
       </div>
     </header>
@@ -36,110 +27,62 @@
     <main>
       <section class="section" id="benefits">
         <div class="container">
-          <h2>Преимущества</h2>
-          <div class="grid grid-3">
-            <article class="card">
-              <h3>Быстрый старт</h3>
-              <p>Без длинной регистрации — переход в бота по одной кнопке.</p>
-            </article>
-            <article class="card">
-              <h3>Гибкая глубина</h3>
-              <p>Форматы T0–T3: от ознакомительного до расширенного аналитического.</p>
-            </article>
-            <article class="card">
-              <h3>Удобный результат</h3>
-              <p>Отчёт в Telegram + выгрузка PDF в один клик.</p>
-            </article>
-          </div>
+          <h2 data-content="benefits.title"></h2>
+          <div class="grid grid-3" id="benefits-grid"></div>
         </div>
       </section>
 
       <section class="section" id="tariffs">
         <div class="container">
-          <h2>Тарифы T0–T3</h2>
-          <div class="grid grid-4">
-            <article class="card tariff">
-              <p class="tariff-title">T0</p>
-              <p class="tariff-price">0 ₽</p>
-              <p>Ознакомительный отчёт, доступно 1 раз в месяц.</p>
-              <a class="btn btn-primary js-telegram-cta js-tariff-cta" href="https://t.me/your_bot_username" data-placement="tariff_t0" data-tariff="t0">Выбрать T0</a>
+          <h2 data-content="tariffs.title"></h2>
+          <div class="grid grid-4" id="tariffs-grid"></div>
+        </div>
+      </section>
+
+      <section class="section" id="pre-payment-notice">
+        <div class="container">
+          <h2 data-content="prePaymentNotice.title"></h2>
+          <div class="grid grid-2">
+            <article class="card notice-card">
+              <h3 data-content="prePaymentNotice.consultationBlockTitle"></h3>
+              <p data-content="prePaymentNotice.consultationBlockText"></p>
             </article>
-            <article class="card tariff">
-              <p class="tariff-title">T1</p>
-              <p class="tariff-price">от 990 ₽</p>
-              <p>Расширенный базовый отчёт по вашим данным.</p>
-              <a class="btn btn-primary js-telegram-cta js-tariff-cta" href="https://t.me/your_bot_username" data-placement="tariff_t1" data-tariff="t1">Выбрать T1</a>
+            <article class="card notice-card">
+              <h3 data-content="prePaymentNotice.refundBlockTitle"></h3>
+              <p data-content="prePaymentNotice.refundBlockText"></p>
             </article>
-            <article class="card tariff tariff-recommended">
-              <span class="badge">Рекомендуем</span>
-              <p class="tariff-title">T2</p>
-              <p class="tariff-price">от 2 490 ₽</p>
-              <p>Дополнительная анкета и углублённые сценарии развития.</p>
-              <a class="btn btn-primary js-telegram-cta js-tariff-cta" href="https://t.me/your_bot_username" data-placement="tariff_t2" data-tariff="t2">Выбрать T2</a>
-            </article>
-            <article class="card tariff">
-              <p class="tariff-title">T3</p>
-              <p class="tariff-price">от 4 990 ₽</p>
-              <p>Максимальная глубина с месячным и годовым фокусом.</p>
-              <a class="btn btn-primary js-telegram-cta js-tariff-cta" href="https://t.me/your_bot_username" data-placement="tariff_t3" data-tariff="t3">Выбрать T3</a>
-            </article>
+          </div>
+          <div class="notice-actions">
+            <a class="btn btn-primary js-telegram-cta" href="https://t.me/your_bot_username" data-placement="prepayment_primary" target="_blank" rel="noopener noreferrer" data-content="prePaymentNotice.cta"></a>
           </div>
         </div>
       </section>
 
       <section class="section" id="disclaimers">
         <div class="container">
-          <h2>Дисклеймеры</h2>
+          <h2 data-content="disclaimers.title"></h2>
           <div class="card disclaimer">
-            <ul>
-              <li>Сервис не является консультацией, прогнозом или рекомендацией к действию.</li>
-              <li>Все выводы носят аналитический и описательный характер.</li>
-              <li>Ответственность за решения остаётся за пользователем.</li>
-              <li>Сервис не гарантирует финансовых или иных результатов.</li>
-              <li>Возвратов нет.</li>
-            </ul>
+            <ul id="disclaimer-list"></ul>
           </div>
         </div>
       </section>
 
       <section class="section" id="faq">
         <div class="container">
-          <h2>FAQ</h2>
-          <div class="faq-list">
-            <details class="faq-item">
-              <summary>Сколько времени занимает получение отчёта?</summary>
-              <p>Обычно несколько минут после заполнения данных (и оплаты для T1–T3).</p>
-            </details>
-            <details class="faq-item">
-              <summary>Можно ли начать бесплатно?</summary>
-              <p>Да, тариф T0 доступен бесплатно с ограничением 1 раз в месяц.</p>
-            </details>
-            <details class="faq-item">
-              <summary>Где я получу результат?</summary>
-              <p>В Telegram-боте, также можно выгрузить PDF-версию отчёта.</p>
-            </details>
-          </div>
+          <h2 data-content="faq.title"></h2>
+          <div class="faq-list" id="faq-list"></div>
         </div>
       </section>
     </main>
 
     <footer class="section footer" id="footer">
       <div class="container">
-        <p>© Numerolog Bot MVP</p>
-        <a class="btn btn-primary footer-cta js-telegram-cta" href="https://t.me/your_bot_username" data-placement="footer_primary"
-          >Открыть Telegram-бота</a
-        >
+        <p id="footer-brand">© Numerolog Bot MVP</p>
+        <a class="btn btn-primary footer-cta js-telegram-cta" href="https://t.me/your_bot_username" data-placement="footer_primary" data-content="footer.cta"></a>
       </div>
     </footer>
 
-    <a
-      class="sticky-cta btn btn-primary js-telegram-cta"
-      href="https://t.me/your_bot_username"
-      data-placement="sticky_primary"
-      target="_blank"
-      rel="noopener noreferrer"
-      >Перейти в Telegram</a
-    >
+    <a class="sticky-cta btn btn-primary js-telegram-cta" href="https://t.me/your_bot_username" data-placement="sticky_primary" target="_blank" rel="noopener noreferrer" data-content="footer.stickyCta"></a>
     <script src="script.js"></script>
   </body>
 </html>

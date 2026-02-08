@@ -196,4 +196,6 @@ server {
 2. Убедитесь, что бот и API активны: `systemctl status numerolog-bot.service numerolog-api.service`.
 3. Проверьте последние логи: `journalctl -u numerolog-bot.service -n 100 --no-pager`.
 4. Пройдите smoke-flow в Telegram: `/start` → выбор тарифа → открытие экрана оплаты/анкеты.
-5. Убедитесь, что в БД появляются записи `screen_transition_events` (включая trigger_type callback/job).
+5. Проверьте лендинг и словарь контента: `python scripts/check_landing_content.py` (должно быть `[OK]`).
+6. Убедитесь, что на лендинге видны блоки «Не является консультацией/прогнозом» и «Возвратов нет».
+7. Убедитесь, что в БД появляются записи `screen_transition_events` (включая trigger_type callback/job).

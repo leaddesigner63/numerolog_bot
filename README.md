@@ -36,12 +36,15 @@ app/
   payments/           # платёжные провайдеры и проверки webhook
 scripts/              # вспомогательные скрипты
   deploy.sh           # серверный деплой-скрипт (используется GitHub Actions)
-  test.sh             # локальные проверки
+  test.sh             # полный набор локальных проверок
   fast_checks.py      # быстрые сценарные проверки без внешних зависимостей
+  check_landing_content.py # статическая проверка словаря/дисклеймеров лендинга
 web/                  # one-screen лендинг для перехода в Telegram-бот
   index.html          # секции Hero/Преимущества/Тарифы/FAQ/Footer + CTA deep-link
   styles.css          # mobile-first стили (360px+, tablet, desktop)
-  script.js           # FAQ-аккордеон + UTM/deep-link + фронтовые события аналитики
+  script.js           # рендер контента из JSON + FAQ-аккордеон + UTM/deep-link + аналитика
+  content/
+    landing-content.json # централизованный контент лендинга + словарь проверок
 AUTODEPLOY_INSTRUCTIONS.md # пошаговая инструкция по автодеплою
 .env.prompts.example # пример файла с системными промптами по тарифам
 TZ.md                 # техническое задание (ТЗ)
@@ -236,8 +239,7 @@ tmux attach -t numerolog_bot
 Быстрые сценарные проверки (без внешних зависимостей по умолчанию):
 
 ```bash
-./scripts/test.sh
-python -m unittest discover -s tests -p "test_*.py"
+bash scripts/test.sh
 ```
 
 Сценарии включают:
@@ -246,6 +248,18 @@ python -m unittest discover -s tests -p "test_*.py"
 - fallback LLM,
 - webhook-валидация провайдеров,
 - повторная выдача PDF.
+
+## Ревью текстов лендинга
+
+Источник всех текстов лендинга: `web/content/landing-content.json`.
+
+Перед публикацией контентных изменений обязательно:
+
+```bash
+python scripts/check_landing_content.py
+```
+
+Подробный регламент: `docs/landing/review-rules.md`.
 
 ## Контентная безопасность
 
