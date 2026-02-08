@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -14,6 +14,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.services.admin_analytics import (
+    AnalyticsFilters,
+    build_screen_transition_analytics,
+    parse_trigger_type,
+)
 from app.db.models import (
     AdminNote,
     FeedbackMessage,
@@ -2118,6 +2123,27 @@ def admin_health(request: Request) -> dict:
         "admin_auth_enabled": _admin_credentials_ready(),
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get("/api/analytics/screen-transitions")
+def admin_screen_transition_analytics(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    tariff: str | None = Query(default=None),
+    trigger_type: str | None = Query(default=None),
+    unique_users_only: bool = Query(default=False),
+    dropoff_window_minutes: int = Query(default=60, ge=1),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters = AnalyticsFilters(
+        from_dt=from_dt,
+        to_dt=to_dt,
+        tariff=tariff,
+        trigger_type=parse_trigger_type(trigger_type),
+        unique_users_only=unique_users_only,
+        dropoff_window_minutes=dropoff_window_minutes,
+    )
+    return build_screen_transition_analytics(session, filters)
 
 
 def _mask_key(value: str | None) -> str:
