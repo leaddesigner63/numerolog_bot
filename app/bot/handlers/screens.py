@@ -306,6 +306,20 @@ async def _send_notice(callback: CallbackQuery, text: str, **kwargs: Any) -> Non
     )
 
 
+async def _show_reports_list_with_refresh(callback: CallbackQuery) -> None:
+    with get_session() as session:
+        _refresh_reports_list_state(session, callback.from_user.id)
+    screen_manager.update_state(
+        callback.from_user.id,
+        report_text=None,
+        report_meta=None,
+    )
+    await _show_screen_for_callback(
+        callback,
+        screen_id="S12",
+    )
+
+
 async def _show_screen_for_callback(
     callback: CallbackQuery,
     *,
@@ -1475,6 +1489,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await _send_notice(
                     callback, "Отчёт не найден. Обновите список в кабинете."
                 )
+                await _show_reports_list_with_refresh(callback)
                 await _safe_callback_answer(callback)
                 return
             screen_manager.update_state(
@@ -1499,6 +1514,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             report = _get_report_for_user(session, callback.from_user.id, report_id)
             if not report:
                 await _send_notice(callback, "Отчёт не найден. Обновите список.")
+                await _show_reports_list_with_refresh(callback)
                 await _safe_callback_answer(callback)
                 return
             screen_manager.update_state(
