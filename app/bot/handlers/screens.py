@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import asyncio
 import logging
 from typing import Any
@@ -16,6 +16,7 @@ from app.bot.screens import build_report_wait_message
 from app.bot.handlers.profile import start_profile_wizard
 from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
+from app.core.timezone import APP_TIMEZONE, as_app_timezone, format_app_datetime, now_app_timezone
 from app.core.pdf_service import pdf_service
 from app.db.models import (
     FreeLimit,
@@ -152,7 +153,7 @@ async def _submit_feedback(
         username=username,
     )
     status = FeedbackStatus.SENT if delivered else FeedbackStatus.FAILED
-    sent_at = datetime.now(timezone.utc)
+    sent_at = now_app_timezone()
 
     try:
         with get_session() as session:
@@ -485,12 +486,12 @@ def _t0_cooldown_status(session, telegram_user_id: int) -> tuple[bool, str | Non
     free_limit = user.free_limit
     last_t0_at = free_limit.last_t0_at if free_limit else None
     if last_t0_at and last_t0_at.tzinfo is None:
-        last_t0_at = last_t0_at.replace(tzinfo=timezone.utc)
+        last_t0_at = last_t0_at.replace(tzinfo=APP_TIMEZONE)
     cooldown = timedelta(hours=settings.free_t0_cooldown_hours)
-    now = datetime.now(timezone.utc)
+    now = now_app_timezone()
     if last_t0_at and now < last_t0_at + cooldown:
         next_available = last_t0_at + cooldown
-        return False, next_available.strftime("%Y-%m-%d %H:%M UTC")
+        return False, format_app_datetime(next_available)
     return True, None
 
 
@@ -694,8 +695,8 @@ def _format_report_created_at(created_at: datetime | None) -> str:
         return "неизвестно"
     value = created_at
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    return value.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        value = value.replace(tzinfo=APP_TIMEZONE)
+    return format_app_datetime(value)
 
 
 def _refresh_reports_list_state(
@@ -827,10 +828,8 @@ def _build_report_pdf_filename(
         created_at = report_meta.get("created_at")
         if isinstance(created_at, datetime):
             if created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=timezone.utc)
-            created_at_value = created_at.astimezone(timezone.utc).strftime(
-                "%Y%m%d-%H%M%S"
-            )
+                created_at = created_at.replace(tzinfo=APP_TIMEZONE)
+            created_at_value = as_app_timezone(created_at).strftime("%Y%m%d-%H%M%S")
     return f"{display_username}_{tariff_value}_{created_at_value}_{report_id}.pdf"
 
 
@@ -1209,7 +1208,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             if not settings.payment_enabled:
                 if order.status != OrderStatus.PAID:
                     order.status = OrderStatus.PAID
-                    order.paid_at = datetime.now(timezone.utc)
+                    order.paid_at = now_app_timezone()
                     session.add(order)
             elif order.status != OrderStatus.PAID:
                 missing_status = _missing_payment_status_config(order.provider)
@@ -1237,7 +1236,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 result = provider.check_payment_status(order)
                 if result and result.is_paid:
                     order.status = OrderStatus.PAID
-                    order.paid_at = datetime.now(timezone.utc)
+                    order.paid_at = now_app_timezone()
                     if result.provider_payment_id:
                         order.provider_payment_id = result.provider_payment_id
                     order.provider = PaymentProviderEnum(provider.provider.value)
@@ -1352,7 +1351,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     return
                 user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
                 if user.free_limit:
-                    user.free_limit.last_t0_at = datetime.now(timezone.utc)
+                    user.free_limit.last_t0_at = now_app_timezone()
         screen_manager.update_state(callback.from_user.id, profile_flow=None)
         next_screen = "S5" if tariff in {Tariff.T2.value, Tariff.T3.value} else "S6"
         if next_screen == "S6":

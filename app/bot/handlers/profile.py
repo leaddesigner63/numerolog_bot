@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Any
 
 from aiogram import F, Router
@@ -13,6 +13,7 @@ from sqlalchemy import delete, select, func
 from app.bot.questionnaire.config import load_questionnaire_config
 from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
+from app.core.timezone import APP_TIMEZONE, format_app_datetime, now_app_timezone
 from app.db.models import (
     FeedbackMessage,
     FreeLimit,
@@ -83,12 +84,12 @@ def _t0_cooldown_status(session, telegram_user_id: int) -> tuple[bool, str | Non
     free_limit = user.free_limit
     last_t0_at = free_limit.last_t0_at if free_limit else None
     if last_t0_at and last_t0_at.tzinfo is None:
-        last_t0_at = last_t0_at.replace(tzinfo=timezone.utc)
+        last_t0_at = last_t0_at.replace(tzinfo=APP_TIMEZONE)
     cooldown = timedelta(hours=settings.free_t0_cooldown_hours)
-    now = datetime.now(timezone.utc)
+    now = now_app_timezone()
     if last_t0_at and now < last_t0_at + cooldown:
         next_available = last_t0_at + cooldown
-        return False, next_available.strftime("%Y-%m-%d %H:%M UTC")
+        return False, format_app_datetime(next_available)
     return True, None
 
 

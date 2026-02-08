@@ -18,7 +18,7 @@ def test_build_report_pdf_filename_with_username() -> None:
         123,
     )
 
-    assert name == "@real_user_T3_20260120-181227_282.pdf"
+    assert name == "@real_user_T3_20260120-211227_282.pdf"
 
 
 def test_build_report_pdf_filename_fallback_to_user_id_when_username_absent() -> None:
@@ -32,7 +32,7 @@ def test_build_report_pdf_filename_fallback_to_user_id_when_username_absent() ->
         555000,
     )
 
-    assert name == "@user_555000_T3_20260120-181227_282.pdf"
+    assert name == "@user_555000_T3_20260120-211227_282.pdf"
 
 
 def test_send_report_pdf_uses_username_from_db_when_runtime_username_absent(monkeypatch) -> None:
@@ -78,4 +78,4 @@ def test_send_report_pdf_uses_username_from_db_when_runtime_username_absent(monk
 
     assert ok is True
     assert captured["chat_id"] == 10
-    assert captured["filename"] == "@saved_username_T3_20260120-181227_282.pdf"
+    assert captured["filename"] == "@saved_username_T3_20260120-211227_282.pdf"
