@@ -459,6 +459,24 @@ def admin_ui(request: Request) -> HTMLResponse:
     .tab-panel.active {
       display: block;
     }
+    .select-col {
+      width: 38px;
+      text-align: center;
+    }
+    .row-checkbox,
+    .select-all-checkbox {
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+      accent-color: var(--accent);
+    }
+    .bulk-actions {
+      margin-top: 10px;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
   </style>
 </head>
 <body>
@@ -578,12 +596,22 @@ def admin_ui(request: Request) -> HTMLResponse:
             <input id="llmKeysActiveSearch" class="table-search" type="text" placeholder="Поиск по активным ключам" />
             <button class="secondary" onclick="clearTableFilters('llmKeysActive')">Сбросить</button>
           </div>
+          <div class="bulk-actions">
+            <button class="secondary" onclick="bulkToggleLlmKeys(true)">Включить выбранные</button>
+            <button class="secondary" onclick="bulkToggleLlmKeys(false)">Выключить выбранные</button>
+            <button class="secondary" onclick="bulkDeleteLlmKeys()">Удалить выбранные</button>
+          </div>
           <div id="llmKeysActive" class="muted">Загрузка...</div>
         </div>
         <div class="tab-panel" data-llm-panel="inactive">
           <div class="row table-controls">
             <input id="llmKeysInactiveSearch" class="table-search" type="text" placeholder="Поиск по неактивным ключам" />
             <button class="secondary" onclick="clearTableFilters('llmKeysInactive')">Сбросить</button>
+          </div>
+          <div class="bulk-actions">
+            <button class="secondary" onclick="bulkToggleLlmKeys(true)">Включить выбранные</button>
+            <button class="secondary" onclick="bulkToggleLlmKeys(false)">Выключить выбранные</button>
+            <button class="secondary" onclick="bulkDeleteLlmKeys()">Удалить выбранные</button>
           </div>
           <div id="llmKeysInactive" class="muted">Загрузка...</div>
         </div>
@@ -594,6 +622,10 @@ def admin_ui(request: Request) -> HTMLResponse:
           <input id="ordersSearch" class="table-search" type="text" placeholder="Поиск по любому столбцу" />
           <button class="secondary" onclick="clearTableFilters('orders')">Сбросить</button>
           <button class="secondary" onclick="loadOrders()">Обновить</button>
+        </div>
+        <div class="bulk-actions">
+          <button class="secondary" onclick="bulkMarkOrders('paid')">Отметить выбранные как оплаченные</button>
+          <button class="secondary" onclick="bulkMarkOrders('failed')">Отметить выбранные как ошибка</button>
         </div>
         <div id="orders" class="muted">Загрузка...</div>
       </section>
@@ -656,6 +688,9 @@ def admin_ui(request: Request) -> HTMLResponse:
           <button class="secondary" onclick="clearTableFilters('systemPrompts')">Сбросить</button>
           <button class="secondary" onclick="loadSystemPrompts()">Обновить</button>
         </div>
+        <div class="bulk-actions">
+          <button class="secondary" onclick="bulkDeleteSystemPrompts()">Удалить выбранные промпты</button>
+        </div>
         <div id="systemPrompts" class="muted">Загрузка...</div>
       </section>
       <section data-panel="notes">
@@ -668,6 +703,9 @@ def admin_ui(request: Request) -> HTMLResponse:
           <input id="notesSearch" class="table-search" type="text" placeholder="Поиск по любому столбцу" />
           <button class="secondary" onclick="clearTableFilters('notes')">Сбросить</button>
           <button class="secondary" onclick="loadNotes()">Обновить</button>
+        </div>
+        <div class="bulk-actions">
+          <button class="secondary" onclick="bulkDeleteNotes()">Удалить выбранные заметки</button>
         </div>
         <div id="notes" class="muted">Загрузка...</div>
       </section>
@@ -887,12 +925,41 @@ def admin_ui(request: Request) -> HTMLResponse:
       }
     }
 
-    async function deleteLlmKey(keyId) {
-      if (!confirm("Удалить ключ?")) {
+    async function bulkToggleLlmKeys(nextState) {
+      const ids = getSelectedIds("llmKeysActive").concat(getSelectedIds("llmKeysInactive"));
+      if (!ids.length) {
+        alert("Выберите хотя бы одну строку.");
         return;
       }
       try {
-        await fetchJson(`/llm-keys/${keyId}`, {method: "DELETE"});
+        await fetchJson("/llm-keys/bulk-update", {
+          method: "POST",
+          body: JSON.stringify({ids, is_active: nextState})
+        });
+        selectedRows.llmKeysActive.clear();
+        selectedRows.llmKeysInactive.clear();
+        await loadLlmKeys();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function bulkDeleteLlmKeys() {
+      const ids = getSelectedIds("llmKeysActive").concat(getSelectedIds("llmKeysInactive"));
+      if (!ids.length) {
+        alert("Выберите хотя бы одну строку.");
+        return;
+      }
+      if (!confirm(`Удалить выбранные ключи: ${ids.length} шт.?`)) {
+        return;
+      }
+      try {
+        await fetchJson("/llm-keys/bulk-delete", {
+          method: "POST",
+          body: JSON.stringify({ids})
+        });
+        selectedRows.llmKeysActive.clear();
+        selectedRows.llmKeysInactive.clear();
         await loadLlmKeys();
       } catch (error) {
         alert(error.message);
@@ -921,6 +988,17 @@ def admin_ui(request: Request) -> HTMLResponse:
       systemPrompts: {search: "", sortKey: null, sortDir: "asc"},
       notes: {search: "", sortKey: null, sortDir: "asc"},
     };
+    const selectedRows = {
+      llmKeysActive: new Set(),
+      llmKeysInactive: new Set(),
+      orders: new Set(),
+      reports: new Set(),
+      users: new Set(),
+      feedbackInbox: new Set(),
+      systemPrompts: new Set(),
+      notes: new Set(),
+    };
+
 
     const tableConfigs = {
       llmKeysActive: {
@@ -1159,6 +1237,56 @@ def admin_ui(request: Request) -> HTMLResponse:
       return aText.localeCompare(bText, "ru", {numeric: true, sensitivity: "base"});
     }
 
+    function rowIdentifier(row) {
+      if (row && row.id !== undefined && row.id !== null) {
+        return String(row.id);
+      }
+      return "";
+    }
+
+    function toggleRowSelection(tableKey, rowId, checked) {
+      const selected = selectedRows[tableKey];
+      if (!selected) {
+        return;
+      }
+      if (checked) {
+        selected.add(String(rowId));
+      } else {
+        selected.delete(String(rowId));
+      }
+    }
+
+    function toggleSelectAll(tableKey, checked) {
+      const config = tableConfigs[tableKey];
+      if (!config) {
+        return;
+      }
+      const selected = selectedRows[tableKey];
+      selected.clear();
+      if (checked) {
+        (tableData[tableKey] || []).forEach((row) => {
+          const rowId = rowIdentifier(row);
+          if (rowId) {
+            selected.add(rowId);
+          }
+        });
+      }
+      renderTableForKey(tableKey);
+    }
+
+    function getSelectedIds(tableKey) {
+      return Array.from(selectedRows[tableKey] || []);
+    }
+
+    function clearSelection(tableKey) {
+      const selected = selectedRows[tableKey];
+      if (!selected) {
+        return;
+      }
+      selected.clear();
+      renderTableForKey(tableKey);
+    }
+
     function collectSearchableText(columns, row) {
       const parts = columns.map((column) => {
         if (column.searchValue) {
@@ -1197,7 +1325,10 @@ def admin_ui(request: Request) -> HTMLResponse:
         target.textContent = "Нет данных";
         return;
       }
-      const header = config.columns.map((column) => {
+      const selected = selectedRows[tableKey] || new Set();
+      const selectableRows = filteredRows.filter((row) => rowIdentifier(row));
+      const allSelected = selectableRows.length > 0 && selectableRows.every((row) => selected.has(rowIdentifier(row)));
+      const headerCells = config.columns.map((column) => {
         const sortable = column.sortable && column.key;
         const isActive = sortable && state.sortKey === column.key;
         const indicator = isActive ? (state.sortDir === "asc" ? "▲" : "▼") : "⇅";
@@ -1211,6 +1342,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         }
         return `<th>${column.label}</th>`;
       }).join("");
+      const header = `<th class="select-col"><input type="checkbox" class="select-all-checkbox" ${allSelected ? "checked" : ""} onchange="toggleSelectAll('${tableKey}', this.checked)" /></th>${headerCells}`;
       const body = filteredRows.map((row) => {
         const cells = config.columns.map((column) => {
           const cellValue = column.render
@@ -1220,7 +1352,10 @@ def admin_ui(request: Request) -> HTMLResponse:
           const cellClass = isCopyable ? "copyable-cell" : "";
           return `<td class="${cellClass}">${cellValue || "—"}</td>`;
         }).join("");
-        return `<tr>${cells}</tr>`;
+        const rowId = rowIdentifier(row);
+        const checked = rowId && selected.has(rowId) ? "checked" : "";
+        const selectCell = `<td class="select-col"><input type="checkbox" class="row-checkbox" ${checked} onchange="toggleRowSelection('${tableKey}', '${rowId}', this.checked)" /></td>`;
+        return `<tr>${selectCell}${cells}</tr>`;
       }).join("");
       target.innerHTML = `<table><thead><tr>${header}</tr></thead><tbody>${body}</tbody></table>`;
     }
@@ -1326,6 +1461,24 @@ def admin_ui(request: Request) -> HTMLResponse:
           method: "POST",
           body: JSON.stringify({status})
         });
+        await loadOrders();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function bulkMarkOrders(status) {
+      const ids = getSelectedIds("orders");
+      if (!ids.length) {
+        alert("Выберите хотя бы один заказ.");
+        return;
+      }
+      try {
+        await fetchJson("/orders/bulk-status", {
+          method: "POST",
+          body: JSON.stringify({ids, status})
+        });
+        selectedRows.orders.clear();
         await loadOrders();
       } catch (error) {
         alert(error.message);
@@ -1446,6 +1599,27 @@ def admin_ui(request: Request) -> HTMLResponse:
       }
     }
 
+    async function bulkDeleteSystemPrompts() {
+      const ids = getSelectedIds("systemPrompts");
+      if (!ids.length) {
+        alert("Выберите хотя бы один промпт.");
+        return;
+      }
+      if (!confirm(`Удалить выбранные промпты: ${ids.length} шт.?`)) {
+        return;
+      }
+      try {
+        await fetchJson("/system-prompts/bulk-delete", {
+          method: "POST",
+          body: JSON.stringify({ids})
+        });
+        selectedRows.systemPrompts.clear();
+        await loadSystemPrompts();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
     async function loadNotes() {
       try {
         const data = await fetchJson("/notes");
@@ -1471,6 +1645,28 @@ def admin_ui(request: Request) -> HTMLResponse:
           body: JSON.stringify(payload)
         });
         input.value = "";
+        await loadNotes();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+
+    async function bulkDeleteNotes() {
+      const ids = getSelectedIds("notes");
+      if (!ids.length) {
+        alert("Выберите хотя бы одну заметку.");
+        return;
+      }
+      if (!confirm(`Удалить выбранные заметки: ${ids.length} шт.?`)) {
+        return;
+      }
+      try {
+        await fetchJson("/notes/bulk-delete", {
+          method: "POST",
+          body: JSON.stringify({ids})
+        });
+        selectedRows.notes.clear();
         await loadNotes();
       } catch (error) {
         alert(error.message);
@@ -1642,6 +1838,23 @@ def _mask_key(value: str | None) -> str:
     return f"{value[:2]}***{value[-4:]}"
 
 
+
+
+def _parse_json_payload(payload: object) -> dict:
+    return payload if isinstance(payload, dict) else {}
+
+
+def _parse_ids(payload: dict, *, field: str = "ids") -> list[int]:
+    raw_ids = payload.get(field)
+    if not isinstance(raw_ids, list):
+        return []
+    parsed: list[int] = []
+    for raw_id in raw_ids:
+        try:
+            parsed.append(int(raw_id))
+        except (TypeError, ValueError):
+            continue
+    return parsed
 def _coerce_bool(value: object) -> bool:
     if isinstance(value, bool):
         return value
@@ -1751,6 +1964,53 @@ async def admin_bulk_llm_keys(
     return {"created": created, "lines": len(lines)}
 
 
+@router.post("/api/llm-keys/bulk-update")
+async def admin_bulk_update_llm_keys(
+    request: Request, session: Session = Depends(_get_db_session)
+) -> dict:
+    try:
+        payload = _parse_json_payload(await request.json())
+    except Exception:
+        payload = {}
+    ids = _parse_ids(payload)
+    if not ids:
+        return {"updated": 0}
+    records = session.execute(select(LLMApiKey).where(LLMApiKey.id.in_(ids))).scalars().all()
+    if "is_active" in payload:
+        next_state = _coerce_bool(payload.get("is_active"))
+        now = datetime.now(timezone.utc)
+        for record in records:
+            if next_state:
+                record.disabled_at = None
+            elif record.is_active or record.disabled_at is None:
+                record.disabled_at = now
+            record.is_active = next_state
+    if "priority" in payload:
+        value = payload.get("priority")
+        for record in records:
+            record.priority = None if value is None else str(value)
+    session.flush()
+    return {"updated": len(records)}
+
+
+@router.post("/api/llm-keys/bulk-delete")
+async def admin_bulk_delete_llm_keys(
+    request: Request, session: Session = Depends(_get_db_session)
+) -> dict:
+    try:
+        payload = _parse_json_payload(await request.json())
+    except Exception:
+        payload = {}
+    ids = _parse_ids(payload)
+    if not ids:
+        return {"deleted": 0}
+    records = session.execute(select(LLMApiKey).where(LLMApiKey.id.in_(ids))).scalars().all()
+    deleted = len(records)
+    for record in records:
+        session.delete(record)
+    return {"deleted": deleted}
+
+
 @router.patch("/api/llm-keys/{key_id}")
 async def admin_update_llm_key(
     key_id: int, request: Request, session: Session = Depends(_get_db_session)
@@ -1855,6 +2115,34 @@ async def admin_order_status(
         "current_status": order.status.value,
         "updated": updated,
     }
+
+
+@router.post("/api/orders/bulk-status")
+async def admin_orders_bulk_status(
+    request: Request,
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    try:
+        payload = _parse_json_payload(await request.json())
+    except Exception:
+        payload = {}
+    ids = _parse_ids(payload)
+    status_value = payload.get("status")
+    if not ids or not isinstance(status_value, str):
+        return {"updated": 0}
+    try:
+        new_status = OrderStatus(status_value)
+    except ValueError:
+        return {"updated": 0}
+    orders = session.execute(select(Order).where(Order.id.in_(ids))).scalars().all()
+    updated = 0
+    now = datetime.now(timezone.utc)
+    for order in orders:
+        order.status = new_status
+        if new_status == OrderStatus.PAID and not order.paid_at:
+            order.paid_at = now
+        updated += 1
+    return {"updated": updated}
 
 
 @router.get("/api/reports")
@@ -2021,6 +2309,42 @@ def admin_delete_system_prompt(
         raise HTTPException(status_code=404, detail="Prompt not found")
     session.delete(prompt)
     return {"deleted": True}
+
+
+@router.post("/api/system-prompts/bulk-delete")
+async def admin_bulk_delete_system_prompts(
+    request: Request, session: Session = Depends(_get_db_session)
+) -> dict:
+    try:
+        payload = _parse_json_payload(await request.json())
+    except Exception:
+        payload = {}
+    ids = _parse_ids(payload)
+    if not ids:
+        return {"deleted": 0}
+    prompts = session.execute(select(SystemPrompt).where(SystemPrompt.id.in_(ids))).scalars().all()
+    deleted = len(prompts)
+    for prompt in prompts:
+        session.delete(prompt)
+    return {"deleted": deleted}
+
+
+@router.post("/api/notes/bulk-delete")
+async def admin_bulk_delete_notes(
+    request: Request, session: Session = Depends(_get_db_session)
+) -> dict:
+    try:
+        payload = _parse_json_payload(await request.json())
+    except Exception:
+        payload = {}
+    ids = _parse_ids(payload)
+    if not ids:
+        return {"deleted": 0}
+    notes = session.execute(select(AdminNote).where(AdminNote.id.in_(ids))).scalars().all()
+    deleted = len(notes)
+    for note in notes:
+        session.delete(note)
+    return {"deleted": deleted}
 
 
 @router.get("/api/notes")
