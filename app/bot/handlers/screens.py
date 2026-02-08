@@ -218,6 +218,23 @@ async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
         await asyncio.sleep(1)
 
 
+async def _maybe_run_report_delay(callback: CallbackQuery) -> None:
+    if settings.report_delay_seconds <= 0:
+        return
+    if not callback.message:
+        return
+    state_snapshot = screen_manager.update_state(callback.from_user.id)
+    if state_snapshot.data.get("report_job_status") == ReportJobStatus.FAILED.value:
+        return
+    asyncio.create_task(
+        _run_report_delay(
+            bot=callback.bot,
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+        )
+    )
+
+
 async def _safe_callback_answer(callback: CallbackQuery) -> None:
     if getattr(callback, "answered", False) or getattr(callback, "_answered", False):
         return
@@ -1280,6 +1297,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 callback,
                 screen_id="S6",
             )
+            await _maybe_run_report_delay(callback)
         else:
             with get_session() as session:
                 _refresh_questionnaire_state(session, callback.from_user.id)
@@ -1358,6 +1376,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             callback,
             screen_id="S6",
         )
+        await _maybe_run_report_delay(callback)
         with get_session() as session:
             user = _get_or_create_user(session, callback.from_user.id)
             order_id = _safe_int(state_snapshot.data.get("order_id"))
@@ -1438,6 +1457,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             callback,
             screen_id="S6",
         )
+        await _maybe_run_report_delay(callback)
         await _safe_callback_answer(callback)
         return
 

@@ -101,7 +101,7 @@ REPORT_SAFETY_ENABLED=true
 # Отключение проверки оплаты (тестовый режим):
 PAYMENT_ENABLED=true
 # Искусственная задержка перед выдачей отчёта (секунды, с анимацией и таймером):
-REPORT_DELAY_SECONDS=0
+REPORT_DELAY_SECONDS=10
 # Report job worker (фоновые задания генерации отчёта)
 REPORT_JOB_POLL_INTERVAL_SECONDS=5
 REPORT_JOB_LOCK_TIMEOUT_SECONDS=600
