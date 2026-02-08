@@ -531,6 +531,82 @@ def admin_ui(request: Request) -> HTMLResponse:
       font-size: 12px;
       margin-bottom: 4px;
     }
+    .analytics-filters {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .kpi-card {
+      border: 1px solid #2a2f3a;
+      border-radius: 10px;
+      padding: 10px;
+      background: #11151c;
+    }
+    .kpi-card h3 {
+      margin: 0;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .kpi-card .value {
+      margin-top: 6px;
+      font-size: 22px;
+      font-weight: 600;
+    }
+    .kpi-card.problem {
+      border-color: rgba(239, 68, 68, 0.65);
+      background: rgba(127, 29, 29, 0.2);
+    }
+    .analytics-block {
+      border: 1px solid #2a2f3a;
+      border-radius: 10px;
+      padding: 10px;
+      margin-top: 10px;
+      background: #11151c;
+    }
+    .analytics-title {
+      font-size: 13px;
+      margin-bottom: 8px;
+      color: #cbd5e1;
+    }
+    .funnel-chart {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .funnel-step {
+      display: grid;
+      grid-template-columns: 110px 1fr 55px;
+      gap: 8px;
+      align-items: center;
+      font-size: 12px;
+    }
+    .funnel-bar-wrap {
+      width: 100%;
+      height: 14px;
+      border-radius: 999px;
+      background: #0f1115;
+      border: 1px solid #2a2f3a;
+      overflow: hidden;
+    }
+    .funnel-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #22c55e, #3b82f6);
+    }
+    .problem-cell {
+      background: rgba(239, 68, 68, 0.16);
+      color: #fecaca;
+    }
+    .analytics-state {
+      font-size: 13px;
+      color: var(--muted);
+    }
   </style>
 </head>
 <body>
@@ -552,6 +628,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         <button class="nav-button" data-section="reports">Отчёты</button>
         <button class="nav-button" data-section="users">Пользователи</button>
         <button class="nav-button" data-section="feedback-inbox">Обратная связь</button>
+        <button class="nav-button" data-section="analytics">Analytics</button>
         <button class="nav-button" data-section="system-prompts">Системные промпты</button>
         <button class="nav-button" data-section="notes">Админ-заметки</button>
       </nav>
@@ -738,6 +815,55 @@ def admin_ui(request: Request) -> HTMLResponse:
             </div>
           </div>
           <div id="feedbackThreadBody" class="thread-history-list muted">Выберите обращение и нажмите «История треда».</div>
+        </div>
+      </section>
+      <section data-panel="analytics">
+        <h2>Analytics: переходы и воронка</h2>
+        <div class="analytics-filters">
+          <div class="field">
+            <label for="analyticsFrom">Период c</label>
+            <input id="analyticsFrom" type="datetime-local" />
+          </div>
+          <div class="field">
+            <label for="analyticsTo">Период по</label>
+            <input id="analyticsTo" type="datetime-local" />
+          </div>
+          <div class="field">
+            <label for="analyticsTariff">Тариф</label>
+            <select id="analyticsTariff">
+              <option value="">Все</option>
+              <option value="T0">T0</option>
+              <option value="T1">T1</option>
+              <option value="T2">T2</option>
+              <option value="T3">T3</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="analyticsDropoffWindow">Drop-off окно, мин</label>
+            <input id="analyticsDropoffWindow" type="number" min="1" max="1440" value="60" />
+          </div>
+          <div class="field">
+            <label for="analyticsTopN">Top N</label>
+            <input id="analyticsTopN" type="number" min="3" max="500" value="50" />
+          </div>
+          <div class="field" style="justify-content: flex-end;">
+            <label>&nbsp;</label>
+            <button class="secondary" onclick="loadAnalytics()">Обновить аналитику</button>
+          </div>
+        </div>
+        <div id="analyticsState" class="analytics-state">Загрузка...</div>
+        <div id="analyticsKpi" class="kpi-grid"></div>
+        <div class="analytics-block">
+          <div class="analytics-title">Воронка по шагам</div>
+          <div id="analyticsFunnel" class="muted">Нет данных</div>
+        </div>
+        <div class="analytics-block">
+          <div class="analytics-title">Матрица переходов</div>
+          <div id="analyticsMatrix" class="muted">Нет данных</div>
+        </div>
+        <div class="analytics-block">
+          <div class="analytics-title">Узкие места (высокий отвал / долгое время)</div>
+          <div id="analyticsBottlenecks" class="muted">Нет данных</div>
         </div>
       </section>
       <section data-panel="system-prompts">
@@ -1909,6 +2035,207 @@ def admin_ui(request: Request) -> HTMLResponse:
       }
     }
 
+    const analyticsThresholds = {
+      lowCr: 0.35,
+      highDropoff: 0.45,
+      longDurationSec: 1800,
+    };
+
+    function toIsoFromLocal(value) {
+      if (!value) {
+        return null;
+      }
+      const parsed = new Date(value);
+      if (Number.isNaN(parsed.getTime())) {
+        return null;
+      }
+      return parsed.toISOString();
+    }
+
+    function formatPercent(value) {
+      const num = Number(value) || 0;
+      return `${(num * 100).toFixed(1)}%`;
+    }
+
+    function renderAnalyticsTable(targetId, headers, rows) {
+      const target = document.getElementById(targetId);
+      if (!target) {
+        return;
+      }
+      if (!rows.length) {
+        target.innerHTML = '<div class="muted">Нет данных за выбранный период.</div>';
+        return;
+      }
+      target.innerHTML = `
+        <table>
+          <thead>
+            <tr>${headers.map((header) => `<th>${header}</th>`).join("")}</tr>
+          </thead>
+          <tbody>
+            ${rows.map((row) => `<tr>${row.map((cell) => `<td class="${cell.className || ""}">${cell.value}</td>`).join("")}</tr>`).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderFunnelChart(funnelRows) {
+      const target = document.getElementById("analyticsFunnel");
+      if (!target) {
+        return;
+      }
+      if (!funnelRows.length) {
+        target.innerHTML = '<div class="muted">Нет данных по воронке.</div>';
+        return;
+      }
+      target.innerHTML = `
+        <div class="funnel-chart">
+          ${funnelRows.map((row) => {
+            const width = Math.max(0, Math.min(100, (Number(row.conversion_from_start) || 0) * 100));
+            const stepCr = Number(row.conversion_from_previous) || 0;
+            const isProblem = stepCr > 0 && stepCr < analyticsThresholds.lowCr;
+            return `
+              <div class="funnel-step ${isProblem ? "problem-cell" : ""}">
+                <div>${row.step}</div>
+                <div class="funnel-bar-wrap"><div class="funnel-bar" style="width: ${width}%;"></div></div>
+                <div>${formatPercent(stepCr)}</div>
+              </div>
+            `;
+          }).join("")}
+        </div>
+      `;
+    }
+
+    function renderKpis(summary, funnelRows, dropoffRows) {
+      const target = document.getElementById("analyticsKpi");
+      if (!target) {
+        return;
+      }
+      const users = Number(summary?.users) || 0;
+      const startStep = funnelRows.find((row) => row.step === "S0") || funnelRows[0];
+      const endStep = funnelRows[funnelRows.length - 1];
+      const startUsers = Number(startStep?.users) || 0;
+      const endUsers = Number(endStep?.users) || 0;
+      const conversion = startUsers ? endUsers / startUsers : 0;
+      const topDropoff = dropoffRows.slice(0, 3).map((row) => `${row.screen}: ${formatPercent(row.share)}`).join(" • ") || "Нет данных";
+
+      target.innerHTML = `
+        <div class="kpi-card">
+          <h3>Уникальные пользователи воронки</h3>
+          <div class="value">${users}</div>
+        </div>
+        <div class="kpi-card ${conversion < analyticsThresholds.lowCr ? "problem" : ""}">
+          <h3>Общая конверсия воронки</h3>
+          <div class="value">${formatPercent(conversion)}</div>
+        </div>
+        <div class="kpi-card ${(dropoffRows[0]?.share || 0) > analyticsThresholds.highDropoff ? "problem" : ""}">
+          <h3>Drop-off top-3</h3>
+          <div class="value" style="font-size: 14px; line-height: 1.35;">${topDropoff}</div>
+        </div>
+      `;
+    }
+
+    function buildAnalyticsQuery() {
+      const query = new URLSearchParams();
+      const fromIso = toIsoFromLocal(document.getElementById("analyticsFrom")?.value || "");
+      const toIso = toIsoFromLocal(document.getElementById("analyticsTo")?.value || "");
+      const tariff = document.getElementById("analyticsTariff")?.value || "";
+      const dropoffWindow = Number(document.getElementById("analyticsDropoffWindow")?.value || "60");
+      const topN = Number(document.getElementById("analyticsTopN")?.value || "50");
+      if (fromIso) {
+        query.set("from", fromIso);
+      }
+      if (toIso) {
+        query.set("to", toIso);
+      }
+      if (tariff) {
+        query.set("tariff", tariff);
+      }
+      query.set("dropoff_window_minutes", String(Math.min(1440, Math.max(1, dropoffWindow || 60))));
+      query.set("top_n", String(Math.min(500, Math.max(3, topN || 50))));
+      return query.toString();
+    }
+
+    async function loadAnalytics() {
+      const stateNode = document.getElementById("analyticsState");
+      if (!stateNode) {
+        return;
+      }
+      stateNode.textContent = "Загрузка аналитики...";
+      try {
+        const query = buildAnalyticsQuery();
+        const [summaryRes, matrixRes, funnelRes, timingRes, fullRes] = await Promise.all([
+          fetchJson(`/analytics/transitions/summary?${query}`),
+          fetchJson(`/analytics/transitions/matrix?${query}`),
+          fetchJson(`/analytics/transitions/funnel?${query}`),
+          fetchJson(`/analytics/transitions/timing?${query}`),
+          fetchJson(`/analytics/screen-transitions?${query}`),
+        ]);
+
+        const summary = summaryRes?.data?.summary || {};
+        const matrixRows = matrixRes?.data?.transition_matrix || [];
+        const funnelRows = funnelRes?.data?.funnel || [];
+        const timingRows = timingRes?.data?.transition_timing || [];
+        const dropoffRows = fullRes?.data?.dropoff || [];
+
+        const isEmpty = !matrixRows.length && !funnelRows.length && !dropoffRows.length;
+        if (isEmpty) {
+          stateNode.textContent = "Нет данных за выбранный период.";
+          renderKpis({}, [], []);
+          renderFunnelChart([]);
+          renderAnalyticsTable("analyticsMatrix", ["from", "to", "count", "share"], []);
+          renderAnalyticsTable("analyticsBottlenecks", ["Переход", "CR", "Drop-off", "Медиана времени"], []);
+          return;
+        }
+
+        renderKpis(summary, funnelRows, dropoffRows);
+        renderFunnelChart(funnelRows);
+
+        renderAnalyticsTable(
+          "analyticsMatrix",
+          ["From", "To", "Переходов", "Доля"],
+          matrixRows.map((row) => [
+            {value: row.from_screen || "-"},
+            {value: row.to_screen || "-"},
+            {value: Number(row.count) || 0},
+            {value: formatPercent(row.share)},
+          ])
+        );
+
+        const timingByPair = new Map(
+          timingRows.map((row) => [`${row.from_screen}->${row.to_screen}`, row])
+        );
+        const bottlenecks = matrixRows.slice(0, 20).map((row) => {
+          const key = `${row.from_screen}->${row.to_screen}`;
+          const timing = timingByPair.get(key);
+          const cr = Number(row.share) || 0;
+          const dropoffShare = Number((dropoffRows.find((drop) => drop.screen === row.to_screen) || {}).share) || 0;
+          const medianSec = Number(timing?.median_seconds) || 0;
+          const isProblem = cr < analyticsThresholds.lowCr || dropoffShare > analyticsThresholds.highDropoff || medianSec > analyticsThresholds.longDurationSec;
+          return {
+            transition: key,
+            cr,
+            dropoffShare,
+            medianSec,
+            isProblem,
+          };
+        }).filter((row) => row.isProblem).sort((a, b) => (b.dropoffShare + b.medianSec / 10000) - (a.dropoffShare + a.medianSec / 10000));
+
+        renderAnalyticsTable(
+          "analyticsBottlenecks",
+          ["Переход", "CR", "Drop-off", "Медиана времени"],
+          bottlenecks.map((row) => [
+            {value: row.transition, className: row.isProblem ? "problem-cell" : ""},
+            {value: formatPercent(row.cr), className: row.cr < analyticsThresholds.lowCr ? "problem-cell" : ""},
+            {value: formatPercent(row.dropoffShare), className: row.dropoffShare > analyticsThresholds.highDropoff ? "problem-cell" : ""},
+            {value: row.medianSec ? `${Math.round(row.medianSec)} сек` : "—", className: row.medianSec > analyticsThresholds.longDurationSec ? "problem-cell" : ""},
+          ])
+        );
+        stateNode.textContent = `Обновлено: ${new Date().toLocaleString()}`;
+      } catch (error) {
+        stateNode.textContent = `Ошибка загрузки аналитики: ${error.message}`;
+      }
+    }
+
     async function createNote() {
       const input = document.getElementById("noteInput");
       const value = input.value;
@@ -1962,6 +2289,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       reports: loadReports,
       users: loadUsers,
       "feedback-inbox": async () => { await loadFeedbackInbox(); await loadFeedbackArchive(); },
+      analytics: loadAnalytics,
       "system-prompts": loadSystemPrompts,
       notes: loadNotes,
     };
