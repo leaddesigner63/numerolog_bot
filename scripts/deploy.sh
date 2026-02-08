@@ -91,3 +91,9 @@ fi
 $SYSTEMCTL daemon-reload
 $SYSTEMCTL restart -- "${services[@]}"
 $SYSTEMCTL --no-pager --full status -- "${services[@]}" | head -n 80
+
+if [ -f scripts/smoke_check_landing.sh ]; then
+  bash scripts/smoke_check_landing.sh
+else
+  echo "scripts/smoke_check_landing.sh не найден, smoke-check пропущен."
+fi

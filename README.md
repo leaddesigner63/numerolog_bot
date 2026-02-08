@@ -39,6 +39,10 @@ scripts/              # вспомогательные скрипты
   test.sh             # полный набор локальных проверок
   fast_checks.py      # быстрые сценарные проверки без внешних зависимостей
   check_landing_content.py # статическая проверка словаря/дисклеймеров лендинга
+  smoke_check_landing.sh # smoke-check доступности лендинга/CTA/ассетов после деплоя
+docs/
+  deploy/
+    landing_autodeploy.md # подробный runbook по автодеплою лендинга (VPS + Nginx)
 web/                  # one-screen лендинг для перехода в Telegram-бот
   index.html          # секции Hero/Преимущества/Тарифы/FAQ/Footer + CTA deep-link
   styles.css          # mobile-first стили (360px+, tablet, desktop)
@@ -568,17 +572,18 @@ sudo systemctl restart numerolog.target
 ## Автодеплой
 
 Пошаговые инструкции по автодеплою через GitHub Actions находятся в
-[`AUTODEPLOY_INSTRUCTIONS.md`](AUTODEPLOY_INSTRUCTIONS.md).
+[`AUTODEPLOY_INSTRUCTIONS.md`](AUTODEPLOY_INSTRUCTIONS.md) и
+[`docs/deploy/landing_autodeploy.md`](docs/deploy/landing_autodeploy.md).
 
 Ключевые секреты для workflow:
 - `SERVICE_NAME` — имя systemd-сервиса или target для перезапуска.
 - `SERVICE_NAMES` — опционально, список сервисов/target’ов через пробел (имеет приоритет).
 - `ENV_FILE`, `DEPLOY_PATH`, `SSH_HOST`, `SSH_USER`, `SSH_PORT`, `SSH_PRIVATE_KEY` — инфраструктурные параметры.
+- `LANDING_URL`, `LANDING_EXPECTED_CTA`, `LANDING_ASSET_URLS` — параметры smoke-check после деплоя.
 
 Workflow запускает `scripts/deploy.sh` на сервере и передаёт ссылку на ветку,
 в которую был сделан push (например, `origin/work` или `origin/main`).
-По умолчанию workflow настроен на ветки `main` и `work` — убедитесь, что ваш push выполняется
-в одну из них или расширьте список веток в `.github/workflows/deploy.yml`.
+Workflow по умолчанию запускается на push в `main` и содержит последовательность: `build -> lint/check -> deploy` в production-окружение.
 Проверьте, что unit-файлы созданы и имена сервисов совпадают с тем, что вы передали
 в `SERVICE_NAME`/`SERVICE_NAMES`. Если получаете ошибку вида
 `...service: command not found`, это признак отсутствующего unit-файла или неверного имени сервиса.
