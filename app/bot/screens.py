@@ -381,6 +381,12 @@ def _format_questionnaire_profile(questionnaire: dict[str, Any] | None) -> str:
     if not questionnaire:
         return "Профиль расширенной анкеты: нет данных."
     status = questionnaire.get("status", "empty")
+    status_labels = {
+        "empty": "не заполнена",
+        "in_progress": "в процессе",
+        "completed": "завершена",
+    }
+    display_status = status_labels.get(str(status).lower(), status)
     version = questionnaire.get("version", "—")
     answered_count = questionnaire.get("answered_count", 0)
     total_questions = questionnaire.get("total_questions", 0)
@@ -388,7 +394,7 @@ def _format_questionnaire_profile(questionnaire: dict[str, Any] | None) -> str:
     answers = questionnaire.get("answers")
     lines = [
         "Профиль расширенной анкеты:",
-        f"Статус: {status}",
+        f"Статус: {display_status}",
         f"Версия: {version}",
         f"Прогресс: {answered_count}/{total_questions}",
         f"Завершена: {completed_at}",
@@ -397,7 +403,9 @@ def _format_questionnaire_profile(questionnaire: dict[str, Any] | None) -> str:
         field_labels = {
             "experience": "Опыт",
             "skills_confidence": "Уверенность в навыках",
+            "skills": "Навыки",
             "motivation": "Мотивация",
+            "interests": "Интересы",
             "constraints": "Ограничения",
             "goals": "Цели",
         }
