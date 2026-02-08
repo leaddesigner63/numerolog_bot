@@ -183,10 +183,10 @@ server {
     server_name landing.example.com;
 
     root /var/www/numerolog_bot/web;
-    index index.html;
+    index test.html;
 
     location / {
-        try_files $uri $uri/ /index.html;
+        try_files $uri $uri/ /test.html;
     }
 }
 ```

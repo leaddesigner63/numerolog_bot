@@ -44,7 +44,7 @@ docs/
   deploy/
     landing_autodeploy.md # подробный runbook по автодеплою лендинга (VPS + Nginx)
 web/                  # one-screen лендинг для перехода в Telegram-бот
-  index.html          # секции Hero/Преимущества/Тарифы/FAQ/Footer + CTA deep-link
+  test.html           # секции Hero/Преимущества/Тарифы/FAQ/Footer + CTA deep-link
   styles.css          # mobile-first стили (360px+, tablet, desktop)
   script.js           # рендер контента из JSON + FAQ-аккордеон + UTM/deep-link + аналитика
   content/
@@ -132,7 +132,7 @@ python -m http.server 8080 --directory web
 
 После запуска откройте `http://localhost:8080`.
 
-> В `web/index.html` используются Telegram deep-link вида `https://t.me/your_bot_username?start=<utm_tag>`. Перед публикацией замените `your_bot_username` на реальный username вашего бота.
+> В `web/test.html` используются Telegram deep-link вида `https://t.me/your_bot_username?start=<utm_tag>`. Перед публикацией замените `your_bot_username` на реальный username вашего бота.
 
 5. Выполните миграции:
 
