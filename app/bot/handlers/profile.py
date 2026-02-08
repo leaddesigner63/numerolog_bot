@@ -19,6 +19,7 @@ from app.db.models import (
     Order,
     OrderStatus,
     QuestionnaireResponse,
+    Report,
     User,
     UserProfile,
 )
