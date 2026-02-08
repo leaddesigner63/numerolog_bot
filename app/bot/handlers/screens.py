@@ -50,6 +50,8 @@ TARIFF_PRICES = {
 
 PAID_TARIFFS = {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}
 
+_report_wait_tasks: dict[int, asyncio.Task[None]] = {}
+
 
 def _safe_int(value: str | int | None) -> int | None:
     if value is None:
@@ -183,23 +185,26 @@ async def _submit_feedback(
 
 
 async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
-    delay_seconds = settings.report_delay_seconds
-    if delay_seconds <= 0:
-        return
-    state = screen_manager.update_state(user_id)
-    if not state.message_ids:
-        await asyncio.sleep(delay_seconds)
-        return
-    message_id = state.message_ids[-1]
-    content = screen_manager.render_screen("S6", user_id, state.data)
+    cycle_seconds = max(settings.report_delay_seconds, 1)
     frames = ["⏳", "⌛", "🔄", "✨"]
-    for remaining in range(delay_seconds, 0, -1):
-        frame = frames[remaining % len(frames)]
+    tick = 0
+    while True:
+        state = screen_manager.update_state(user_id)
+        if not state.message_ids:
+            return
+        message_id = state.message_ids[-1]
+        with get_session() as session:
+            job = _refresh_report_job_state(session, user_id)
+        if job and job.status in {ReportJobStatus.COMPLETED, ReportJobStatus.FAILED}:
+            return
+        frame = frames[tick % len(frames)]
+        raw_progress = ((tick % cycle_seconds) + 1) / cycle_seconds
+        progress = min(max(raw_progress, 0.05), 0.95)
         text = build_report_wait_message(
-            remaining_seconds=remaining,
             frame=frame,
-            total_seconds=delay_seconds,
+            progress=progress,
         )
+        content = screen_manager.render_screen("S6", user_id, state.data)
         try:
             await bot.edit_message_text(
                 chat_id=chat_id,
@@ -217,8 +222,8 @@ async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
                     "error": str(exc),
                 },
             )
-            await asyncio.sleep(delay_seconds)
             return
+        tick += 1
         await asyncio.sleep(1)
 
 
@@ -227,16 +232,25 @@ async def _maybe_run_report_delay(callback: CallbackQuery) -> None:
         return
     if not callback.message:
         return
-    state_snapshot = screen_manager.update_state(callback.from_user.id)
+    user_id = callback.from_user.id
+    running_task = _report_wait_tasks.get(user_id)
+    if running_task and not running_task.done():
+        return
+    state_snapshot = screen_manager.update_state(user_id)
     if state_snapshot.data.get("report_job_status") == ReportJobStatus.FAILED.value:
         return
-    asyncio.create_task(
-        _run_report_delay(
-            bot=callback.bot,
-            chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
-        )
-    )
+
+    async def _runner() -> None:
+        try:
+            await _run_report_delay(
+                bot=callback.bot,
+                chat_id=callback.message.chat.id,
+                user_id=user_id,
+            )
+        finally:
+            _report_wait_tasks.pop(user_id, None)
+
+    _report_wait_tasks[user_id] = asyncio.create_task(_runner())
 
 
 async def _safe_callback_answer(callback: CallbackQuery) -> None:
