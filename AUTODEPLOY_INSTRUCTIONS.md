@@ -170,3 +170,11 @@ sudo systemctl restart numerolog-api.service numerolog-bot.service
 ```
 
 - После деплоя обязательно применяйте новые миграции (`alembic upgrade head`), чтобы изменения админки (включая архив обращений) работали корректно.
+
+
+## 10. Чек-лист после автодеплоя
+1. Проверьте, что миграции применились: `alembic current` и `alembic heads`.
+2. Убедитесь, что бот и API активны: `systemctl status numerolog-bot.service numerolog-api.service`.
+3. Проверьте последние логи: `journalctl -u numerolog-bot.service -n 100 --no-pager`.
+4. Пройдите smoke-flow в Telegram: `/start` → выбор тарифа → открытие экрана оплаты/анкеты.
+5. Убедитесь, что в БД появляются записи `screen_transition_events` (включая trigger_type callback/job).

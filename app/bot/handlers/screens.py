@@ -170,7 +170,9 @@ async def _submit_feedback(
             session.flush()
             support_message.thread_feedback_id = thread_feedback_id or feedback.id
             session.add(support_message)
-            screen_manager.update_state(user_id, support_thread_feedback_id=thread_feedback_id or feedback.id)
+            screen_manager.update_state(
+                user_id, support_thread_feedback_id=thread_feedback_id or feedback.id
+            )
     except Exception as exc:
         logger.warning(
             "feedback_store_failed",
@@ -253,10 +255,8 @@ async def _safe_callback_processing(callback: CallbackQuery) -> None:
 
 
 async def _ensure_report_delivery(callback: CallbackQuery, screen_id: str) -> bool:
-    delivered = await screen_manager.show_screen(
-        bot=callback.bot,
-        chat_id=callback.message.chat.id,
-        user_id=callback.from_user.id,
+    delivered = await _show_screen_for_callback(
+        callback,
         screen_id=screen_id,
     )
     if delivered:
@@ -268,10 +268,8 @@ async def _ensure_report_delivery(callback: CallbackQuery, screen_id: str) -> bo
             user_id=callback.from_user.id,
         )
     await asyncio.sleep(1)
-    delivered = await screen_manager.show_screen(
-        bot=callback.bot,
-        chat_id=callback.message.chat.id,
-        user_id=callback.from_user.id,
+    delivered = await _show_screen_for_callback(
+        callback,
         screen_id=screen_id,
     )
     if not delivered:
@@ -288,6 +286,23 @@ async def _send_notice(callback: CallbackQuery, text: str, **kwargs: Any) -> Non
         text,
         user_id=callback.from_user.id,
         **kwargs,
+    )
+
+
+async def _show_screen_for_callback(
+    callback: CallbackQuery,
+    *,
+    screen_id: str,
+    metadata_json: dict[str, Any] | None = None,
+) -> bool:
+    return await screen_manager.show_screen(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+        screen_id=screen_id,
+        trigger_type="callback",
+        trigger_value=callback.data,
+        metadata_json=metadata_json,
     )
 
 
@@ -356,7 +371,9 @@ def _get_or_create_user(session, telegram_user_id: int) -> User:
     return user
 
 
-def _profile_payload(profile: UserProfile | None) -> dict[str, dict[str, str | None] | None]:
+def _profile_payload(
+    profile: UserProfile | None,
+) -> dict[str, dict[str, str | None] | None]:
     if not profile:
         return {"profile": None}
     return {
@@ -396,7 +413,8 @@ def _refresh_questionnaire_state(session, telegram_user_id: int) -> None:
     config = load_questionnaire_config()
     response = session.execute(
         select(QuestionnaireResponse).where(
-            QuestionnaireResponse.user_id == _get_or_create_user(session, telegram_user_id).id,
+            QuestionnaireResponse.user_id
+            == _get_or_create_user(session, telegram_user_id).id,
             QuestionnaireResponse.questionnaire_version == config.version,
         )
     ).scalar_one_or_none()
@@ -410,7 +428,11 @@ def _refresh_questionnaire_state(session, telegram_user_id: int) -> None:
             "current_question_id": response.current_question_id if response else None,
             "answered_count": len(answers),
             "total_questions": len(config.questions),
-            "completed_at": response.completed_at.isoformat() if response and response.completed_at else None,
+            "completed_at": (
+                response.completed_at.isoformat()
+                if response and response.completed_at
+                else None
+            ),
         },
     )
 
@@ -591,7 +613,9 @@ def _format_report_created_at(created_at: datetime | None) -> str:
     return value.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
 
-def _refresh_reports_list_state(session, telegram_user_id: int, *, limit: int = 10) -> None:
+def _refresh_reports_list_state(
+    session, telegram_user_id: int, *, limit: int = 10
+) -> None:
     user = _get_user(session, telegram_user_id)
     if not user:
         screen_manager.update_state(
@@ -600,9 +624,12 @@ def _refresh_reports_list_state(session, telegram_user_id: int, *, limit: int = 
             reports_total=0,
         )
         return
-    total = session.execute(
-        select(func.count(Report.id)).where(Report.user_id == user.id)
-    ).scalar() or 0
+    total = (
+        session.execute(
+            select(func.count(Report.id)).where(Report.user_id == user.id)
+        ).scalar()
+        or 0
+    )
     reports = (
         session.execute(
             select(Report)
@@ -616,7 +643,9 @@ def _refresh_reports_list_state(session, telegram_user_id: int, *, limit: int = 
     report_entries = []
     for report in reports:
         tariff_value = (
-            report.tariff.value if isinstance(report.tariff, Tariff) else str(report.tariff)
+            report.tariff.value
+            if isinstance(report.tariff, Tariff)
+            else str(report.tariff)
         )
         report_entries.append(
             {
@@ -644,7 +673,9 @@ def _get_report_for_user(
 
 
 def _report_meta_payload(report: Report) -> dict[str, str]:
-    tariff_value = report.tariff.value if isinstance(report.tariff, Tariff) else str(report.tariff)
+    tariff_value = (
+        report.tariff.value if isinstance(report.tariff, Tariff) else str(report.tariff)
+    )
     return {
         "id": str(report.id),
         "tariff": tariff_value,
@@ -680,7 +711,9 @@ def _get_report_pdf_meta(report: Report | None) -> dict | None:
         tariff_value = report.tariff.value
     else:
         tariff_value = str(report.tariff or "tariff")
-    created_at_value = report.created_at if isinstance(report.created_at, datetime) else None
+    created_at_value = (
+        report.created_at if isinstance(report.created_at, datetime) else None
+    )
     return {
         "id": report_id,
         "tariff": tariff_value,
@@ -782,10 +815,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 profile = state_snapshot.data.get("profile")
                 if not selected_tariff and not profile:
                     await _send_notice(callback, "Сначала выберите тариф.")
-                    await screen_manager.show_screen(
-                        bot=callback.bot,
-                        chat_id=callback.message.chat.id,
-                        user_id=callback.from_user.id,
+                    await _show_screen_for_callback(
+                        callback,
                         screen_id="S1",
                     )
                     await _safe_callback_answer(callback)
@@ -798,13 +829,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                             callback.from_user.id, **_refresh_order_state(order)
                         )
                     if not order or order.status != OrderStatus.PAID:
-                        await _send_notice(callback, 
-                            "Сначала подтвердите оплату, чтобы заполнить «Мои данные»."
+                        await _send_notice(
+                            callback,
+                            "Сначала подтвердите оплату, чтобы заполнить «Мои данные».",
                         )
-                        await screen_manager.show_screen(
-                            bot=callback.bot,
-                            chat_id=callback.message.chat.id,
-                            user_id=callback.from_user.id,
+                        await _show_screen_for_callback(
+                            callback,
                             screen_id="S3",
                         )
                         await _safe_callback_answer(callback)
@@ -819,10 +849,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                             selected_tariff=Tariff.T0.value,
                             t0_next_available=next_available,
                         )
-                        await screen_manager.show_screen(
-                            bot=callback.bot,
-                            chat_id=callback.message.chat.id,
-                            user_id=callback.from_user.id,
+                        await _show_screen_for_callback(
+                            callback,
                             screen_id="S9",
                         )
                         await _safe_callback_answer(callback)
@@ -840,10 +868,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             if not state_snapshot.data.get("profile"):
                 await _send_notice(callback, "Сначала заполните «Мои данные».")
-                await screen_manager.show_screen(
-                    bot=callback.bot,
-                    chat_id=callback.message.chat.id,
-                    user_id=callback.from_user.id,
+                await _show_screen_for_callback(
+                    callback,
                     screen_id="S4",
                 )
                 await _safe_callback_answer(callback)
@@ -859,32 +885,24 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             selected_tariff = state_snapshot.data.get("selected_tariff")
             if selected_tariff not in PAID_TARIFFS:
                 await _send_notice(callback, "Сначала выберите платный тариф.")
-                await screen_manager.show_screen(
-                    bot=callback.bot,
-                    chat_id=callback.message.chat.id,
-                    user_id=callback.from_user.id,
+                await _show_screen_for_callback(
+                    callback,
                     screen_id="S1",
                 )
                 await _safe_callback_answer(callback)
                 return
             if not state_snapshot.data.get("offer_seen"):
                 await _send_notice(callback, "Сначала ознакомьтесь с офертой.")
-                await screen_manager.show_screen(
-                    bot=callback.bot,
-                    chat_id=callback.message.chat.id,
-                    user_id=callback.from_user.id,
+                await _show_screen_for_callback(
+                    callback,
                     screen_id="S2",
                 )
                 await _safe_callback_answer(callback)
                 return
             if not state_snapshot.data.get("order_id"):
-                await _send_notice(callback, 
-                    "Сначала выберите тариф и создайте заказ."
-                )
-                await screen_manager.show_screen(
-                    bot=callback.bot,
-                    chat_id=callback.message.chat.id,
-                    user_id=callback.from_user.id,
+                await _send_notice(callback, "Сначала выберите тариф и создайте заказ.")
+                await _show_screen_for_callback(
+                    callback,
                     screen_id="S1",
                 )
                 await _safe_callback_answer(callback)
@@ -893,13 +911,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             selected_tariff = state_snapshot.data.get("selected_tariff")
             if selected_tariff not in {Tariff.T2.value, Tariff.T3.value}:
-                await _send_notice(callback, 
-                    "Анкета доступна только для тарифов T2 и T3."
+                await _send_notice(
+                    callback, "Анкета доступна только для тарифов T2 и T3."
                 )
-                await screen_manager.show_screen(
-                    bot=callback.bot,
-                    chat_id=callback.message.chat.id,
-                    user_id=callback.from_user.id,
+                await _show_screen_for_callback(
+                    callback,
                     screen_id="S1",
                 )
                 await _safe_callback_answer(callback)
@@ -907,13 +923,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             with get_session() as session:
                 order_id = _safe_int(state_snapshot.data.get("order_id"))
                 if not order_id:
-                    await _send_notice(callback, 
-                        "Сначала выберите тариф и завершите оплату."
+                    await _send_notice(
+                        callback, "Сначала выберите тариф и завершите оплату."
                     )
-                    await screen_manager.show_screen(
-                        bot=callback.bot,
-                        chat_id=callback.message.chat.id,
-                        user_id=callback.from_user.id,
+                    await _show_screen_for_callback(
+                        callback,
                         screen_id="S3",
                     )
                     await _safe_callback_answer(callback)
@@ -924,13 +938,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         callback.from_user.id, **_refresh_order_state(order)
                     )
                 if not order or order.status != OrderStatus.PAID:
-                    await _send_notice(callback, 
-                        "Сначала подтвердите оплату, чтобы перейти к анкете."
+                    await _send_notice(
+                        callback, "Сначала подтвердите оплату, чтобы перейти к анкете."
                     )
-                    await screen_manager.show_screen(
-                        bot=callback.bot,
-                        chat_id=callback.message.chat.id,
-                        user_id=callback.from_user.id,
+                    await _show_screen_for_callback(
+                        callback,
                         screen_id="S3",
                     )
                     await _safe_callback_answer(callback)
@@ -939,10 +951,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 state_snapshot = screen_manager.update_state(callback.from_user.id)
                 if not state_snapshot.data.get("profile"):
                     await _send_notice(callback, "Сначала заполните «Мои данные».")
-                    await screen_manager.show_screen(
-                        bot=callback.bot,
-                        chat_id=callback.message.chat.id,
-                        user_id=callback.from_user.id,
+                    await _show_screen_for_callback(
+                        callback,
                         screen_id="S4",
                     )
                     await start_profile_wizard(
@@ -955,9 +965,17 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             with get_session() as session:
                 job = _refresh_report_job_state(session, callback.from_user.id)
-                if job and job.status == ReportJobStatus.COMPLETED and screen_id == "S6":
+                if (
+                    job
+                    and job.status == ReportJobStatus.COMPLETED
+                    and screen_id == "S6"
+                ):
                     screen_id = "S7"
-                if job and job.status != ReportJobStatus.COMPLETED and screen_id == "S7":
+                if (
+                    job
+                    and job.status != ReportJobStatus.COMPLETED
+                    and screen_id == "S7"
+                ):
                     screen_id = "S6"
                 if screen_id == "S7":
                     _refresh_report_state(
@@ -965,10 +983,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         callback.from_user.id,
                         tariff_value=state_snapshot.data.get("selected_tariff"),
                     )
-        await screen_manager.show_screen(
-            bot=callback.bot,
-            chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
+        await _show_screen_for_callback(
+            callback,
             screen_id=screen_id,
         )
         if screen_id == "S2":
@@ -989,10 +1005,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         selected_tariff=tariff,
                         t0_next_available=next_available,
                     )
-                    await screen_manager.show_screen(
-                        bot=callback.bot,
-                        chat_id=callback.message.chat.id,
-                        user_id=callback.from_user.id,
+                    await _show_screen_for_callback(
+                        callback,
                         screen_id="S9",
                     )
                     await _safe_callback_answer(callback)
@@ -1006,11 +1020,16 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 if settings.payment_enabled:
                     provider = get_payment_provider(order.provider.value)
                     payment_link = provider.create_payment_link(order, user=user)
-                    if not payment_link and order.provider == PaymentProviderEnum.PRODAMUS:
+                    if (
+                        not payment_link
+                        and order.provider == PaymentProviderEnum.PRODAMUS
+                    ):
                         fallback_provider = get_payment_provider(
                             PaymentProviderEnum.CLOUDPAYMENTS.value
                         )
-                        payment_link = fallback_provider.create_payment_link(order, user=user)
+                        payment_link = fallback_provider.create_payment_link(
+                            order, user=user
+                        )
                         if payment_link:
                             order.provider = PaymentProviderEnum.CLOUDPAYMENTS
                             provider = fallback_provider
@@ -1022,7 +1041,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                             if order.provider == PaymentProviderEnum.PRODAMUS
                             else PaymentProviderEnum.PRODAMUS
                         )
-                        missing_fallback = _missing_payment_link_config(fallback_provider_enum)
+                        missing_fallback = _missing_payment_link_config(
+                            fallback_provider_enum
+                        )
                         logger.warning(
                             "payment_link_unavailable",
                             extra={
@@ -1033,11 +1054,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                             },
                         )
                         missing_vars = (
-                            ", ".join(missing_primary + missing_fallback) or "секреты провайдера"
+                            ", ".join(missing_primary + missing_fallback)
+                            or "секреты провайдера"
                         )
-                        await _send_notice(callback, 
+                        await _send_notice(
+                            callback,
                             "Платёжная ссылка недоступна: не настроены ключи оплаты. "
-                            f"Проверьте переменные {missing_vars}."
+                            f"Проверьте переменные {missing_vars}.",
                         )
                 screen_manager.update_state(
                     callback.from_user.id,
@@ -1053,10 +1076,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             offer_seen=False if tariff in PAID_TARIFFS else True,
         )
         next_screen = "S4" if tariff == Tariff.T0.value else "S2"
-        await screen_manager.show_screen(
-            bot=callback.bot,
-            chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
+        await _show_screen_for_callback(
+            callback,
             screen_id=next_screen,
         )
         if next_screen == "S2":
@@ -1080,7 +1101,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         with get_session() as session:
             order = session.get(Order, order_id)
             if not order:
-                await _send_notice(callback, "Заказ не найден. Попробуйте выбрать тариф заново.")
+                await _send_notice(
+                    callback, "Заказ не найден. Попробуйте выбрать тариф заново."
+                )
                 await _safe_callback_answer(callback)
                 return
             if not settings.payment_enabled:
@@ -1099,14 +1122,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                             "missing": missing_status,
                         },
                     )
-                    await _send_notice(callback, 
+                    await _send_notice(
+                        callback,
                         "Проверка оплаты недоступна: не настроены ключи платёжного провайдера. "
-                        f"Добавьте {', '.join(missing_status)}."
+                        f"Добавьте {', '.join(missing_status)}.",
                     )
-                    await screen_manager.show_screen(
-                        bot=callback.bot,
-                        chat_id=callback.message.chat.id,
-                        user_id=callback.from_user.id,
+                    await _show_screen_for_callback(
+                        callback,
                         screen_id="S3",
                     )
                     await _safe_callback_answer(callback)
@@ -1124,24 +1146,23 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     screen_manager.update_state(
                         callback.from_user.id, **_refresh_order_state(order)
                     )
-                    await _send_notice(callback, 
-                        "Оплата ещё не подтверждена. Мы проверим статус и сообщим, когда всё будет готово."
+                    await _send_notice(
+                        callback,
+                        "Оплата ещё не подтверждена. Мы проверим статус и сообщим, когда всё будет готово.",
                     )
-                    await screen_manager.show_screen(
-                        bot=callback.bot,
-                        chat_id=callback.message.chat.id,
-                        user_id=callback.from_user.id,
+                    await _show_screen_for_callback(
+                        callback,
                         screen_id="S3",
                     )
                     await _safe_callback_answer(callback)
                     return
-            screen_manager.update_state(callback.from_user.id, **_refresh_order_state(order))
+            screen_manager.update_state(
+                callback.from_user.id, **_refresh_order_state(order)
+            )
             _refresh_profile_state(session, callback.from_user.id)
             screen_manager.update_state(callback.from_user.id, profile_flow="report")
-        await screen_manager.show_screen(
-            bot=callback.bot,
-            chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
+        await _show_screen_for_callback(
+            callback,
             screen_id="S4",
         )
         state_snapshot = screen_manager.update_state(callback.from_user.id)
@@ -1161,7 +1182,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         if tariff in {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}:
             order_id = _safe_int(state_snapshot.data.get("order_id"))
             if not order_id:
-                await _send_notice(callback, "Сначала выберите тариф и завершите оплату.")
+                await _send_notice(
+                    callback, "Сначала выберите тариф и завершите оплату."
+                )
                 await _safe_callback_answer(callback)
                 return
             with get_session() as session:
@@ -1171,13 +1194,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         screen_manager.update_state(
                             callback.from_user.id, **_refresh_order_state(order)
                         )
-                    await _send_notice(callback, 
-                        "Оплата ещё не подтверждена. Доступ к генерации откроется после статуса paid."
+                    await _send_notice(
+                        callback,
+                        "Оплата ещё не подтверждена. Доступ к генерации откроется после статуса paid.",
                     )
-                    await screen_manager.show_screen(
-                        bot=callback.bot,
-                        chat_id=callback.message.chat.id,
-                        user_id=callback.from_user.id,
+                    await _show_screen_for_callback(
+                        callback,
                         screen_id="S3",
                     )
                     await _safe_callback_answer(callback)
@@ -1187,9 +1209,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     screen_manager.update_state(
                         callback.from_user.id,
                         report_text=existing_report.report_text,
-                        report_model=existing_report.model_used.value
-                        if existing_report.model_used
-                        else None,
+                        report_model=(
+                            existing_report.model_used.value
+                            if existing_report.model_used
+                            else None
+                        ),
                     )
                     await _ensure_report_delivery(callback, "S7")
                     report_meta = _get_report_pdf_meta(existing_report)
@@ -1205,7 +1229,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         await _send_notice(
                             callback,
                             "PDF уже сформирован ранее. "
-                            "Вы можете попробовать кнопку «Выгрузить PDF»."
+                            "Вы можете попробовать кнопку «Выгрузить PDF».",
                         )
                     await _safe_callback_answer(callback)
                     return
@@ -1220,10 +1244,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         selected_tariff=Tariff.T0.value,
                         t0_next_available=next_available,
                     )
-                    await screen_manager.show_screen(
-                        bot=callback.bot,
-                        chat_id=callback.message.chat.id,
-                        user_id=callback.from_user.id,
+                    await _show_screen_for_callback(
+                        callback,
                         screen_id="S9",
                     )
                     await _safe_callback_answer(callback)
@@ -1236,7 +1258,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         if next_screen == "S6":
             with get_session() as session:
                 user = _get_or_create_user(session, callback.from_user.id)
-                order_id = _safe_int(screen_manager.update_state(callback.from_user.id).data.get("order_id"))
+                order_id = _safe_int(
+                    screen_manager.update_state(callback.from_user.id).data.get(
+                        "order_id"
+                    )
+                )
                 job = _create_report_job(
                     session,
                     user=user,
@@ -1245,22 +1271,20 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     chat_id=callback.message.chat.id if callback.message else None,
                 )
                 if not job:
-                    await _send_notice(callback, "Не удалось создать задание на генерацию.")
+                    await _send_notice(
+                        callback, "Не удалось создать задание на генерацию."
+                    )
                     await _safe_callback_answer(callback)
                     return
-            await screen_manager.show_screen(
-                bot=callback.bot,
-                chat_id=callback.message.chat.id,
-                user_id=callback.from_user.id,
+            await _show_screen_for_callback(
+                callback,
                 screen_id="S6",
             )
         else:
             with get_session() as session:
                 _refresh_questionnaire_state(session, callback.from_user.id)
-            await screen_manager.show_screen(
-                bot=callback.bot,
-                chat_id=callback.message.chat.id,
-                user_id=callback.from_user.id,
+            await _show_screen_for_callback(
+                callback,
                 screen_id=next_screen,
             )
         await _safe_callback_answer(callback)
@@ -1272,7 +1296,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         if tariff in {Tariff.T2.value, Tariff.T3.value}:
             order_id = _safe_int(state_snapshot.data.get("order_id"))
             if not order_id:
-                await _send_notice(callback, "Сначала выберите тариф и завершите оплату.")
+                await _send_notice(
+                    callback, "Сначала выберите тариф и завершите оплату."
+                )
                 await _safe_callback_answer(callback)
                 return
             with get_session() as session:
@@ -1282,13 +1308,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         screen_manager.update_state(
                             callback.from_user.id, **_refresh_order_state(order)
                         )
-                    await _send_notice(callback, 
-                        "Оплата ещё не подтверждена. Генерация будет доступна после статуса paid."
+                    await _send_notice(
+                        callback,
+                        "Оплата ещё не подтверждена. Генерация будет доступна после статуса paid.",
                     )
-                    await screen_manager.show_screen(
-                        bot=callback.bot,
-                        chat_id=callback.message.chat.id,
-                        user_id=callback.from_user.id,
+                    await _show_screen_for_callback(
+                        callback,
                         screen_id="S3",
                     )
                     await _safe_callback_answer(callback)
@@ -1298,9 +1323,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     screen_manager.update_state(
                         callback.from_user.id,
                         report_text=existing_report.report_text,
-                        report_model=existing_report.model_used.value
-                        if existing_report.model_used
-                        else None,
+                        report_model=(
+                            existing_report.model_used.value
+                            if existing_report.model_used
+                            else None
+                        ),
                     )
                     await _ensure_report_delivery(callback, "S7")
                     report_meta = _get_report_pdf_meta(existing_report)
@@ -1316,19 +1343,19 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         await _send_notice(
                             callback,
                             "PDF уже сформирован ранее. "
-                            "Вы можете попробовать кнопку «Выгрузить PDF»."
+                            "Вы можете попробовать кнопку «Выгрузить PDF».",
                         )
                     await _safe_callback_answer(callback)
                     return
             questionnaire = state_snapshot.data.get("questionnaire") or {}
             if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
-                await _send_notice(callback, "Анкета ещё не заполнена. Нажмите «Заполнить анкету».")
+                await _send_notice(
+                    callback, "Анкета ещё не заполнена. Нажмите «Заполнить анкету»."
+                )
                 await _safe_callback_answer(callback)
                 return
-        await screen_manager.show_screen(
-            bot=callback.bot,
-            chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
+        await _show_screen_for_callback(
+            callback,
             screen_id="S6",
         )
         with get_session() as session:
@@ -1358,7 +1385,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         if tariff in {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}:
             order_id = _safe_int(state_snapshot.data.get("order_id"))
             if not order_id:
-                await _send_notice(callback, "Сначала выберите тариф и завершите оплату.")
+                await _send_notice(
+                    callback, "Сначала выберите тариф и завершите оплату."
+                )
                 await _safe_callback_answer(callback)
                 return
             with get_session() as session:
@@ -1369,10 +1398,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                             callback.from_user.id, **_refresh_order_state(order)
                         )
                     await _send_notice(callback, "Оплата ещё не подтверждена.")
-                    await screen_manager.show_screen(
-                        bot=callback.bot,
-                        chat_id=callback.message.chat.id,
-                        user_id=callback.from_user.id,
+                    await _show_screen_for_callback(
+                        callback,
                         screen_id="S3",
                     )
                     await _safe_callback_answer(callback)
@@ -1396,7 +1423,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await _safe_callback_answer(callback)
                 return
             if job and job.status == ReportJobStatus.FAILED:
-                _requeue_report_job(session, telegram_user_id=callback.from_user.id, job=job)
+                _requeue_report_job(
+                    session, telegram_user_id=callback.from_user.id, job=job
+                )
             if not job:
                 _create_report_job(
                     session,
@@ -1405,10 +1434,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     order_id=_safe_int(state_snapshot.data.get("order_id")),
                     chat_id=callback.message.chat.id if callback.message else None,
                 )
-        await screen_manager.show_screen(
-            bot=callback.bot,
-            chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
+        await _show_screen_for_callback(
+            callback,
             screen_id="S6",
         )
         await _safe_callback_answer(callback)
@@ -1417,13 +1444,17 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.data.startswith("report:view:"):
         report_id = _safe_int(callback.data.split("report:view:")[-1])
         if not report_id:
-            await _send_notice(callback, "Не удалось открыть отчёт. Попробуйте выбрать его ещё раз.")
+            await _send_notice(
+                callback, "Не удалось открыть отчёт. Попробуйте выбрать его ещё раз."
+            )
             await _safe_callback_answer(callback)
             return
         with get_session() as session:
             report = _get_report_for_user(session, callback.from_user.id, report_id)
             if not report:
-                await _send_notice(callback, "Отчёт не найден. Обновите список в кабинете.")
+                await _send_notice(
+                    callback, "Отчёт не найден. Обновите список в кабинете."
+                )
                 await _safe_callback_answer(callback)
                 return
             screen_manager.update_state(
@@ -1435,7 +1466,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         await _safe_callback_answer(callback)
         return
 
-    if callback.data.startswith("report:delete:") and callback.data != "report:delete:confirm":
+    if (
+        callback.data.startswith("report:delete:")
+        and callback.data != "report:delete:confirm"
+    ):
         report_id = _safe_int(callback.data.split("report:delete:")[-1])
         if not report_id:
             await _send_notice(callback, "Не удалось выбрать отчёт для удаления.")
@@ -1452,10 +1486,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 report_meta=_report_meta_payload(report),
                 report_text=report.report_text,
             )
-        await screen_manager.show_screen(
-            bot=callback.bot,
-            chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
+        await _show_screen_for_callback(
+            callback,
             screen_id="S14",
         )
         await _safe_callback_answer(callback)
@@ -1466,7 +1498,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         report_meta = state_snapshot.data.get("report_meta") or {}
         report_id = _safe_int(report_meta.get("id"))
         if not report_id:
-            await _send_notice(callback, "Не удалось удалить отчёт. Попробуйте ещё раз.")
+            await _send_notice(
+                callback, "Не удалось удалить отчёт. Попробуйте ещё раз."
+            )
             await _safe_callback_answer(callback)
             return
         with get_session() as session:
@@ -1483,10 +1517,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             report_meta=None,
         )
         await _send_notice(callback, "Отчёт удалён.")
-        await screen_manager.show_screen(
-            bot=callback.bot,
-            chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
+        await _show_screen_for_callback(
+            callback,
             screen_id="S12",
         )
         await _safe_callback_answer(callback)
@@ -1495,13 +1527,17 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if callback.data.startswith("report:pdf:"):
         report_id = _safe_int(callback.data.split("report:pdf:")[-1])
         if not report_id:
-            await _send_notice(callback, "Не удалось сформировать PDF. Попробуйте ещё раз.")
+            await _send_notice(
+                callback, "Не удалось сформировать PDF. Попробуйте ещё раз."
+            )
             await _safe_callback_answer(callback)
             return
         with get_session() as session:
             report = _get_report_for_user(session, callback.from_user.id, report_id)
             if not report:
-                await _send_notice(callback, "Отчёт не найден. Попробуйте выбрать другой.")
+                await _send_notice(
+                    callback, "Отчёт не найден. Попробуйте выбрать другой."
+                )
                 await _safe_callback_answer(callback)
                 return
             report_meta = _get_report_pdf_meta(report)
@@ -1515,8 +1551,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             user_id=callback.from_user.id,
         ):
             await _send_notice(
-                callback,
-                "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
+                callback, "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
             )
         await _safe_callback_answer(callback)
         return
@@ -1531,7 +1566,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 tariff_value=state_snapshot.data.get("selected_tariff"),
             )
             if not report:
-                await _send_notice(callback, "PDF будет доступен после генерации отчёта.")
+                await _send_notice(
+                    callback, "PDF будет доступен после генерации отчёта."
+                )
                 await _safe_callback_answer(callback)
                 return
             report_meta = _get_report_pdf_meta(report)
@@ -1546,8 +1583,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             user_id=callback.from_user.id,
         ):
             await _send_notice(
-                callback,
-                "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
+                callback, "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
             )
         await _safe_callback_answer(callback)
         return
@@ -1555,7 +1591,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     thread_feedback_id = _extract_quick_reply_thread_id(callback.data)
     if thread_feedback_id is not None:
         if not thread_feedback_id:
-            await _send_notice(callback, "Не удалось открыть быстрый ответ. Попробуйте ещё раз.")
+            await _send_notice(
+                callback, "Не удалось открыть быстрый ответ. Попробуйте ещё раз."
+            )
             await _safe_callback_answer(callback)
             return
         screen_manager.update_state(
@@ -1563,10 +1601,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             support_thread_feedback_id=thread_feedback_id,
             feedback_text=None,
         )
-        await screen_manager.show_screen(
-            bot=callback.bot,
-            chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
+        await _show_screen_for_callback(
+            callback,
             screen_id="S8",
         )
         await _safe_callback_answer(callback)
@@ -1584,7 +1620,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         )
 
         if status == FeedbackStatus.SENT:
-            await _send_notice(callback, "Сообщение отправлено в админку. Спасибо за обратную связь!")
+            await _send_notice(
+                callback, "Сообщение отправлено в админку. Спасибо за обратную связь!"
+            )
         else:
             await _send_notice(
                 callback,
