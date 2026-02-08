@@ -355,19 +355,20 @@ class ScreenManager:
 
         message_ids: list[int] = []
         image_sent = False
+        send_text_after_image = False
         if image_path:
             caption = "\n\n".join(
                 message for message in content.messages if message
             ).strip()
             if len(caption) > self._telegram_caption_limit:
-                truncated = caption[: self._telegram_caption_limit - 1].rstrip()
-                caption = f"{truncated}…"
+                send_text_after_image = True
+                caption = ""
             sent_photo = await self._send_photo_with_fallback(
                 bot=bot,
                 chat_id=chat_id,
                 image_path=image_path,
                 caption=caption or None,
-                keyboard=content.keyboard,
+                keyboard=None if send_text_after_image else content.keyboard,
                 parse_mode=content.parse_mode if caption else None,
                 user_id=user_id,
                 screen_id=screen_id,
@@ -376,7 +377,7 @@ class ScreenManager:
                 message_ids.append(sent_photo.message_id)
                 delivered = True
                 image_sent = True
-        if not image_path or not image_sent:
+        if not image_path or not image_sent or send_text_after_image:
             expanded_messages: list[str] = []
             for message in content.messages:
                 expanded_messages.extend(self._split_message(message))
