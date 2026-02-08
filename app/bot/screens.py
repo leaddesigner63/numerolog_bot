@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -68,6 +69,17 @@ TARIFF_META: dict[str, dict[str, Any]] = {
         "note": None,
     },
 }
+
+
+_REPORT_HTML_TAG_RE = re.compile(r"</?(?:i|em|b|strong|u|s|strike|code|pre|span|a)(?:\s[^>]*)?>", re.IGNORECASE)
+_REPORT_BR_TAG_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+
+
+def _sanitize_report_text(report_text: str) -> str:
+    if not report_text:
+        return ""
+    normalized_breaks = _REPORT_BR_TAG_RE.sub("\n", report_text)
+    return _REPORT_HTML_TAG_RE.sub("", normalized_breaks)
 
 
 def _global_menu() -> list[list[InlineKeyboardButton]]:
@@ -784,7 +796,7 @@ def screen_s6(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s7(state: dict[str, Any]) -> ScreenContent:
-    report_text = (state.get("report_text") or "").strip()
+    report_text = _sanitize_report_text((state.get("report_text") or "").strip())
     job_status = state.get("report_job_status")
     disclaimer = (
         "Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
@@ -1015,7 +1027,7 @@ def screen_s12(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s13(state: dict[str, Any]) -> ScreenContent:
-    report_text = (state.get("report_text") or "").strip()
+    report_text = _sanitize_report_text((state.get("report_text") or "").strip())
     report_meta = state.get("report_meta") or {}
     report_id_value = str(report_meta.get("id") or "")
     report_id = report_id_value or "—"
