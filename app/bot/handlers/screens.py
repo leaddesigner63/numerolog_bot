@@ -206,7 +206,8 @@ async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
         )
         content = screen_manager.render_screen("S6", user_id, state.data)
         try:
-            await bot.edit_message_text(
+            await _edit_report_wait_message(
+                bot=bot,
                 chat_id=chat_id,
                 message_id=message_id,
                 text=text,
@@ -225,6 +226,37 @@ async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
             return
         tick += 1
         await asyncio.sleep(1)
+
+
+async def _edit_report_wait_message(
+    *,
+    bot: Bot,
+    chat_id: int,
+    message_id: int,
+    text: str,
+    reply_markup: Any,
+    parse_mode: str | None,
+) -> None:
+    try:
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
+        return
+    except TelegramBadRequest as exc:
+        error_message = str(exc)
+        if "there is no text in the message to edit" not in error_message.lower():
+            raise
+    await bot.edit_message_caption(
+        chat_id=chat_id,
+        message_id=message_id,
+        caption=text,
+        reply_markup=reply_markup,
+        parse_mode=parse_mode,
+    )
 
 
 async def _maybe_run_report_delay(callback: CallbackQuery) -> None:
