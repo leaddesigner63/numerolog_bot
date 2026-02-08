@@ -195,7 +195,11 @@ async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
     frames = ["⏳", "⌛", "🔄", "✨"]
     for remaining in range(delay_seconds, 0, -1):
         frame = frames[remaining % len(frames)]
-        text = build_report_wait_message(remaining, frame)
+        text = build_report_wait_message(
+            remaining_seconds=remaining,
+            frame=frame,
+            total_seconds=delay_seconds,
+        )
         try:
             await bot.edit_message_text(
                 chat_id=chat_id,
