@@ -228,14 +228,17 @@ async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
     delay_seconds = settings.report_delay_seconds
     if delay_seconds <= 0:
         return
-    state = screen_manager.update_state(user_id)
-    if not state.message_ids:
+    initial_state = screen_manager.update_state(user_id)
+    if not initial_state.message_ids:
         await asyncio.sleep(delay_seconds)
         return
-    message_id = state.message_ids[-1]
-    content = screen_manager.render_screen("S6", user_id, state.data)
     frames = ["⏳", "⌛", "🔄", "✨"]
     for remaining in range(delay_seconds, 0, -1):
+        current_state = screen_manager.update_state(user_id)
+        if not current_state.message_ids:
+            return
+        message_id = current_state.message_ids[-1]
+        content = screen_manager.render_screen("S6", user_id, current_state.data)
         frame = frames[remaining % len(frames)]
         text = build_report_wait_message(
             remaining_seconds=remaining,
