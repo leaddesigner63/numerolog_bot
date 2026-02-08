@@ -19,7 +19,6 @@ from app.db.models import (
     Order,
     OrderStatus,
     QuestionnaireResponse,
-    Report,
     User,
     UserProfile,
 )
@@ -124,7 +123,6 @@ def _clear_user_data(session, user: User) -> None:
     session.execute(
         delete(QuestionnaireResponse).where(QuestionnaireResponse.user_id == user.id)
     )
-    session.execute(delete(Report).where(Report.user_id == user.id))
 
 
 def _refresh_reports_summary(session, telegram_user_id: int) -> None:
@@ -385,7 +383,7 @@ async def delete_profile_data(callback: CallbackQuery, state: FSMContext) -> Non
     )
     await screen_manager.send_ephemeral_message(
         callback.message,
-        "Ваши данные удалены. Вы можете заполнить их заново в любой момент.",
+        "Анкетные данные удалены. Отчёты сохранены в «Мои отчёты».",
         user_id=callback.from_user.id,
     )
     await _show_profile_screen(callback.message, callback.from_user.id)

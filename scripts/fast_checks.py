@@ -129,6 +129,95 @@ def _check_paid_report_gate(database_url: str) -> None:
         assert report.order_id == order_id
 
 
+
+
+def _check_profile_data_deletion_keeps_reports(database_url: str) -> None:
+    from sqlalchemy import create_engine, select
+    from sqlalchemy.orm import sessionmaker
+
+    from app.bot.handlers.profile import _clear_user_data
+    from app.db.models import (
+        Order,
+        OrderStatus,
+        PaymentProvider,
+        QuestionnaireResponse,
+        QuestionnaireStatus,
+        Report,
+        Tariff,
+        User,
+        UserProfile,
+    )
+
+    engine = create_engine(database_url)
+    Session = sessionmaker(bind=engine)
+
+    with Session() as session:
+        user = User(telegram_user_id=4111)
+        session.add(user)
+        session.flush()
+
+        session.add(
+            UserProfile(
+                user_id=user.id,
+                name="Тест",
+                birth_date="2000-01-01",
+                birth_time="10:00",
+                birth_place_city="Москва",
+                birth_place_region="Москва",
+                birth_place_country="Россия",
+            )
+        )
+        session.add(
+            QuestionnaireResponse(
+                user_id=user.id,
+                questionnaire_version="v1",
+                status=QuestionnaireStatus.COMPLETED,
+                answers={"q1": "a1"},
+            )
+        )
+
+        order = Order(
+            user_id=user.id,
+            tariff=Tariff.T2,
+            amount=2190,
+            currency="RUB",
+            provider=PaymentProvider.PRODAMUS,
+            status=OrderStatus.PAID,
+        )
+        session.add(order)
+        session.flush()
+
+        session.add(
+            Report(
+                user_id=user.id,
+                order_id=order.id,
+                tariff=Tariff.T2,
+                report_text="Отчёт должен сохраниться",
+            )
+        )
+        session.commit()
+
+        _clear_user_data(session, user)
+        session.commit()
+
+        profile = session.execute(
+            select(UserProfile).where(UserProfile.user_id == user.id)
+        ).scalar_one_or_none()
+        responses = session.execute(
+            select(QuestionnaireResponse).where(QuestionnaireResponse.user_id == user.id)
+        ).scalars().all()
+        orders = session.execute(
+            select(Order).where(Order.user_id == user.id)
+        ).scalars().all()
+        reports = session.execute(
+            select(Report).where(Report.user_id == user.id)
+        ).scalars().all()
+
+        assert profile is None
+        assert len(responses) == 0
+        assert len(orders) == 0
+        assert len(reports) == 1
+
 def _check_llm_fallback() -> None:
     from app.core.llm_router import LLMProviderError, LLMResponse, llm_router
 
@@ -313,6 +402,7 @@ def main() -> None:
         _create_tables(database_url)
         _check_t0_cooldown(database_url)
         _check_paid_report_gate(database_url)
+        _check_profile_data_deletion_keeps_reports(database_url)
         _check_llm_fallback()
         _check_webhook_validation()
         _check_pdf_redownload(database_url, storage_root)
