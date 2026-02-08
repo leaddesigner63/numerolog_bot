@@ -1314,12 +1314,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     callback.from_user.id,
                     tariff_value=tariff,
                 )
-                await screen_manager.show_screen(
-                    bot=callback.bot,
-                    chat_id=callback.message.chat.id,
-                    user_id=callback.from_user.id,
-                    screen_id="S7",
-                )
+                await _ensure_report_delivery(callback, "S7")
                 await _safe_callback_answer(callback)
                 return
             if job and job.status == ReportJobStatus.FAILED:
