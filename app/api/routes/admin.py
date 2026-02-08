@@ -1206,12 +1206,13 @@ def admin_ui(request: Request) -> HTMLResponse:
       feedbackInbox: {
         targetId: "feedbackInbox",
         columns: [
-          {label: "ID", key: "id", sortable: true},
+          {label: "Тред", key: "thread_feedback_id", sortable: true},
           {label: "Пользователь", key: "telegram_user_id", sortable: true},
           {label: "User ID", key: "user_id", sortable: true},
-          {label: "Статус", key: "status", sortable: true},
-          {label: "Сообщение", key: "text", sortable: true},
-          {label: "Отправлено", key: "sent_at", sortable: true},
+          {label: "Сообщений", key: "message_count", sortable: true},
+          {label: "Последний статус", key: "status", sortable: true},
+          {label: "Последнее сообщение", key: "text", sortable: true},
+          {label: "Последняя активность", key: "sent_at", sortable: true},
           {label: "Ответ админа", key: "admin_reply", sortable: true},
           {label: "Ответ отправлен", key: "replied_at", sortable: true},
           {
@@ -1220,7 +1221,7 @@ def admin_ui(request: Request) -> HTMLResponse:
             sortable: false,
             copyable: false,
             render: (row) => `
-              <button class="secondary" onclick="replyToFeedback(${row.id})">Ответить</button>
+              <button class="secondary" onclick="replyToFeedback(${row.last_feedback_id || row.thread_feedback_id || row.id})">Ответить</button>
               <button class="secondary" onclick="showFeedbackThread(${row.thread_feedback_id || row.id})">История треда</button>
               <button class="secondary" onclick="toggleFeedbackArchive(${row.id}, true)">В архив</button>
             `,
@@ -1230,12 +1231,13 @@ def admin_ui(request: Request) -> HTMLResponse:
       feedbackArchive: {
         targetId: "feedbackArchive",
         columns: [
-          {label: "ID", key: "id", sortable: true},
+          {label: "Тред", key: "thread_feedback_id", sortable: true},
           {label: "Пользователь", key: "telegram_user_id", sortable: true},
           {label: "User ID", key: "user_id", sortable: true},
-          {label: "Статус", key: "status", sortable: true},
-          {label: "Сообщение", key: "text", sortable: true},
-          {label: "Отправлено", key: "sent_at", sortable: true},
+          {label: "Сообщений", key: "message_count", sortable: true},
+          {label: "Последний статус", key: "status", sortable: true},
+          {label: "Последнее сообщение", key: "text", sortable: true},
+          {label: "Последняя активность", key: "sent_at", sortable: true},
           {label: "Ответ админа", key: "admin_reply", sortable: true},
           {label: "Ответ отправлен", key: "replied_at", sortable: true},
           {label: "Архивировано", key: "archived_at", sortable: true},
@@ -1245,7 +1247,7 @@ def admin_ui(request: Request) -> HTMLResponse:
             sortable: false,
             copyable: false,
             render: (row) => `
-              <button class="secondary" onclick="replyToFeedback(${row.id})">Ответить</button>
+              <button class="secondary" onclick="replyToFeedback(${row.last_feedback_id || row.thread_feedback_id || row.id})">Ответить</button>
               <button class="secondary" onclick="showFeedbackThread(${row.thread_feedback_id || row.id})">История треда</button>
               <button class="secondary" onclick="toggleFeedbackArchive(${row.id}, false)">В текущие</button>
             `,
@@ -2484,35 +2486,102 @@ def _resolve_thread_feedback_id(feedback: FeedbackMessage) -> int:
     return feedback.parent_feedback_id or feedback.id
 
 
-def _load_feedback_messages(session: Session, *, limit: int, archived: bool) -> list[dict]:
-    query = (
-        select(FeedbackMessage, User)
-        .join(User, User.id == FeedbackMessage.user_id)
-        .where(
-            FeedbackMessage.archived_at.is_not(None)
-            if archived
-            else FeedbackMessage.archived_at.is_(None)
+def _load_feedback_threads(session: Session, *, limit: int, archived: bool) -> list[dict]:
+    root_alias = FeedbackMessage
+    latest_sent_at_subquery = (
+        select(
+            func.coalesce(FeedbackMessage.parent_feedback_id, FeedbackMessage.id).label("thread_feedback_id"),
+            func.max(FeedbackMessage.sent_at).label("latest_sent_at"),
         )
-        .order_by(FeedbackMessage.sent_at.desc())
+        .group_by(func.coalesce(FeedbackMessage.parent_feedback_id, FeedbackMessage.id))
+        .subquery()
+    )
+    latest_message_subquery = (
+        select(
+            FeedbackMessage.id.label("id"),
+            FeedbackMessage.user_id.label("user_id"),
+            FeedbackMessage.text.label("text"),
+            FeedbackMessage.status.label("status"),
+            FeedbackMessage.sent_at.label("sent_at"),
+            FeedbackMessage.admin_reply.label("admin_reply"),
+            FeedbackMessage.replied_at.label("replied_at"),
+            func.coalesce(FeedbackMessage.parent_feedback_id, FeedbackMessage.id).label("thread_feedback_id"),
+        )
+        .join(
+            latest_sent_at_subquery,
+            (func.coalesce(FeedbackMessage.parent_feedback_id, FeedbackMessage.id) == latest_sent_at_subquery.c.thread_feedback_id)
+            & (FeedbackMessage.sent_at == latest_sent_at_subquery.c.latest_sent_at),
+        )
+        .subquery()
+    )
+    thread_stats_subquery = (
+        select(
+            func.coalesce(FeedbackMessage.parent_feedback_id, FeedbackMessage.id).label("thread_feedback_id"),
+            func.count(FeedbackMessage.id).label("message_count"),
+        )
+        .group_by(func.coalesce(FeedbackMessage.parent_feedback_id, FeedbackMessage.id))
+        .subquery()
+    )
+
+    query = (
+        select(
+            root_alias,
+            User,
+            thread_stats_subquery.c.message_count,
+            latest_message_subquery.c.id.label("last_feedback_id"),
+            latest_message_subquery.c.status.label("last_status"),
+            latest_message_subquery.c.text.label("last_text"),
+            latest_message_subquery.c.sent_at.label("last_sent_at"),
+            latest_message_subquery.c.admin_reply.label("last_admin_reply"),
+            latest_message_subquery.c.replied_at.label("last_replied_at"),
+        )
+        .join(User, User.id == root_alias.user_id)
+        .join(
+            latest_message_subquery,
+            latest_message_subquery.c.thread_feedback_id == root_alias.id,
+        )
+        .join(
+            thread_stats_subquery,
+            thread_stats_subquery.c.thread_feedback_id == root_alias.id,
+        )
+        .where(
+            root_alias.parent_feedback_id.is_(None),
+            root_alias.archived_at.is_not(None) if archived else root_alias.archived_at.is_(None),
+        )
+        .order_by(
+            latest_message_subquery.c.sent_at.desc(),
+            latest_message_subquery.c.id.desc(),
+        )
     )
     if limit > 0:
         query = query.limit(limit)
     rows = session.execute(query).all()
     feedback = []
-    for message, user in rows:
+    for (
+        thread_root,
+        user,
+        message_count,
+        last_feedback_id,
+        last_status,
+        last_text,
+        last_sent_at,
+        last_admin_reply,
+        last_replied_at,
+    ) in rows:
         feedback.append(
             {
-                "id": message.id,
-                "user_id": message.user_id,
+                "id": thread_root.id,
+                "user_id": thread_root.user_id,
                 "telegram_user_id": user.telegram_user_id if user else None,
-                "text": message.text,
-                "status": message.status.value,
-                "sent_at": message.sent_at.isoformat() if message.sent_at else None,
-                "archived_at": message.archived_at.isoformat() if message.archived_at else None,
-                "admin_reply": message.admin_reply,
-                "replied_at": message.replied_at.isoformat() if message.replied_at else None,
-                "parent_feedback_id": message.parent_feedback_id,
-                "thread_feedback_id": _resolve_thread_feedback_id(message),
+                "status": last_status.value,
+                "text": last_text,
+                "sent_at": last_sent_at.isoformat() if last_sent_at else None,
+                "archived_at": thread_root.archived_at.isoformat() if thread_root.archived_at else None,
+                "admin_reply": last_admin_reply,
+                "replied_at": last_replied_at.isoformat() if last_replied_at else None,
+                "thread_feedback_id": thread_root.id,
+                "last_feedback_id": last_feedback_id,
+                "message_count": int(message_count or 0),
             }
         )
     return feedback
@@ -2578,19 +2647,19 @@ def _load_feedback_thread_history(
 
 @router.get("/api/feedback")
 def admin_feedback(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
-    return {"feedback": _load_feedback_messages(session, limit=limit, archived=False)}
+    return {"feedback": _load_feedback_threads(session, limit=limit, archived=False)}
 
 
 @router.get("/api/feedback/inbox")
 def admin_feedback_inbox(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
-    return {"feedback": _load_feedback_messages(session, limit=limit, archived=False)}
+    return {"feedback": _load_feedback_threads(session, limit=limit, archived=False)}
 
 
 
 
 @router.get("/api/feedback/archive")
 def admin_feedback_archive(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
-    return {"feedback": _load_feedback_messages(session, limit=limit, archived=True)}
+    return {"feedback": _load_feedback_threads(session, limit=limit, archived=True)}
 
 
 @router.get("/api/feedback/thread/{thread_feedback_id}")
@@ -2632,11 +2701,20 @@ async def admin_feedback_toggle_archive(
     feedback = session.get(FeedbackMessage, feedback_id)
     if not feedback:
         raise HTTPException(status_code=404, detail="Feedback message not found")
-    feedback.archived_at = datetime.now(timezone.utc) if archive else None
+    thread_feedback_id = _resolve_thread_feedback_id(feedback)
+    thread_rows = session.execute(
+        select(FeedbackMessage).where(
+            (FeedbackMessage.id == thread_feedback_id)
+            | (FeedbackMessage.parent_feedback_id == thread_feedback_id)
+        )
+    ).scalars().all()
+    archived_at = datetime.now(timezone.utc) if archive else None
+    for row in thread_rows:
+        row.archived_at = archived_at
     return {
-        "id": feedback.id,
-        "archived": feedback.archived_at is not None,
-        "archived_at": feedback.archived_at.isoformat() if feedback.archived_at else None,
+        "id": thread_feedback_id,
+        "archived": archived_at is not None,
+        "archived_at": archived_at.isoformat() if archived_at else None,
     }
 
 
@@ -2747,7 +2825,18 @@ async def admin_feedback_bulk_archive(
         raise HTTPException(status_code=400, detail="No feedback ids provided")
     archive = bool(payload.get("archive", True))
     now = datetime.now(timezone.utc)
-    rows = session.execute(select(FeedbackMessage).where(FeedbackMessage.id.in_(ids))).scalars().all()
+    thread_ids_subquery = (
+        select(func.coalesce(FeedbackMessage.parent_feedback_id, FeedbackMessage.id).label("thread_feedback_id"))
+        .where(FeedbackMessage.id.in_(ids))
+        .subquery()
+    )
+    rows = session.execute(
+        select(FeedbackMessage).where(
+            func.coalesce(FeedbackMessage.parent_feedback_id, FeedbackMessage.id).in_(
+                select(thread_ids_subquery.c.thread_feedback_id)
+            )
+        )
+    ).scalars().all()
     updated = 0
     for feedback in rows:
         feedback.archived_at = now if archive else None
