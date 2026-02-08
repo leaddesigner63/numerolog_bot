@@ -121,13 +121,37 @@ def _with_screen_prefix(screen_id: str, text: str) -> str:
     return text.lstrip()
 
 
-def build_report_wait_message(remaining_seconds: int | None = None, frame: str = "⏳") -> str:
+def _build_text_progress_bar(progress: float, length: int = 12) -> str:
+    safe_progress = min(max(progress, 0.0), 1.0)
+    filled = int(round(safe_progress * length))
+    empty = max(length - filled, 0)
+    return "█" * filled + "░" * empty
+
+
+def build_report_wait_message(
+    remaining_seconds: int | None = None,
+    frame: str = "⏳",
+    total_seconds: int | None = None,
+) -> str:
     base_text = "Генерируем отчёт… Пожалуйста, подождите."
     if remaining_seconds is None:
         return _with_screen_prefix("S6", base_text)
+
+    safe_total = total_seconds if isinstance(total_seconds, int) and total_seconds > 0 else None
+    progress = None
+    if safe_total is not None:
+        done = max(safe_total - max(remaining_seconds, 0), 0)
+        progress = done / safe_total
+
+    progress_line = ""
+    if progress is not None:
+        progress_bar = _build_text_progress_bar(progress)
+        percent = int(round(progress * 100))
+        progress_line = f"\nПрогресс: [{progress_bar}] {percent}%"
+
     return _with_screen_prefix(
         "S6",
-        f"{frame} {base_text}\nОсталось: {remaining_seconds} сек.",
+        f"{frame} {base_text}{progress_line}\nОсталось: {remaining_seconds} сек.",
     )
 
 

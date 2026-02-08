@@ -182,6 +182,48 @@ async def _submit_feedback(
     return status
 
 
+async def _update_report_wait_message(
+    bot: Bot,
+    *,
+    chat_id: int,
+    message_id: int,
+    text: str,
+    reply_markup,
+    parse_mode: str | None,
+    user_id: int,
+) -> bool:
+    try:
+        await bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode=parse_mode,
+        )
+        return True
+    except Exception as text_exc:
+        try:
+            await bot.edit_message_caption(
+                chat_id=chat_id,
+                message_id=message_id,
+                caption=text,
+                reply_markup=reply_markup,
+                parse_mode=parse_mode,
+            )
+            return True
+        except Exception as caption_exc:
+            logger.info(
+                "report_delay_edit_failed",
+                extra={
+                    "user_id": user_id,
+                    "message_id": message_id,
+                    "text_error": str(text_exc),
+                    "caption_error": str(caption_exc),
+                },
+            )
+            return False
+
+
 async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
     delay_seconds = settings.report_delay_seconds
     if delay_seconds <= 0:
@@ -195,24 +237,21 @@ async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
     frames = ["⏳", "⌛", "🔄", "✨"]
     for remaining in range(delay_seconds, 0, -1):
         frame = frames[remaining % len(frames)]
-        text = build_report_wait_message(remaining, frame)
-        try:
-            await bot.edit_message_text(
-                chat_id=chat_id,
-                message_id=message_id,
-                text=text,
-                reply_markup=content.keyboard,
-                parse_mode=content.parse_mode,
-            )
-        except Exception as exc:
-            logger.info(
-                "report_delay_edit_failed",
-                extra={
-                    "user_id": user_id,
-                    "message_id": message_id,
-                    "error": str(exc),
-                },
-            )
+        text = build_report_wait_message(
+            remaining_seconds=remaining,
+            frame=frame,
+            total_seconds=delay_seconds,
+        )
+        updated = await _update_report_wait_message(
+            bot,
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=content.keyboard,
+            parse_mode=content.parse_mode,
+            user_id=user_id,
+        )
+        if not updated:
             await asyncio.sleep(delay_seconds)
             return
         await asyncio.sleep(1)
