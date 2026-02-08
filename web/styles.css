@@ -1,0 +1,147 @@
+:root {
+  --bg: #0b1022;
+  --surface: rgba(13, 21, 45, 0.78);
+  --surface-strong: #111a35;
+  --text: #f4f8ff;
+  --muted: #c1d1ea;
+  --accent: linear-gradient(135deg, #9f61ff 0%, #35d6ff 100%);
+  --border: rgba(180, 200, 240, 0.25);
+  --space: clamp(14px, 2vw, 20px);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: Inter, Segoe UI, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.45;
+}
+
+.page-bg {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 20%, rgba(65, 110, 255, 0.24), transparent 45%),
+    radial-gradient(circle at 80% 10%, rgba(240, 120, 80, 0.2), transparent 40%),
+    linear-gradient(180deg, #090f20 0%, #0d1630 100%);
+  z-index: -1;
+}
+
+.container {
+  width: min(1120px, 100% - 24px);
+  margin: 0 auto;
+}
+
+.section { padding: clamp(24px, 5vw, 56px) 0; }
+.hero { padding-top: 20px; }
+.hero-card, .card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  backdrop-filter: blur(8px);
+}
+.hero-card { padding: clamp(20px, 4vw, 40px); }
+.eyebrow { color: #b4c6ff; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; }
+h1 { margin: 6px 0 10px; font-size: clamp(28px, 6vw, 56px); line-height: 1.05; }
+.subtitle { margin: 0; max-width: 62ch; color: var(--muted); font-size: clamp(16px, 2.7vw, 20px); }
+
+.hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.btn {
+  text-decoration: none;
+  color: var(--text);
+  border-radius: 999px;
+  padding: 12px 18px;
+  min-height: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  transition: transform .15s ease, filter .15s ease;
+}
+.btn:hover { transform: translateY(-1px); filter: brightness(1.07); }
+.btn:focus-visible { outline: 2px solid #35d6ff; outline-offset: 2px; }
+.btn-primary { background: var(--accent); border: none; }
+.btn-secondary { background: var(--surface-strong); border: 1px solid var(--border); }
+
+h2 { font-size: clamp(22px, 4.2vw, 34px); margin: 0 0 14px; }
+.grid { display: grid; gap: 12px; }
+.grid-3 { grid-template-columns: 1fr; }
+.grid-4 { grid-template-columns: 1fr; }
+.card { padding: 18px; }
+.card p { margin: 0; color: var(--muted); }
+.card h3 { margin: 0 0 8px; font-size: 18px; }
+
+.tariff { position: relative; display: flex; flex-direction: column; gap: 12px; }
+.tariff-title { font-size: 24px; color: var(--text); font-weight: 800; }
+.tariff-price { color: #7ee8ff; font-weight: 700; font-size: 20px; }
+.tariff .btn { margin-top: auto; }
+.badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 12px;
+  background: rgba(53, 214, 255, 0.22);
+  border: 1px solid rgba(53, 214, 255, 0.55);
+  border-radius: 999px;
+  padding: 4px 8px;
+}
+.tariff-recommended {
+  box-shadow: 0 0 0 1px rgba(53, 214, 255, 0.6), 0 12px 24px rgba(53, 214, 255, 0.16);
+}
+
+.disclaimer ul { margin: 0; padding-left: 18px; display: grid; gap: 10px; }
+.faq-list { display: grid; gap: 10px; }
+.faq-item {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  padding: 12px 14px;
+}
+.faq-item summary { cursor: pointer; font-weight: 600; }
+.faq-item p { color: var(--muted); margin: 10px 0 2px; }
+
+.footer { padding-bottom: 96px; }
+.footer .container {
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.sticky-cta {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  z-index: 5;
+  box-shadow: 0 12px 24px rgba(48, 96, 255, 0.35);
+}
+
+@media (min-width: 700px) {
+  .container { width: min(1120px, 100% - 48px); }
+  .sticky-cta {
+    left: auto;
+    right: 20px;
+    bottom: 20px;
+    width: auto;
+  }
+  .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1024px) {
+  .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; scroll-behavior: auto !important; }
+}
