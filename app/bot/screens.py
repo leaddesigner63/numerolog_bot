@@ -803,8 +803,7 @@ def screen_s8(_: dict[str, Any]) -> ScreenContent:
     text = _with_screen_prefix(
         "S8",
         (
-            "Напишите сообщение. Нажмите «Отправить», чтобы опубликовать его в группе, "
-            "или «Перейти в группу»."
+            "Напишите сообщение. Нажмите «Отправить», чтобы передать его в админку."
         ),
     )
     rows = [
@@ -821,15 +820,6 @@ def screen_s8(_: dict[str, Any]) -> ScreenContent:
             )
         ],
     ]
-    if settings.feedback_group_url:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=_with_button_icons("Перейти в группу", "👥"),
-                    url=settings.feedback_group_url,
-                )
-            ]
-        )
     rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)

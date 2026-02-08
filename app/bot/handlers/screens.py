@@ -1478,63 +1478,26 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         state_snapshot = screen_manager.update_state(callback.from_user.id)
         feedback_text = state_snapshot.data.get("feedback_text") or ""
 
-        feedback_mode = (settings.feedback_mode or "native").lower()
         delivered = False
         status = FeedbackStatus.FAILED
-        sent_at: datetime | None = None
+        sent_at = datetime.now(timezone.utc)
         admin_delivered = await _send_feedback_to_admins(
             callback.bot,
             feedback_text=feedback_text,
             user_id=callback.from_user.id,
             username=callback.from_user.username,
         )
-        if admin_delivered:
-            delivered = True
-        if feedback_mode != "native":
-            if settings.feedback_group_url:
-                if delivered:
-                    await _send_notice(
-                        callback,
-                        "Сообщение отправлено в админку. "
-                        "Нажмите «Перейти в группу», чтобы опубликовать его в группе."
-                    )
-                else:
-                    await _send_notice(
-                        callback,
-                        "Обратная связь настроена через livegram. "
-                        "Нажмите «Перейти в группу», чтобы отправить сообщение."
-                    )
-            else:
-                if delivered:
-                    await _send_notice(callback, "Сообщение отправлено в админку.")
-                else:
-                    await _send_notice(
-                        callback,
-                        "Обратная связь настроена через livegram, но ссылка на группу не указана."
-                    )
-        elif not settings.feedback_group_chat_id:
-            if not delivered:
-                await _send_notice(
-                    callback,
-                    "Чат для обратной связи не настроен. "
-                    "Добавьте FEEDBACK_GROUP_CHAT_ID или используйте livegram."
-                )
+        delivered = admin_delivered
+        if delivered:
+            await _send_notice(callback, "Сообщение отправлено в админку. Спасибо за обратную связь!")
         else:
-            try:
-                await callback.bot.send_message(
-                    chat_id=settings.feedback_group_chat_id,
-                    text=f"Сообщение от пользователя {callback.from_user.id}:\n{feedback_text}",
-                )
-                delivered = True
-            except Exception as exc:
-                logger.warning(
-                    "feedback_send_failed",
-                    extra={"user_id": callback.from_user.id, "error": str(exc)},
-                )
+            await _send_notice(
+                callback,
+                "Не удалось отправить сообщение в админку. Попробуйте позже.",
+            )
 
         if delivered:
             status = FeedbackStatus.SENT
-            sent_at = datetime.now(timezone.utc)
 
         try:
             with get_session() as session:
@@ -1554,15 +1517,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             )
 
         if status == FeedbackStatus.SENT:
-            if feedback_mode == "native":
-                await _send_notice(callback, "Сообщение отправлено. Спасибо за обратную связь!")
             screen_manager.update_state(callback.from_user.id, feedback_text=None)
-        else:
-            if feedback_mode == "native":
-                await _send_notice(
-                    callback,
-                    "Не удалось отправить сообщение. Попробуйте позже или используйте «Перейти в группу»."
-                )
         await _safe_callback_answer(callback)
         return
 
