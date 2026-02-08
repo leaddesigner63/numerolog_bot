@@ -31,6 +31,8 @@ class AnalyticsFilters:
     trigger_type: str | None = None
     unique_users_only: bool = False
     dropoff_window_minutes: int = 60
+    limit: int | None = None
+    screen_ids: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -82,22 +84,29 @@ def _load_events(session: Session, filters: AnalyticsFilters) -> list[EventPoint
         ScreenTransitionEvent.created_at.asc(),
         ScreenTransitionEvent.id.asc(),
     )
+    if filters.limit and filters.limit > 0:
+        query = query.limit(filters.limit)
     rows = session.execute(query).scalars().all()
 
     tariff_filter = filters.tariff.upper() if filters.tariff else None
     events: list[EventPoint] = []
+    screen_filter = filters.screen_ids
     for row in rows:
         metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
         tariff_value = metadata.get("tariff")
         if tariff_filter and str(tariff_value or "").upper() != tariff_filter:
+            continue
+        from_screen = _normalize_screen_id(row.from_screen_id)
+        to_screen = _normalize_screen_id(row.to_screen_id)
+        if screen_filter and from_screen not in screen_filter and to_screen not in screen_filter:
             continue
         created_at = row.created_at or datetime.now(timezone.utc)
         events.append(
             EventPoint(
                 id=row.id,
                 user_id=row.telegram_user_id or 0,
-                from_screen=_normalize_screen_id(row.from_screen_id),
-                to_screen=_normalize_screen_id(row.to_screen_id),
+                from_screen=from_screen,
+                to_screen=to_screen,
                 trigger_type=(row.trigger_type.value if hasattr(row.trigger_type, "value") else str(row.trigger_type)),
                 tariff=str(tariff_value) if tariff_value is not None else None,
                 created_at=created_at,
