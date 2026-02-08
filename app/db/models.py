@@ -231,6 +231,9 @@ class FeedbackMessage(Base):
         Enum(FeedbackStatus, values_callable=_enum_values, name="feedbackstatus")
     )
     sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), index=True
+    )
 
     user: Mapped[User] = relationship(back_populates="feedback_messages")
 

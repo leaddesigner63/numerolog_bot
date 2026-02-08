@@ -649,12 +649,32 @@ def admin_ui(request: Request) -> HTMLResponse:
       </section>
       <section data-panel="feedback-inbox">
         <h2>Обратная связь</h2>
-        <div class="row table-controls">
-          <input id="feedbackInboxSearch" class="table-search" type="text" placeholder="Поиск по любому столбцу" />
-          <button class="secondary" onclick="clearTableFilters('feedbackInbox')">Сбросить</button>
-          <button class="secondary" onclick="loadFeedbackInbox()">Обновить</button>
+        <div class="tabs">
+          <button class="tab-button active" data-feedback-tab="current">Текущие</button>
+          <button class="tab-button" data-feedback-tab="archive">Архив</button>
         </div>
-        <div id="feedbackInbox" class="muted">Загрузка...</div>
+        <div class="tab-panel active" data-feedback-panel="current">
+          <div class="row table-controls">
+            <input id="feedbackInboxSearch" class="table-search" type="text" placeholder="Поиск по текущим обращениям" />
+            <button class="secondary" onclick="clearTableFilters('feedbackInbox')">Сбросить</button>
+            <button class="secondary" onclick="loadFeedbackInbox()">Обновить</button>
+          </div>
+          <div class="bulk-actions">
+            <button class="secondary" onclick="bulkArchiveFeedback(false)">Архивировать выбранные</button>
+          </div>
+          <div id="feedbackInbox" class="muted">Загрузка...</div>
+        </div>
+        <div class="tab-panel" data-feedback-panel="archive">
+          <div class="row table-controls">
+            <input id="feedbackArchiveSearch" class="table-search" type="text" placeholder="Поиск по архиву" />
+            <button class="secondary" onclick="clearTableFilters('feedbackArchive')">Сбросить</button>
+            <button class="secondary" onclick="loadFeedbackArchive()">Обновить</button>
+          </div>
+          <div class="bulk-actions">
+            <button class="secondary" onclick="bulkArchiveFeedback(true)">Вернуть выбранные в текущие</button>
+          </div>
+          <div id="feedbackArchive" class="muted">Загрузка...</div>
+        </div>
       </section>
       <section data-panel="system-prompts">
         <h2>Системные промпты</h2>
@@ -974,6 +994,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       reports: [],
       users: [],
       feedbackInbox: [],
+      feedbackArchive: [],
       systemPrompts: [],
       notes: [],
     };
@@ -985,6 +1006,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       reports: {search: "", sortKey: null, sortDir: "asc"},
       users: {search: "", sortKey: null, sortDir: "asc"},
       feedbackInbox: {search: "", sortKey: null, sortDir: "asc"},
+      feedbackArchive: {search: "", sortKey: null, sortDir: "asc"},
       systemPrompts: {search: "", sortKey: null, sortDir: "asc"},
       notes: {search: "", sortKey: null, sortDir: "asc"},
     };
@@ -995,6 +1017,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       reports: new Set(),
       users: new Set(),
       feedbackInbox: new Set(),
+      feedbackArchive: new Set(),
       systemPrompts: new Set(),
       notes: new Set(),
     };
@@ -1129,6 +1152,32 @@ def admin_ui(request: Request) -> HTMLResponse:
           {label: "Статус", key: "status", sortable: true},
           {label: "Сообщение", key: "text", sortable: true},
           {label: "Отправлено", key: "sent_at", sortable: true},
+          {
+            label: "Действия",
+            key: null,
+            sortable: false,
+            copyable: false,
+            render: (row) => `<button class="secondary" onclick="toggleFeedbackArchive(${row.id}, true)">В архив</button>`,
+          },
+        ],
+      },
+      feedbackArchive: {
+        targetId: "feedbackArchive",
+        columns: [
+          {label: "ID", key: "id", sortable: true},
+          {label: "Пользователь", key: "telegram_user_id", sortable: true},
+          {label: "User ID", key: "user_id", sortable: true},
+          {label: "Статус", key: "status", sortable: true},
+          {label: "Сообщение", key: "text", sortable: true},
+          {label: "Отправлено", key: "sent_at", sortable: true},
+          {label: "Архивировано", key: "archived_at", sortable: true},
+          {
+            label: "Действия",
+            key: null,
+            sortable: false,
+            copyable: false,
+            render: (row) => `<button class="secondary" onclick="toggleFeedbackArchive(${row.id}, false)">В текущие</button>`,
+          },
         ],
       },
       systemPrompts: {
@@ -1515,6 +1564,50 @@ def admin_ui(request: Request) -> HTMLResponse:
       }
     }
 
+    async function loadFeedbackArchive() {
+      try {
+        const data = await fetchJson("/feedback/archive");
+        tableData.feedbackArchive = data.feedback || [];
+        renderTableForKey("feedbackArchive");
+      } catch (error) {
+        document.getElementById("feedbackArchive").textContent = error.message;
+      }
+    }
+
+    async function toggleFeedbackArchive(feedbackId, archive) {
+      try {
+        await fetchJson(`/feedback/${feedbackId}/archive`, {
+          method: "POST",
+          body: JSON.stringify({archive})
+        });
+        await loadFeedbackInbox();
+        await loadFeedbackArchive();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function bulkArchiveFeedback(restore) {
+      const tableKey = restore ? "feedbackArchive" : "feedbackInbox";
+      const ids = getSelectedIds(tableKey);
+      if (!ids.length) {
+        alert("Выберите хотя бы одно обращение.");
+        return;
+      }
+      try {
+        await fetchJson("/feedback/bulk-archive", {
+          method: "POST",
+          body: JSON.stringify({ids, archive: !restore})
+        });
+        selectedRows.feedbackInbox.clear();
+        selectedRows.feedbackArchive.clear();
+        await loadFeedbackInbox();
+        await loadFeedbackArchive();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
     async function loadSystemPrompts() {
       try {
         const data = await fetchJson("/system-prompts");
@@ -1682,7 +1775,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       orders: loadOrders,
       reports: loadReports,
       users: loadUsers,
-      "feedback-inbox": loadFeedbackInbox,
+      "feedback-inbox": async () => { await loadFeedbackInbox(); await loadFeedbackArchive(); },
       "system-prompts": loadSystemPrompts,
       notes: loadNotes,
     };
@@ -1713,6 +1806,22 @@ def admin_ui(request: Request) -> HTMLResponse:
 
     llmTabButtons.forEach((button) => {
       button.addEventListener("click", () => showLlmTab(button.dataset.llmTab));
+    });
+
+    const feedbackTabButtons = document.querySelectorAll("[data-feedback-tab]");
+    const feedbackTabPanels = document.querySelectorAll("[data-feedback-panel]");
+
+    function showFeedbackTab(name) {
+      feedbackTabPanels.forEach((panel) => {
+        panel.classList.toggle("active", panel.dataset.feedbackPanel === name);
+      });
+      feedbackTabButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.feedbackTab === name);
+      });
+    }
+
+    feedbackTabButtons.forEach((button) => {
+      button.addEventListener("click", () => showFeedbackTab(button.dataset.feedbackTab));
     });
 
     let activePanel = "overview";
@@ -2192,13 +2301,20 @@ def admin_users(limit: int = 50, session: Session = Depends(_get_db_session)) ->
     return {"users": users}
 
 
-def _load_feedback_messages(session: Session, *, limit: int) -> list[dict]:
-    rows = session.execute(
+def _load_feedback_messages(session: Session, *, limit: int, archived: bool) -> list[dict]:
+    query = (
         select(FeedbackMessage, User)
         .join(User, User.id == FeedbackMessage.user_id)
+        .where(
+            FeedbackMessage.archived_at.is_not(None)
+            if archived
+            else FeedbackMessage.archived_at.is_(None)
+        )
         .order_by(FeedbackMessage.sent_at.desc())
-        .limit(limit)
-    ).all()
+    )
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).all()
     feedback = []
     for message, user in rows:
         feedback.append(
@@ -2209,6 +2325,7 @@ def _load_feedback_messages(session: Session, *, limit: int) -> list[dict]:
                 "text": message.text,
                 "status": message.status.value,
                 "sent_at": message.sent_at.isoformat() if message.sent_at else None,
+                "archived_at": message.archived_at.isoformat() if message.archived_at else None,
             }
         )
     return feedback
@@ -2216,13 +2333,74 @@ def _load_feedback_messages(session: Session, *, limit: int) -> list[dict]:
 
 @router.get("/api/feedback")
 def admin_feedback(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
-    return {"feedback": _load_feedback_messages(session, limit=limit)}
+    return {"feedback": _load_feedback_messages(session, limit=limit, archived=False)}
 
 
 @router.get("/api/feedback/inbox")
 def admin_feedback_inbox(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
-    return {"feedback": _load_feedback_messages(session, limit=limit)}
+    return {"feedback": _load_feedback_messages(session, limit=limit, archived=False)}
 
+
+
+
+@router.get("/api/feedback/archive")
+def admin_feedback_archive(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
+    return {"feedback": _load_feedback_messages(session, limit=limit, archived=True)}
+
+
+@router.post("/api/feedback/{feedback_id}/archive")
+async def admin_feedback_toggle_archive(
+    feedback_id: int,
+    request: Request,
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    payload: dict = {}
+    body = await request.body()
+    if body:
+        try:
+            candidate = await request.json()
+            if isinstance(candidate, dict):
+                payload = candidate
+        except Exception:
+            payload = {}
+    archive = bool(payload.get("archive", True))
+    feedback = session.get(FeedbackMessage, feedback_id)
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback message not found")
+    feedback.archived_at = datetime.now(timezone.utc) if archive else None
+    return {
+        "id": feedback.id,
+        "archived": feedback.archived_at is not None,
+        "archived_at": feedback.archived_at.isoformat() if feedback.archived_at else None,
+    }
+
+
+@router.post("/api/feedback/bulk-archive")
+async def admin_feedback_bulk_archive(
+    request: Request,
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    payload: dict = {}
+    body = await request.body()
+    if body:
+        try:
+            candidate = await request.json()
+            if isinstance(candidate, dict):
+                payload = candidate
+        except Exception:
+            payload = {}
+    raw_ids = payload.get("ids")
+    ids = [int(item) for item in raw_ids if str(item).strip().isdigit()] if isinstance(raw_ids, list) else []
+    if not ids:
+        raise HTTPException(status_code=400, detail="No feedback ids provided")
+    archive = bool(payload.get("archive", True))
+    now = datetime.now(timezone.utc)
+    rows = session.execute(select(FeedbackMessage).where(FeedbackMessage.id.in_(ids))).scalars().all()
+    updated = 0
+    for feedback in rows:
+        feedback.archived_at = now if archive else None
+        updated += 1
+    return {"updated": updated}
 
 @router.get("/api/system-prompts")
 def admin_system_prompts(
