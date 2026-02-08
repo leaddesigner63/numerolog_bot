@@ -394,9 +394,16 @@ def _format_questionnaire_profile(questionnaire: dict[str, Any] | None) -> str:
         f"Завершена: {completed_at}",
     ]
     if isinstance(answers, dict) and answers:
+        field_labels = {
+            "experience": "Опыт",
+            "skills_confidence": "Уверенность в навыках",
+            "motivation": "Мотивация",
+            "constraints": "Ограничения",
+            "goals": "Цели",
+        }
         lines.append("Ответы:")
         for key, value in answers.items():
-            lines.append(f"- {key}: {value}")
+            lines.append(f"- {field_labels.get(key, key)}: {value}")
     elif answers:
         lines.append(f"Ответы: {answers}")
     else:
