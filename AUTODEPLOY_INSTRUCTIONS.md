@@ -171,6 +171,7 @@ sudo systemctl restart numerolog-api.service numerolog-bot.service
 ```
 
 - После деплоя обязательно применяйте новые миграции (`alembic upgrade head`), чтобы изменения админки (включая архив обращений) работали корректно.
+- Для текущей версии обязательно убедитесь, что применена миграция `0019_add_users_telegram_username`: без неё поле `users.telegram_username` не появится и fallback имени PDF будет использовать `@user_<id>`.
 
 
 ## 9.1. Публикация one-screen лендинга (`web/`)

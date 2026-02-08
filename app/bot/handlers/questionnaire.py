@@ -43,14 +43,18 @@ def _safe_int(value: str | int | None) -> int | None:
         return None
 
 
-def _get_or_create_user(session, telegram_user_id: int) -> User:
+def _get_or_create_user(
+    session, telegram_user_id: int, telegram_username: str | None = None
+) -> User:
     user = session.execute(
         select(User).where(User.telegram_user_id == telegram_user_id)
     ).scalar_one_or_none()
     if user:
+        if telegram_username is not None:
+            user.telegram_username = telegram_username
         return user
 
-    user = User(telegram_user_id=telegram_user_id)
+    user = User(telegram_user_id=telegram_user_id, telegram_username=telegram_username)
     session.add(user)
     session.flush()
     return user
@@ -212,7 +216,7 @@ async def _ensure_paid_access(callback: CallbackQuery) -> bool:
 
 async def _ensure_profile_ready(callback: CallbackQuery, state: FSMContext) -> bool:
     with get_session() as session:
-        user = _get_or_create_user(session, callback.from_user.id)
+        user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
         profile = session.execute(
             select(UserProfile).where(UserProfile.user_id == user.id)
         ).scalar_one_or_none()
@@ -306,7 +310,7 @@ async def _restore_state_from_db(
     fallback_question_id: str | None,
 ) -> dict[str, Any]:
     with get_session() as session:
-        user = _get_or_create_user(session, message.from_user.id)
+        user = _get_or_create_user(session, message.from_user.id, message.from_user.username)
         response = session.execute(
             select(QuestionnaireResponse).where(
                 QuestionnaireResponse.user_id == user.id,
@@ -343,7 +347,7 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
         return
     config = load_questionnaire_config()
     with get_session() as session:
-        user = _get_or_create_user(session, callback.from_user.id)
+        user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
         response = session.execute(
             select(QuestionnaireResponse).where(
                 QuestionnaireResponse.user_id == user.id,
@@ -406,7 +410,7 @@ async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> N
         return
     config = load_questionnaire_config()
     with get_session() as session:
-        user = _get_or_create_user(session, callback.from_user.id)
+        user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
         response = _upsert_progress(
             session,
             user_id=user.id,
@@ -444,7 +448,7 @@ async def edit_questionnaire(callback: CallbackQuery, state: FSMContext) -> None
         return
     config = load_questionnaire_config()
     with get_session() as session:
-        user = _get_or_create_user(session, callback.from_user.id)
+        user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
         response = session.execute(
             select(QuestionnaireResponse).where(
                 QuestionnaireResponse.user_id == user.id,
@@ -548,7 +552,7 @@ async def _handle_answer(
         completed_at = datetime.now(timezone.utc)
 
     with get_session() as session:
-        user = _get_or_create_user(session, message.from_user.id)
+        user = _get_or_create_user(session, message.from_user.id, message.from_user.username)
         response = _upsert_progress(
             session,
             user_id=user.id,

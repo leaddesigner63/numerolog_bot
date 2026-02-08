@@ -376,11 +376,15 @@ def _get_payment_provider() -> PaymentProviderEnum:
     return PaymentProviderEnum.PRODAMUS
 
 
-def _get_or_create_user(session, telegram_user_id: int) -> User:
+def _get_or_create_user(
+    session, telegram_user_id: int, telegram_username: str | None = None
+) -> User:
     user = session.execute(
         select(User).where(User.telegram_user_id == telegram_user_id)
     ).scalar_one_or_none()
     if user:
+        if telegram_username is not None:
+            user.telegram_username = telegram_username
         if not user.free_limit:
             free_limit = session.execute(
                 select(FreeLimit).where(FreeLimit.user_id == user.id)
@@ -393,7 +397,7 @@ def _get_or_create_user(session, telegram_user_id: int) -> User:
                 user.free_limit = free_limit
         return user
 
-    user = User(telegram_user_id=telegram_user_id)
+    user = User(telegram_user_id=telegram_user_id, telegram_username=telegram_username)
     session.add(user)
     session.flush()
     free_limit = FreeLimit(user_id=user.id)
@@ -752,11 +756,18 @@ def _get_report_pdf_meta(report: Report | None) -> dict | None:
     }
 
 
-def _build_report_pdf_filename(report_meta: dict | None, username: str | None) -> str:
-    raw_username = str(username) if username else "unknown"
-    display_username = (
-        raw_username if raw_username.startswith("@") else f"@{raw_username}"
-    )
+def _build_report_pdf_filename(
+    report_meta: dict | None, username: str | None, user_id: int | None
+) -> str:
+    if username:
+        raw_username = str(username)
+        display_username = (
+            raw_username if raw_username.startswith("@") else f"@{raw_username}"
+        )
+    elif user_id is not None:
+        display_username = f"@user_{user_id}"
+    else:
+        display_username = "@unknown"
     tariff_value = "tariff"
     created_at_value = "unknown-time"
     report_id = "report"
@@ -784,7 +795,15 @@ async def _send_report_pdf(
 ) -> bool:
     if not pdf_bytes:
         return False
-    filename = _build_report_pdf_filename(report_meta, username)
+    stored_username = username
+    if stored_username is None:
+        with get_session() as session:
+            user = session.execute(
+                select(User).where(User.telegram_user_id == user_id)
+            ).scalar_one_or_none()
+            if user and user.telegram_username is not None:
+                stored_username = user.telegram_username
+    filename = _build_report_pdf_filename(report_meta, stored_username, user_id)
     report_id = report_meta.get("id") if report_meta else None
     try:
         sent = await bot.send_document(
@@ -1045,7 +1064,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 _refresh_profile_state(session, callback.from_user.id)
         else:
             with get_session() as session:
-                user = _get_or_create_user(session, callback.from_user.id)
+                user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
                 order = _create_order(session, user, Tariff(tariff))
                 payment_link = None
                 if settings.payment_enabled:
@@ -1281,14 +1300,14 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     )
                     await _safe_callback_answer(callback)
                     return
-                user = _get_or_create_user(session, callback.from_user.id)
+                user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
                 if user.free_limit:
                     user.free_limit.last_t0_at = datetime.now(timezone.utc)
         screen_manager.update_state(callback.from_user.id, profile_flow=None)
         next_screen = "S5" if tariff in {Tariff.T2.value, Tariff.T3.value} else "S6"
         if next_screen == "S6":
             with get_session() as session:
-                user = _get_or_create_user(session, callback.from_user.id)
+                user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
                 order_id = _safe_int(
                     screen_manager.update_state(callback.from_user.id).data.get(
                         "order_id"
@@ -1392,7 +1411,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         )
         await _maybe_run_report_delay(callback)
         with get_session() as session:
-            user = _get_or_create_user(session, callback.from_user.id)
+            user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
             order_id = _safe_int(state_snapshot.data.get("order_id"))
             job = _create_report_job(
                 session,
@@ -1444,7 +1463,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await _safe_callback_answer(callback)
                 return
         with get_session() as session:
-            user = _get_or_create_user(session, callback.from_user.id)
+            user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
             job = _refresh_report_job_state(session, callback.from_user.id)
             if job and job.status == ReportJobStatus.COMPLETED:
                 _refresh_report_state(

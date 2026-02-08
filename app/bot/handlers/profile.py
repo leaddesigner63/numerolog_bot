@@ -48,11 +48,15 @@ def _safe_int(value: str | int | None) -> int | None:
         return None
 
 
-def _get_or_create_user(session, telegram_user_id: int) -> User:
+def _get_or_create_user(
+    session, telegram_user_id: int, telegram_username: str | None = None
+) -> User:
     user = session.execute(
         select(User).where(User.telegram_user_id == telegram_user_id)
     ).scalar_one_or_none()
     if user:
+        if telegram_username is not None:
+            user.telegram_username = telegram_username
         if not user.free_limit:
             free_limit = session.execute(
                 select(FreeLimit).where(FreeLimit.user_id == user.id)
@@ -65,7 +69,7 @@ def _get_or_create_user(session, telegram_user_id: int) -> User:
                 user.free_limit = free_limit
         return user
 
-    user = User(telegram_user_id=telegram_user_id)
+    user = User(telegram_user_id=telegram_user_id, telegram_username=telegram_username)
     session.add(user)
     session.flush()
     free_limit = FreeLimit(user_id=user.id)
@@ -168,11 +172,12 @@ async def show_cabinet(message: Message) -> None:
     if not message.from_user:
         return
     with get_session() as session:
-        user = session.execute(
-            select(User).where(User.telegram_user_id == message.from_user.id)
-        ).scalar_one_or_none()
-        if user:
-            screen_manager.update_state(message.from_user.id, **_profile_payload(user.profile))
+        user = _get_or_create_user(
+            session,
+            message.from_user.id,
+            message.from_user.username,
+        )
+        screen_manager.update_state(message.from_user.id, **_profile_payload(user.profile))
         _refresh_reports_summary(session, message.from_user.id)
         _refresh_questionnaire_summary(session, message.from_user.id)
     screen_manager.add_user_message_id(message.from_user.id, message.message_id)
@@ -366,7 +371,7 @@ async def start_profile_edit_birth_place(
 async def delete_profile_data(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     with get_session() as session:
-        user = _get_or_create_user(session, callback.from_user.id)
+        user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
         _clear_user_data(session, user)
         _refresh_reports_summary(session, callback.from_user.id)
         _refresh_questionnaire_summary(session, callback.from_user.id)
@@ -512,7 +517,7 @@ async def handle_profile_birth_place(message: Message, state: FSMContext) -> Non
     birth_place = message.text or ""
     data = await state.get_data()
     with get_session() as session:
-        user = _get_or_create_user(session, message.from_user.id)
+        user = _get_or_create_user(session, message.from_user.id, message.from_user.username)
         profile = user.profile
         if profile:
             profile.name = data["name"]
@@ -560,7 +565,7 @@ async def handle_profile_edit_name(message: Message, state: FSMContext) -> None:
     )
     name = message.text or ""
     with get_session() as session:
-        user = _get_or_create_user(session, message.from_user.id)
+        user = _get_or_create_user(session, message.from_user.id, message.from_user.username)
         profile = user.profile
         if not profile:
             await state.clear()
@@ -598,7 +603,7 @@ async def handle_profile_edit_birth_date(message: Message, state: FSMContext) ->
     )
     birth_date = message.text or ""
     with get_session() as session:
-        user = _get_or_create_user(session, message.from_user.id)
+        user = _get_or_create_user(session, message.from_user.id, message.from_user.username)
         profile = user.profile
         if not profile:
             await state.clear()
@@ -636,7 +641,7 @@ async def handle_profile_edit_birth_time(message: Message, state: FSMContext) ->
     )
     birth_time = message.text or ""
     with get_session() as session:
-        user = _get_or_create_user(session, message.from_user.id)
+        user = _get_or_create_user(session, message.from_user.id, message.from_user.username)
         profile = user.profile
         if not profile:
             await state.clear()
@@ -674,7 +679,7 @@ async def handle_profile_edit_birth_place(message: Message, state: FSMContext) -
     )
     birth_place = message.text or ""
     with get_session() as session:
-        user = _get_or_create_user(session, message.from_user.id)
+        user = _get_or_create_user(session, message.from_user.id, message.from_user.username)
         profile = user.profile
         if not profile:
             await state.clear()
