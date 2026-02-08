@@ -3,10 +3,12 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import logging
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
+from aiogram import Bot
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -26,6 +28,7 @@ from app.db.session import get_session_factory
 
 
 router = APIRouter(prefix="/admin", tags=["admin"])
+logger = logging.getLogger(__name__)
 
 
 def _admin_credentials_ready() -> bool:
@@ -1152,12 +1155,17 @@ def admin_ui(request: Request) -> HTMLResponse:
           {label: "Статус", key: "status", sortable: true},
           {label: "Сообщение", key: "text", sortable: true},
           {label: "Отправлено", key: "sent_at", sortable: true},
+          {label: "Ответ админа", key: "admin_reply", sortable: true},
+          {label: "Ответ отправлен", key: "replied_at", sortable: true},
           {
             label: "Действия",
             key: null,
             sortable: false,
             copyable: false,
-            render: (row) => `<button class="secondary" onclick="toggleFeedbackArchive(${row.id}, true)">В архив</button>`,
+            render: (row) => `
+              <button class="secondary" onclick="replyToFeedback(${row.id})">Ответить</button>
+              <button class="secondary" onclick="toggleFeedbackArchive(${row.id}, true)">В архив</button>
+            `,
           },
         ],
       },
@@ -1170,13 +1178,18 @@ def admin_ui(request: Request) -> HTMLResponse:
           {label: "Статус", key: "status", sortable: true},
           {label: "Сообщение", key: "text", sortable: true},
           {label: "Отправлено", key: "sent_at", sortable: true},
+          {label: "Ответ админа", key: "admin_reply", sortable: true},
+          {label: "Ответ отправлен", key: "replied_at", sortable: true},
           {label: "Архивировано", key: "archived_at", sortable: true},
           {
             label: "Действия",
             key: null,
             sortable: false,
             copyable: false,
-            render: (row) => `<button class="secondary" onclick="toggleFeedbackArchive(${row.id}, false)">В текущие</button>`,
+            render: (row) => `
+              <button class="secondary" onclick="replyToFeedback(${row.id})">Ответить</button>
+              <button class="secondary" onclick="toggleFeedbackArchive(${row.id}, false)">В текущие</button>
+            `,
           },
         ],
       },
@@ -1580,6 +1593,29 @@ def admin_ui(request: Request) -> HTMLResponse:
           method: "POST",
           body: JSON.stringify({archive})
         });
+        await loadFeedbackInbox();
+        await loadFeedbackArchive();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function replyToFeedback(feedbackId) {
+      const replyText = window.prompt("Введите ответ пользователю");
+      if (replyText === null) {
+        return;
+      }
+      const normalizedReply = String(replyText || "").trim();
+      if (!normalizedReply) {
+        alert("Ответ не может быть пустым.");
+        return;
+      }
+      try {
+        const result = await fetchJson(`/feedback/${feedbackId}/reply`, {
+          method: "POST",
+          body: JSON.stringify({reply_text: normalizedReply})
+        });
+        alert(result.delivered ? "Ответ отправлен пользователю." : "Ответ сохранён, но отправить пользователю не удалось.");
         await loadFeedbackInbox();
         await loadFeedbackArchive();
       } catch (error) {
@@ -2326,6 +2362,8 @@ def _load_feedback_messages(session: Session, *, limit: int, archived: bool) -> 
                 "status": message.status.value,
                 "sent_at": message.sent_at.isoformat() if message.sent_at else None,
                 "archived_at": message.archived_at.isoformat() if message.archived_at else None,
+                "admin_reply": message.admin_reply,
+                "replied_at": message.replied_at.isoformat() if message.replied_at else None,
             }
         )
     return feedback
@@ -2372,6 +2410,68 @@ async def admin_feedback_toggle_archive(
         "id": feedback.id,
         "archived": feedback.archived_at is not None,
         "archived_at": feedback.archived_at.isoformat() if feedback.archived_at else None,
+    }
+
+
+async def _deliver_feedback_reply(telegram_user_id: int, reply_text: str) -> bool:
+    if not settings.bot_token:
+        return False
+    try:
+        bot = Bot(token=settings.bot_token)
+    except Exception as exc:
+        logger.warning("feedback_reply_bot_init_failed", extra={"error": str(exc)})
+        return False
+    try:
+        await bot.send_message(chat_id=telegram_user_id, text=f"Ответ от поддержки\n\n{reply_text}")
+        return True
+    except Exception as exc:
+        logger.warning(
+            "feedback_reply_send_failed",
+            extra={"telegram_user_id": telegram_user_id, "error": str(exc)},
+        )
+        return False
+    finally:
+        await bot.session.close()
+
+
+@router.post("/api/feedback/{feedback_id}/reply")
+async def admin_feedback_reply(
+    feedback_id: int,
+    request: Request,
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    payload: dict = {}
+    body = await request.body()
+    if body:
+        try:
+            candidate = await request.json()
+            if isinstance(candidate, dict):
+                payload = candidate
+        except Exception:
+            payload = {}
+
+    raw_reply = payload.get("reply_text")
+    reply_text = str(raw_reply or "").strip()
+    if not reply_text:
+        raise HTTPException(status_code=400, detail="Reply text is required")
+
+    feedback = session.get(FeedbackMessage, feedback_id)
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback message not found")
+
+    user = session.get(User, feedback.user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User for feedback message not found")
+
+    delivered = await _deliver_feedback_reply(user.telegram_user_id, reply_text)
+    feedback.admin_reply = reply_text
+    feedback.replied_at = datetime.now(timezone.utc)
+
+    return {
+        "id": feedback.id,
+        "delivered": delivered,
+        "admin_reply": feedback.admin_reply,
+        "replied_at": feedback.replied_at.isoformat() if feedback.replied_at else None,
     }
 
 

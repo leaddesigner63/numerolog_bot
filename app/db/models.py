@@ -234,6 +234,8 @@ class FeedbackMessage(Base):
     archived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True
     )
+    admin_reply: Mapped[str | None] = mapped_column(Text)
+    replied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="feedback_messages")
 
