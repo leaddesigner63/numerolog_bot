@@ -123,6 +123,35 @@ def _update_screen_state(user_id: int, payload: dict[str, Any]) -> None:
     screen_manager.update_state(user_id, **payload)
 
 
+def _build_actual_answers(
+    *,
+    config,
+    raw_answers: dict[str, Any] | None,
+) -> tuple[dict[str, Any], str | None]:
+    """Возвращает только актуальные ответы по валидной ветке анкеты."""
+    answers = raw_answers or {}
+    actual: dict[str, Any] = {}
+    current_question_id = config.start_question_id
+    visited: set[str] = set()
+
+    while current_question_id and current_question_id not in visited:
+        question = config.get_question(current_question_id)
+        if not question:
+            return actual, None
+        visited.add(current_question_id)
+        if current_question_id not in answers:
+            return actual, current_question_id
+
+        answer = answers[current_question_id]
+        actual[current_question_id] = answer
+        next_question_id = resolve_next_question_id(question, str(answer))
+        if next_question_id and next_question_id not in config.questions:
+            next_question_id = None
+        current_question_id = next_question_id
+
+    return actual, current_question_id
+
+
 async def _ensure_paid_access(callback: CallbackQuery) -> bool:
     state_snapshot = screen_manager.update_state(callback.from_user.id)
     selected_tariff = state_snapshot.data.get("selected_tariff")
@@ -285,8 +314,12 @@ async def _restore_state_from_db(
             )
         ).scalar_one_or_none()
     if response:
-        current_question_id = response.current_question_id or fallback_question_id
-        answers = response.answers or {}
+        config = load_questionnaire_config()
+        answers, actual_current_question_id = _build_actual_answers(
+            config=config,
+            raw_answers=response.answers,
+        )
+        current_question_id = actual_current_question_id or fallback_question_id
         await state.set_state(QuestionnaireStates.answering)
         await state.update_data(
             questionnaire_version=config_version,
@@ -331,10 +364,11 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
             return
 
         answers = response.answers if response and response.answers else {}
-        if response and response.current_question_id:
-            current_question_id = response.current_question_id
-        else:
-            current_question_id = config.start_question_id
+        answers, default_current_question_id = _build_actual_answers(
+            config=config,
+            raw_answers=answers,
+        )
+        current_question_id = default_current_question_id or config.start_question_id
         response = _upsert_progress(
             session,
             user_id=user.id,
@@ -417,8 +451,10 @@ async def edit_questionnaire(callback: CallbackQuery, state: FSMContext) -> None
                 QuestionnaireResponse.questionnaire_version == config.version,
             )
         ).scalar_one_or_none()
-        answers = response.answers if response and response.answers else {}
-        current_question_id = response.current_question_id if response else None
+        answers, current_question_id = _build_actual_answers(
+            config=config,
+            raw_answers=response.answers if response and response.answers else {},
+        )
         if not current_question_id:
             current_question_id = config.start_question_id
         response = _upsert_progress(
@@ -486,6 +522,20 @@ async def _handle_answer(
         )
         return
     answers = dict(data.get("answers", {}))
+    actual_answers, expected_question_id = _build_actual_answers(
+        config=config,
+        raw_answers=answers,
+    )
+    if expected_question_id and expected_question_id != current_question_id:
+        current_question_id = expected_question_id
+        question = config.get_question(current_question_id)
+        if not question:
+            await screen_manager.send_ephemeral_message(
+                message,
+                "Анкета временно недоступна. Запустите заполнение заново.",
+            )
+            return
+    answers = actual_answers
     answers[current_question_id] = answer
     next_question_id = resolve_next_question_id(question, answer)
 
