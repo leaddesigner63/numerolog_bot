@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.api.routes.admin import _load_feedback_thread_history
 from app.bot.handlers.screens import _build_feedback_records, _extract_quick_reply_thread_id
 from app.db.base import Base
 from app.db.models import (
@@ -79,6 +80,32 @@ class SupportThreadingTests(unittest.TestCase):
             )
             self.assertEqual(stored_support_message.thread_feedback_id, root_feedback.id)
             self.assertEqual(stored_support_message.direction, SupportMessageDirection.USER)
+
+    def test_admin_fallback_thread_history_marks_delivered(self) -> None:
+        sent_at = datetime.now(timezone.utc)
+        with self.Session() as session:
+            user = User(telegram_user_id=777002)
+            session.add(user)
+            session.flush()
+
+            root_feedback = FeedbackMessage(
+                user_id=user.id,
+                text="Сообщение пользователя",
+                status=FeedbackStatus.SENT,
+                sent_at=sent_at,
+            )
+            session.add(root_feedback)
+            session.commit()
+
+            history = _load_feedback_thread_history(
+                session,
+                thread_feedback_id=root_feedback.id,
+                limit=50,
+            )
+
+            self.assertEqual(len(history), 1)
+            self.assertEqual(history[0]["direction"], "user")
+            self.assertTrue(history[0]["delivered"])
 
 
 if __name__ == "__main__":

@@ -17,6 +17,7 @@ from app.core.config import settings
 from app.db.models import (
     AdminNote,
     FeedbackMessage,
+    FeedbackStatus,
     LLMApiKey,
     Order,
     OrderStatus,
