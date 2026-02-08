@@ -7,6 +7,7 @@ Create Date: 2026-02-08 00:40:00.000000
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 # revision identifiers, used by Alembic.
@@ -35,7 +36,12 @@ def upgrade() -> None:
         ["parent_feedback_id"],
     )
 
-    direction_enum = sa.Enum("user", "admin", name="supportmessagedirection")
+    direction_enum = postgresql.ENUM(
+        "user",
+        "admin",
+        name="supportmessagedirection",
+        create_type=False,
+    )
     bind = op.get_bind()
     direction_enum.create(bind, checkfirst=True)
 
@@ -73,6 +79,11 @@ def downgrade() -> None:
     op.drop_constraint("fk_feedback_messages_parent_feedback_id", "feedback_messages", type_="foreignkey")
     op.drop_column("feedback_messages", "parent_feedback_id")
 
-    direction_enum = sa.Enum("user", "admin", name="supportmessagedirection")
+    direction_enum = postgresql.ENUM(
+        "user",
+        "admin",
+        name="supportmessagedirection",
+        create_type=False,
+    )
     bind = op.get_bind()
     direction_enum.drop(bind, checkfirst=True)
