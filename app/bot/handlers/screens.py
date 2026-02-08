@@ -32,6 +32,8 @@ from app.db.models import (
     UserProfile,
     FeedbackMessage,
     FeedbackStatus,
+    SupportDialogMessage,
+    SupportMessageDirection,
 )
 from app.db.session import get_session
 from app.payments import get_payment_provider
@@ -56,6 +58,38 @@ def _safe_int(value: str | int | None) -> int | None:
         return int(value)
     except (TypeError, ValueError):
         return None
+
+
+def _extract_quick_reply_thread_id(callback_data: str | None) -> int | None:
+    prefix = "feedback:quick_reply:"
+    if not callback_data or not callback_data.startswith(prefix):
+        return None
+    return _safe_int(callback_data.split(prefix)[-1])
+
+
+def _build_feedback_records(
+    *,
+    user_id: int,
+    feedback_text: str,
+    status: FeedbackStatus,
+    sent_at: datetime,
+    thread_feedback_id: int | None,
+) -> tuple[FeedbackMessage, SupportDialogMessage, int | None]:
+    feedback = FeedbackMessage(
+        user_id=user_id,
+        text=feedback_text,
+        status=status,
+        sent_at=sent_at,
+        parent_feedback_id=thread_feedback_id,
+    )
+    support_message = SupportDialogMessage(
+        user_id=user_id,
+        thread_feedback_id=thread_feedback_id or 0,
+        direction=SupportMessageDirection.USER,
+        text=feedback_text,
+        delivered=(status == FeedbackStatus.SENT),
+    )
+    return feedback, support_message, thread_feedback_id
 
 
 def _parse_admin_ids(value: str | None) -> list[int]:
@@ -121,14 +155,22 @@ async def _submit_feedback(
     try:
         with get_session() as session:
             user = _get_or_create_user(session, user_id)
-            session.add(
-                FeedbackMessage(
-                    user_id=user.id,
-                    text=feedback_text,
-                    status=status,
-                    sent_at=sent_at,
-                )
+            state = screen_manager.update_state(user_id)
+            thread_feedback_id = _safe_int(state.data.get("support_thread_feedback_id"))
+            if not thread_feedback_id:
+                thread_feedback_id = None
+            feedback, support_message, _ = _build_feedback_records(
+                user_id=user.id,
+                feedback_text=feedback_text,
+                status=status,
+                sent_at=sent_at,
+                thread_feedback_id=thread_feedback_id,
             )
+            session.add(feedback)
+            session.flush()
+            support_message.thread_feedback_id = thread_feedback_id or feedback.id
+            session.add(support_message)
+            screen_manager.update_state(user_id, support_thread_feedback_id=thread_feedback_id or feedback.id)
     except Exception as exc:
         logger.warning(
             "feedback_store_failed",
@@ -1507,6 +1549,26 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 callback,
                 "Не удалось сформировать PDF. Попробуйте ещё раз чуть позже."
             )
+        await _safe_callback_answer(callback)
+        return
+
+    thread_feedback_id = _extract_quick_reply_thread_id(callback.data)
+    if thread_feedback_id is not None:
+        if not thread_feedback_id:
+            await _send_notice(callback, "Не удалось открыть быстрый ответ. Попробуйте ещё раз.")
+            await _safe_callback_answer(callback)
+            return
+        screen_manager.update_state(
+            callback.from_user.id,
+            support_thread_feedback_id=thread_feedback_id,
+            feedback_text=None,
+        )
+        await screen_manager.show_screen(
+            bot=callback.bot,
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+            screen_id="S8",
+        )
         await _safe_callback_answer(callback)
         return
 

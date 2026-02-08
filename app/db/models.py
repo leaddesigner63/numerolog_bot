@@ -62,6 +62,11 @@ class FeedbackStatus(enum.StrEnum):
     FAILED = "failed"
 
 
+class SupportMessageDirection(enum.StrEnum):
+    USER = "user"
+    ADMIN = "admin"
+
+
 class QuestionnaireStatus(enum.StrEnum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -234,6 +239,9 @@ class FeedbackMessage(Base):
     archived_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), index=True
     )
+    parent_feedback_id: Mapped[int | None] = mapped_column(
+        ForeignKey("feedback_messages.id", ondelete="SET NULL"), index=True
+    )
     admin_reply: Mapped[str | None] = mapped_column(Text)
     replied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -269,6 +277,31 @@ class QuestionnaireResponse(Base):
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     user: Mapped[User] = relationship(back_populates="questionnaire_responses")
+
+
+class SupportDialogMessage(Base):
+    __tablename__ = "support_dialog_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True
+    )
+    thread_feedback_id: Mapped[int] = mapped_column(
+        ForeignKey("feedback_messages.id", ondelete="CASCADE"), index=True
+    )
+    direction: Mapped[SupportMessageDirection] = mapped_column(
+        Enum(
+            SupportMessageDirection,
+            values_callable=_enum_values,
+            name="supportmessagedirection",
+        ),
+        index=True,
+    )
+    text: Mapped[str] = mapped_column(Text)
+    delivered: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
 
 
 class AdminNote(Base):
