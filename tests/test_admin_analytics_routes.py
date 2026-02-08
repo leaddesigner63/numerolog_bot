@@ -1,8 +1,10 @@
 import unittest
+from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -102,6 +104,17 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(len(payload["data"]["transition_matrix"]), 1)
         self.assertEqual(payload["filters_applied"]["screen_ids"], ["S1"])
+
+    def test_transitions_return_503_on_database_overload(self) -> None:
+        with patch.object(
+            admin_routes,
+            "build_screen_transition_analytics",
+            side_effect=OperationalError("SELECT 1", {}, Exception("too many clients")),
+        ):
+            response = self.client.get("/admin/api/analytics/transitions/matrix")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("временно перегружена", response.json()["detail"])
 
     def test_transitions_validation_errors(self) -> None:
         bad_screen = self.client.get(

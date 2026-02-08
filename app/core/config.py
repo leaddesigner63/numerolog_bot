@@ -56,6 +56,10 @@ class Settings(BaseSettings):
     free_t0_cooldown_hours: int = 720
 
     database_url: str | None = None
+    database_pool_size: int = 5
+    database_max_overflow: int = 5
+    database_pool_timeout_seconds: int = 30
+    database_pool_recycle_seconds: int = 1800
     pdf_storage_bucket: str | None = None
     pdf_storage_key: str | None = None
     pdf_font_path: str | None = None

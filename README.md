@@ -75,6 +75,11 @@ cp .env.prompts.example .env.prompts
 ```
 BOT_TOKEN=...
 DATABASE_URL=postgresql://user:password@localhost:5432/numerolog_bot
+# Ограничение пула подключений SQLAlchemy (защита от исчерпания слотов Postgres):
+DATABASE_POOL_SIZE=5
+DATABASE_MAX_OVERFLOW=5
+DATABASE_POOL_TIMEOUT_SECONDS=30
+DATABASE_POOL_RECYCLE_SECONDS=1800
 # Telegram ID администраторов, которые получают копию обратной связи (через запятую):
 ADMIN_IDS=123456789,987654321
 # Ссылка на канал проекта для кнопки "Сообщество":

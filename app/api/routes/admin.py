@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import func, select
+from sqlalchemy.exc import OperationalError, TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -2596,6 +2597,17 @@ def _build_transition_envelope(
     ).model_dump(mode="json")
 
 
+def _safe_build_transition_analytics(session: Session, filters: AnalyticsFilters) -> dict:
+    try:
+        return build_screen_transition_analytics(session, filters)
+    except (OperationalError, SQLAlchemyTimeoutError) as exc:
+        logger.exception("admin_transition_analytics_db_unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail="База данных временно перегружена. Попробуйте повторить запрос позже.",
+        ) from exc
+
+
 def _slice_top_n(items: list[dict], top_n: int) -> list[dict]:
     if top_n <= 0:
         return items
@@ -2625,7 +2637,7 @@ def admin_screen_transition_analytics(
         limit=limit,
         screen_ids=screen_ids,
     )
-    result = build_screen_transition_analytics(session, filters)
+    result = _safe_build_transition_analytics(session, filters)
     payload = {
         "summary": result["summary"],
         "transition_matrix": _slice_top_n(result["transition_matrix"], top_n),
@@ -2658,7 +2670,7 @@ def admin_transitions_summary(
         limit=limit,
         screen_ids=screen_ids,
     )
-    result = build_screen_transition_analytics(session, filters)
+    result = _safe_build_transition_analytics(session, filters)
     summary = TransitionSummaryItem.model_validate(result["summary"]).model_dump(mode="json")
     return _build_transition_envelope(data={"summary": summary}, filters_applied=filters_applied, top_n=0)
 
@@ -2686,7 +2698,7 @@ def admin_transitions_matrix(
         limit=limit,
         screen_ids=screen_ids,
     )
-    result = build_screen_transition_analytics(session, filters)
+    result = _safe_build_transition_analytics(session, filters)
     matrix_items = [
         TransitionMatrixItem.model_validate(item).model_dump(mode="json")
         for item in _slice_top_n(result["transition_matrix"], top_n)
@@ -2717,7 +2729,7 @@ def admin_transitions_funnel(
         limit=limit,
         screen_ids=screen_ids,
     )
-    result = build_screen_transition_analytics(session, filters)
+    result = _safe_build_transition_analytics(session, filters)
     funnel_items = [
         TransitionFunnelItem.model_validate(item).model_dump(mode="json")
         for item in _slice_top_n(result["funnel"], top_n)
@@ -2748,7 +2760,7 @@ def admin_transitions_timing(
         limit=limit,
         screen_ids=screen_ids,
     )
-    result = build_screen_transition_analytics(session, filters)
+    result = _safe_build_transition_analytics(session, filters)
     timing_raw = [row for row in result["transition_durations"] if int(row.get("samples", 0)) >= _TRANSITION_TIMING_MIN_SAMPLES]
     timing_items = [
         TransitionTimingItem.model_validate(item).model_dump(mode="json")
