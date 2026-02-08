@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.api.routes.admin import _load_feedback_thread_history
+from app.api.routes.admin import _load_feedback_thread_history, _load_feedback_threads
 from app.bot.handlers.screens import _build_feedback_records, _extract_quick_reply_thread_id
 from app.db.base import Base
 from app.db.models import (
@@ -106,6 +106,41 @@ class SupportThreadingTests(unittest.TestCase):
             self.assertEqual(len(history), 1)
             self.assertEqual(history[0]["direction"], "user")
             self.assertTrue(history[0]["delivered"])
+
+    def test_load_feedback_threads_returns_thread_summary(self) -> None:
+        sent_at = datetime.now(timezone.utc)
+        with self.Session() as session:
+            user = User(telegram_user_id=777003)
+            session.add(user)
+            session.flush()
+
+            root_feedback = FeedbackMessage(
+                user_id=user.id,
+                text="Первое сообщение",
+                status=FeedbackStatus.SENT,
+                sent_at=sent_at,
+            )
+            session.add(root_feedback)
+            session.flush()
+
+            reply_feedback = FeedbackMessage(
+                user_id=user.id,
+                text="Второе сообщение",
+                status=FeedbackStatus.FAILED,
+                sent_at=sent_at.replace(microsecond=sent_at.microsecond + 1),
+                parent_feedback_id=root_feedback.id,
+            )
+            session.add(reply_feedback)
+            session.commit()
+
+            threads = _load_feedback_threads(session, limit=50, archived=False)
+
+            self.assertEqual(len(threads), 1)
+            self.assertEqual(threads[0]["thread_feedback_id"], root_feedback.id)
+            self.assertEqual(threads[0]["last_feedback_id"], reply_feedback.id)
+            self.assertEqual(threads[0]["message_count"], 2)
+            self.assertEqual(threads[0]["text"], "Второе сообщение")
+            self.assertEqual(threads[0]["status"], FeedbackStatus.FAILED.value)
 
 
 if __name__ == "__main__":
