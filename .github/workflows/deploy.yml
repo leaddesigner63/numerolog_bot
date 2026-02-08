@@ -1,23 +1,14 @@
-name: Deploy to server
+name: Landing CI/CD (VPS + Nginx)
 
 on:
   push:
-    branches: [ "main", "work" ]
+    branches: ["main"]
   workflow_dispatch:
-    inputs:
-      environment:
-        description: "Deployment environment"
-        required: true
-        default: "production"
-        type: choice
-        options:
-          - production
-          - staging
 
 jobs:
-  deploy:
+  build_and_check:
+    name: Build + lint/check
     runs-on: ubuntu-latest
-    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || 'production' }}
 
     steps:
       - name: Checkout
@@ -31,8 +22,21 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Run checks
+      - name: Build (compile python sources)
+        run: python -m compileall app scripts tests
+
+      - name: Lint/check + tests
         run: bash scripts/test.sh
+
+  deploy_production:
+    name: Deploy to production
+    runs-on: ubuntu-latest
+    needs: build_and_check
+    environment: production
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup SSH agent
         uses: webfactory/ssh-agent@v0.9.0
@@ -44,7 +48,7 @@ jobs:
           mkdir -p ~/.ssh
           ssh-keyscan -p "${{ secrets.SSH_PORT }}" -H "${{ secrets.SSH_HOST }}" >> ~/.ssh/known_hosts
 
-      - name: Deploy (git reset + restart service)
+      - name: Deploy (git reset + restart service + smoke-check)
         env:
           HOST: ${{ secrets.SSH_HOST }}
           PORT: ${{ secrets.SSH_PORT }}
@@ -53,7 +57,10 @@ jobs:
           SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
           SERVICE_NAMES: ${{ secrets.SERVICE_NAMES }}
           ENV_FILE: ${{ secrets.ENV_FILE }}
-          GIT_REF: origin/${{ github.ref_name }}
+          GIT_REF: origin/main
+          LANDING_URL: ${{ secrets.LANDING_URL }}
+          LANDING_EXPECTED_CTA: ${{ secrets.LANDING_EXPECTED_CTA }}
+          LANDING_ASSET_URLS: ${{ secrets.LANDING_ASSET_URLS }}
         run: |
           ssh -p "$PORT" "$USER@$HOST" \
             "env DEPLOY_PATH='$DEPLOY_PATH' \
@@ -61,6 +68,9 @@ jobs:
             SERVICE_NAMES='$SERVICE_NAMES' \
             ENV_FILE='$ENV_FILE' \
             GIT_REF='$GIT_REF' \
+            LANDING_URL='$LANDING_URL' \
+            LANDING_EXPECTED_CTA='$LANDING_EXPECTED_CTA' \
+            LANDING_ASSET_URLS='$LANDING_ASSET_URLS' \
             bash -se" <<'EOF'
           set -euo pipefail
 
