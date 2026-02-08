@@ -38,6 +38,10 @@ scripts/              # вспомогательные скрипты
   deploy.sh           # серверный деплой-скрипт (используется GitHub Actions)
   test.sh             # локальные проверки
   fast_checks.py      # быстрые сценарные проверки без внешних зависимостей
+web/                  # one-screen лендинг для перехода в Telegram-бот
+  index.html          # секции Hero/Преимущества/Тарифы/FAQ/Footer + CTA deep-link
+  styles.css          # mobile-first стили (360px+, tablet, desktop)
+  script.js           # базовая интерактивность (FAQ-аккордеон)
 AUTODEPLOY_INSTRUCTIONS.md # пошаговая инструкция по автодеплою
 .env.prompts.example # пример файла с системными промптами по тарифам
 TZ.md                 # техническое задание (ТЗ)
@@ -112,6 +116,16 @@ GEMINI_IMAGE_MODEL=gemini-2.0-flash-exp-image-generation
 ```
 
 > Примечание: лишние переменные в `.env` безопасно игнорируются и не ломают запуск.
+
+### Локальный просмотр лендинга
+
+```bash
+python -m http.server 8080 --directory web
+```
+
+После запуска откройте `http://localhost:8080`.
+
+> В `web/index.html` используются Telegram deep-link вида `https://t.me/your_bot_username?start=<utm_tag>`. Перед публикацией замените `your_bot_username` на реальный username вашего бота.
 
 5. Выполните миграции:
 

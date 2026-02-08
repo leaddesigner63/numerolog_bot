@@ -173,6 +173,24 @@ sudo systemctl restart numerolog-api.service numerolog-bot.service
 - После деплоя обязательно применяйте новые миграции (`alembic upgrade head`), чтобы изменения админки (включая архив обращений) работали корректно.
 
 
+## 9.1. Публикация one-screen лендинга (`web/`)
+Если вы используете Nginx или другой reverse-proxy, добавьте раздачу статического каталога `web/` как отдельный сайт/путь (например, `https://landing.example.com`). После каждого автодеплоя содержимое каталога `web/` обновляется вместе с кодом репозитория, дополнительных шагов в GitHub Actions не требуется.
+
+Пример location для Nginx:
+```nginx
+server {
+    listen 80;
+    server_name landing.example.com;
+
+    root /var/www/numerolog_bot/web;
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+```
+
 ## 10. Чек-лист после автодеплоя
 1. Проверьте, что миграции применились: `alembic current` и `alembic heads`.
 2. Убедитесь, что бот и API активны: `systemctl status numerolog-bot.service numerolog-api.service`.
