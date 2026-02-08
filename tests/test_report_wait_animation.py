@@ -1,10 +1,8 @@
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from app.bot.handlers import screens
-
-from unittest.mock import patch
 
 
 class _State:
@@ -83,6 +81,14 @@ class ReportWaitAnimationTests(unittest.IsolatedAsyncioTestCase):
         second_call = update_mock.await_args_list[1].kwargs
         self.assertEqual(first_call["message_id"], 100)
         self.assertEqual(second_call["message_id"], 101)
+
+
+class ReportDelayResolveTests(unittest.TestCase):
+    def test_resolve_report_delay_seconds_handles_invalid_values(self) -> None:
+        self.assertEqual(screens._resolve_report_delay_seconds(None), screens.settings.report_delay_seconds)
+        self.assertEqual(screens._resolve_report_delay_seconds("bad"), 0)
+        self.assertEqual(screens._resolve_report_delay_seconds(-5), 0)
+        self.assertEqual(screens._resolve_report_delay_seconds(7), 7)
 
 
 if __name__ == "__main__":

@@ -224,8 +224,23 @@ async def _update_report_wait_message(
             return False
 
 
-async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
-    delay_seconds = settings.report_delay_seconds
+def _resolve_report_delay_seconds(delay_seconds: int | None = None) -> int:
+    if delay_seconds is None:
+        delay_seconds = settings.report_delay_seconds
+    try:
+        safe_value = int(delay_seconds)
+    except (TypeError, ValueError):
+        return 0
+    return max(safe_value, 0)
+
+
+async def _run_report_delay(
+    bot: Bot,
+    chat_id: int,
+    user_id: int,
+    delay_seconds: int | None = None,
+) -> None:
+    delay_seconds = _resolve_report_delay_seconds(delay_seconds)
     if delay_seconds <= 0:
         return
     initial_state = screen_manager.update_state(user_id)
@@ -273,6 +288,7 @@ async def _maybe_run_report_delay(callback: CallbackQuery) -> None:
             bot=callback.bot,
             chat_id=callback.message.chat.id,
             user_id=callback.from_user.id,
+            delay_seconds=settings.report_delay_seconds,
         )
     )
 
