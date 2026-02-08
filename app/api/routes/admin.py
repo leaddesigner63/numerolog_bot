@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from aiogram import Bot
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -23,6 +24,8 @@ from app.db.models import (
     SystemPrompt,
     User,
     UserProfile,
+    SupportDialogMessage,
+    SupportMessageDirection,
 )
 from app.db.session import get_session_factory
 
@@ -480,6 +483,48 @@ def admin_ui(request: Request) -> HTMLResponse:
       flex-wrap: wrap;
       align-items: center;
     }
+    .thread-history {
+      margin-top: 12px;
+      border: 1px solid #2a2f3a;
+      border-radius: 10px;
+      padding: 10px;
+      background: #11151c;
+    }
+    .thread-history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      flex-wrap: wrap;
+    }
+    .thread-history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 360px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .thread-history-item {
+      border: 1px solid #2a2f3a;
+      border-radius: 8px;
+      padding: 8px;
+      background: #0f1115;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .thread-history-item.user {
+      border-left: 3px solid #3b82f6;
+    }
+    .thread-history-item.admin {
+      border-left: 3px solid #22c55e;
+    }
+    .thread-history-meta {
+      color: #94a3b8;
+      font-size: 12px;
+      margin-bottom: 4px;
+    }
   </style>
 </head>
 <body>
@@ -677,6 +722,16 @@ def admin_ui(request: Request) -> HTMLResponse:
             <button class="secondary" onclick="bulkArchiveFeedback(true)">Вернуть выбранные в текущие</button>
           </div>
           <div id="feedbackArchive" class="muted">Загрузка...</div>
+        </div>
+        <div id="feedbackThreadViewer" class="thread-history" style="display: none;">
+          <div class="thread-history-header">
+            <strong id="feedbackThreadTitle">История треда</strong>
+            <div class="row" style="margin: 0;">
+              <button class="secondary" onclick="refreshFeedbackThread()">Обновить</button>
+              <button class="secondary" onclick="closeFeedbackThread()">Закрыть</button>
+            </div>
+          </div>
+          <div id="feedbackThreadBody" class="thread-history-list muted">Выберите обращение и нажмите «История треда».</div>
         </div>
       </section>
       <section data-panel="system-prompts">
@@ -1024,6 +1079,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       systemPrompts: new Set(),
       notes: new Set(),
     };
+    let currentFeedbackThreadId = null;
 
 
     const tableConfigs = {
@@ -1164,6 +1220,7 @@ def admin_ui(request: Request) -> HTMLResponse:
             copyable: false,
             render: (row) => `
               <button class="secondary" onclick="replyToFeedback(${row.id})">Ответить</button>
+              <button class="secondary" onclick="showFeedbackThread(${row.thread_feedback_id || row.id})">История треда</button>
               <button class="secondary" onclick="toggleFeedbackArchive(${row.id}, true)">В архив</button>
             `,
           },
@@ -1188,6 +1245,7 @@ def admin_ui(request: Request) -> HTMLResponse:
             copyable: false,
             render: (row) => `
               <button class="secondary" onclick="replyToFeedback(${row.id})">Ответить</button>
+              <button class="secondary" onclick="showFeedbackThread(${row.thread_feedback_id || row.id})">История треда</button>
               <button class="secondary" onclick="toggleFeedbackArchive(${row.id}, false)">В текущие</button>
             `,
           },
@@ -1600,6 +1658,87 @@ def admin_ui(request: Request) -> HTMLResponse:
       }
     }
 
+    function closeFeedbackThread() {
+      currentFeedbackThreadId = null;
+      const viewer = document.getElementById("feedbackThreadViewer");
+      const body = document.getElementById("feedbackThreadBody");
+      const title = document.getElementById("feedbackThreadTitle");
+      if (viewer) {
+        viewer.style.display = "none";
+      }
+      if (body) {
+        body.className = "thread-history-list muted";
+        body.textContent = "Выберите обращение и нажмите «История треда».";
+      }
+      if (title) {
+        title.textContent = "История треда";
+      }
+    }
+
+    function renderFeedbackThread(messages) {
+      const body = document.getElementById("feedbackThreadBody");
+      if (!body) {
+        return;
+      }
+      if (!Array.isArray(messages) || !messages.length) {
+        body.className = "thread-history-list muted";
+        body.textContent = "Сообщения в этом треде пока не найдены.";
+        return;
+      }
+      body.className = "thread-history-list";
+      body.innerHTML = messages.map((item) => {
+        const direction = item.direction === "admin" ? "admin" : "user";
+        const label = direction === "admin" ? "Поддержка" : "Пользователь";
+        const createdAt = normalizeValue(item.created_at || item.sent_at || "—");
+        const delivered = item.delivered === false ? " • не доставлено" : "";
+        return `
+          <div class="thread-history-item ${direction}">
+            <div class="thread-history-meta">${label} • ${createdAt}${delivered}</div>
+            <div>${normalizeValue(item.text)}</div>
+          </div>
+        `;
+      }).join("");
+    }
+
+    async function showFeedbackThread(threadFeedbackId) {
+      const normalizedId = Number(threadFeedbackId);
+      if (!Number.isInteger(normalizedId) || normalizedId <= 0) {
+        alert("Некорректный идентификатор треда.");
+        return;
+      }
+      currentFeedbackThreadId = normalizedId;
+      const viewer = document.getElementById("feedbackThreadViewer");
+      const title = document.getElementById("feedbackThreadTitle");
+      const body = document.getElementById("feedbackThreadBody");
+      if (viewer) {
+        viewer.style.display = "block";
+      }
+      if (title) {
+        title.textContent = `История треда #${normalizedId}`;
+      }
+      if (body) {
+        body.className = "thread-history-list muted";
+        body.textContent = "Загрузка...";
+      }
+      try {
+        const data = await fetchJson(`/feedback/thread/${normalizedId}`);
+        renderFeedbackThread(data.messages || []);
+      } catch (error) {
+        if (body) {
+          body.className = "thread-history-list muted";
+          body.textContent = error.message;
+        }
+      }
+    }
+
+    async function refreshFeedbackThread() {
+      if (!currentFeedbackThreadId) {
+        alert("Сначала выберите тред.");
+        return;
+      }
+      await showFeedbackThread(currentFeedbackThreadId);
+    }
+
     async function replyToFeedback(feedbackId) {
       const replyText = window.prompt("Введите ответ пользователю");
       if (replyText === null) {
@@ -1618,6 +1757,9 @@ def admin_ui(request: Request) -> HTMLResponse:
         alert(result.delivered ? "Ответ отправлен пользователю." : "Ответ сохранён, но отправить пользователю не удалось.");
         await loadFeedbackInbox();
         await loadFeedbackArchive();
+        if (result.thread_feedback_id) {
+          await showFeedbackThread(result.thread_feedback_id);
+        }
       } catch (error) {
         alert(error.message);
       }
@@ -2337,6 +2479,10 @@ def admin_users(limit: int = 50, session: Session = Depends(_get_db_session)) ->
     return {"users": users}
 
 
+def _resolve_thread_feedback_id(feedback: FeedbackMessage) -> int:
+    return feedback.parent_feedback_id or feedback.id
+
+
 def _load_feedback_messages(session: Session, *, limit: int, archived: bool) -> list[dict]:
     query = (
         select(FeedbackMessage, User)
@@ -2364,9 +2510,69 @@ def _load_feedback_messages(session: Session, *, limit: int, archived: bool) -> 
                 "archived_at": message.archived_at.isoformat() if message.archived_at else None,
                 "admin_reply": message.admin_reply,
                 "replied_at": message.replied_at.isoformat() if message.replied_at else None,
+                "parent_feedback_id": message.parent_feedback_id,
+                "thread_feedback_id": _resolve_thread_feedback_id(message),
             }
         )
     return feedback
+
+
+def _load_feedback_thread_history(
+    session: Session,
+    *,
+    thread_feedback_id: int,
+    limit: int,
+) -> list[dict]:
+    query = (
+        select(SupportDialogMessage)
+        .where(SupportDialogMessage.thread_feedback_id == thread_feedback_id)
+        .order_by(SupportDialogMessage.created_at.asc(), SupportDialogMessage.id.asc())
+    )
+    if limit > 0:
+        query = query.limit(limit)
+    rows = session.execute(query).scalars().all()
+    if rows:
+        return [
+            {
+                "id": row.id,
+                "direction": row.direction.value,
+                "text": row.text,
+                "delivered": row.delivered,
+                "created_at": row.created_at.isoformat() if row.created_at else None,
+            }
+            for row in rows
+        ]
+
+    fallback_rows = session.execute(
+        select(FeedbackMessage)
+        .where(
+            (FeedbackMessage.id == thread_feedback_id)
+            | (FeedbackMessage.parent_feedback_id == thread_feedback_id)
+        )
+        .order_by(FeedbackMessage.sent_at.asc(), FeedbackMessage.id.asc())
+    ).scalars().all()
+    history: list[dict] = []
+    for row in fallback_rows:
+        history.append(
+            {
+                "id": row.id,
+                "direction": "user",
+                "text": row.text,
+                "delivered": row.status == FeedbackStatus.SENT,
+                "created_at": row.sent_at.isoformat() if row.sent_at else None,
+            }
+        )
+        if row.admin_reply:
+            history.append(
+                {
+                    "id": row.id,
+                    "direction": "admin",
+                    "text": row.admin_reply,
+                    "delivered": True,
+                    "created_at": row.replied_at.isoformat() if row.replied_at else None,
+                }
+            )
+    return history
 
 
 @router.get("/api/feedback")
@@ -2384,6 +2590,26 @@ def admin_feedback_inbox(limit: int = 50, session: Session = Depends(_get_db_ses
 @router.get("/api/feedback/archive")
 def admin_feedback_archive(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
     return {"feedback": _load_feedback_messages(session, limit=limit, archived=True)}
+
+
+@router.get("/api/feedback/thread/{thread_feedback_id}")
+def admin_feedback_thread(
+    thread_feedback_id: int,
+    limit: int = 200,
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    if thread_feedback_id <= 0:
+        raise HTTPException(status_code=400, detail="thread_feedback_id must be positive")
+    normalized_limit = max(1, min(limit, 1000))
+    messages = _load_feedback_thread_history(
+        session,
+        thread_feedback_id=thread_feedback_id,
+        limit=normalized_limit,
+    )
+    return {
+        "thread_feedback_id": thread_feedback_id,
+        "messages": messages,
+    }
 
 
 @router.post("/api/feedback/{feedback_id}/archive")
@@ -2413,7 +2639,7 @@ async def admin_feedback_toggle_archive(
     }
 
 
-async def _deliver_feedback_reply(telegram_user_id: int, reply_text: str) -> bool:
+async def _deliver_feedback_reply(telegram_user_id: int, reply_text: str, thread_feedback_id: int) -> bool:
     if not settings.bot_token:
         return False
     try:
@@ -2421,8 +2647,22 @@ async def _deliver_feedback_reply(telegram_user_id: int, reply_text: str) -> boo
     except Exception as exc:
         logger.warning("feedback_reply_bot_init_failed", extra={"error": str(exc)})
         return False
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Ответить поддержке",
+                    callback_data=f"feedback:quick_reply:{thread_feedback_id}",
+                )
+            ]
+        ]
+    )
     try:
-        await bot.send_message(chat_id=telegram_user_id, text=f"Ответ от поддержки\n\n{reply_text}")
+        await bot.send_message(
+            chat_id=telegram_user_id,
+            text=f"Ответ от поддержки\n\n{reply_text}",
+            reply_markup=keyboard,
+        )
         return True
     except Exception as exc:
         logger.warning(
@@ -2463,15 +2703,26 @@ async def admin_feedback_reply(
     if not user:
         raise HTTPException(status_code=404, detail="User for feedback message not found")
 
-    delivered = await _deliver_feedback_reply(user.telegram_user_id, reply_text)
+    thread_feedback_id = _resolve_thread_feedback_id(feedback)
+    delivered = await _deliver_feedback_reply(user.telegram_user_id, reply_text, thread_feedback_id)
     feedback.admin_reply = reply_text
     feedback.replied_at = datetime.now(timezone.utc)
+    session.add(
+        SupportDialogMessage(
+            user_id=user.id,
+            thread_feedback_id=thread_feedback_id,
+            direction=SupportMessageDirection.ADMIN,
+            text=reply_text,
+            delivered=delivered,
+        )
+    )
 
     return {
         "id": feedback.id,
         "delivered": delivered,
         "admin_reply": feedback.admin_reply,
         "replied_at": feedback.replied_at.isoformat() if feedback.replied_at else None,
+        "thread_feedback_id": thread_feedback_id,
     }
 
 

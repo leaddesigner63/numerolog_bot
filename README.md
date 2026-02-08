@@ -30,7 +30,7 @@ app/
     report_safety.py  # фильтрация запрещённых слов, гарантий и красных зон
     report_service.py # сервис генерации отчёта и каркаса T0-T3
   db/                 # модели и подключение к БД
-    models.py         # включает report_jobs (очередь генерации отчётов)
+    models.py         # включает report_jobs и support_dialog_messages (история диалога поддержки)
   payments/           # платёжные провайдеры и проверки webhook
 scripts/              # вспомогательные скрипты
   deploy.sh           # серверный деплой-скрипт (используется GitHub Actions)
@@ -216,6 +216,7 @@ tmux attach -t numerolog_bot
 
 ```bash
 ./scripts/test.sh
+python -m unittest discover -s tests -p "test_*.py"
 ```
 
 Сценарии включают:
@@ -464,6 +465,14 @@ sudo systemctl restart numerolog.target
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_ENDPOINT_URL` (если используете bucket)
 - `ENV`, `LOG_LEVEL`
 - `MONITORING_WEBHOOK_URL` (вебхук мониторинга для события `report_generate_failed`)
+
+## Поддержка и история переписки
+
+- Каждое сообщение пользователя в поддержку сохраняется в `feedback_messages` и дополнительно в `support_dialog_messages` с направлением `user`.
+- Каждый ответ администратора пользователю сохраняется в `support_dialog_messages` с направлением `admin`.
+- Для каждого диалога используется `thread_feedback_id`, что позволяет хранить полную цепочку сообщений (включая быстрые ответы пользователя на сообщения поддержки).
+- В сообщении от поддержки пользователю отправляется inline-кнопка **«Ответить поддержке»**, которая мгновенно открывает экран обратной связи (S8) в нужном треде.
+- В админке (раздел «Обратная связь») доступна кнопка **«История треда»** — она показывает полную историю диалога по `thread_feedback_id` на одном экране.
 
 ## Автодеплой
 
