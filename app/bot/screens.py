@@ -132,26 +132,31 @@ def build_report_wait_message(
     remaining_seconds: int | None = None,
     frame: str = "⏳",
     total_seconds: int | None = None,
+    progress: float | None = None,
 ) -> str:
     base_text = "Генерируем отчёт… Пожалуйста, подождите."
-    if remaining_seconds is None:
-        return _with_screen_prefix("S6", base_text)
+    if remaining_seconds is None and progress is None:
+        return _with_screen_prefix("S6", f"{frame} {base_text}")
 
     safe_total = total_seconds if isinstance(total_seconds, int) and total_seconds > 0 else None
-    progress = None
+    resolved_progress = progress
     if safe_total is not None:
         done = max(safe_total - max(remaining_seconds, 0), 0)
-        progress = done / safe_total
+        resolved_progress = done / safe_total
 
     progress_line = ""
-    if progress is not None:
-        progress_bar = _build_text_progress_bar(progress)
-        percent = int(round(progress * 100))
+    if resolved_progress is not None:
+        progress_bar = _build_text_progress_bar(resolved_progress)
+        percent = int(round(resolved_progress * 100))
         progress_line = f"\nПрогресс: [{progress_bar}] {percent}%"
+
+    remaining_line = ""
+    if remaining_seconds is not None:
+        remaining_line = f"\nОсталось: {remaining_seconds} сек."
 
     return _with_screen_prefix(
         "S6",
-        f"{frame} {base_text}{progress_line}\nОсталось: {remaining_seconds} сек.",
+        f"{frame} {base_text}{progress_line}{remaining_line}",
     )
 
 

@@ -21,6 +21,13 @@ class ReportWaitMessageTests(unittest.TestCase):
         self.assertNotIn("Прогресс:", text)
         self.assertIn("Осталось: 3 сек.", text)
 
+    def test_shows_indeterminate_progress_without_remaining_seconds(self) -> None:
+        text = build_report_wait_message(frame="✨", progress=0.4)
+
+        self.assertIn("Прогресс:", text)
+        self.assertIn("40%", text)
+        self.assertNotIn("Осталось:", text)
+
 
 if __name__ == "__main__":
     unittest.main()
