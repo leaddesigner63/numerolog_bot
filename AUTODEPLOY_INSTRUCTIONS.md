@@ -168,3 +168,5 @@ sudo systemctl restart numerolog.target
 ```bash
 sudo systemctl restart numerolog-api.service numerolog-bot.service
 ```
+
+- После деплоя обязательно применяйте новые миграции (`alembic upgrade head`), чтобы изменения админки (включая архив обращений) работали корректно.
