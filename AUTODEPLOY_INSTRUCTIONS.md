@@ -8,6 +8,7 @@
 3. Убедитесь, что на сервере установлены `git`, `python` и `bash`.
 4. Создайте systemd-сервисы для API и бота (см. ниже пример unit-файлов) и убедитесь, что **имена совпадают** с теми, что вы укажете в `SERVICE_NAME` или `SERVICE_NAMES`.
 5. Разместите секреты **вне репозитория** (например, `/etc/numerolog_bot/.env`) и подключите их через systemd (`EnvironmentFile=`) или экспортом переменных окружения. `DATABASE_URL` обязателен: без него сервис не запустится.
+   Для защиты от переполнения подключений PostgreSQL сразу задайте лимиты пула: `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`, `DATABASE_POOL_TIMEOUT_SECONDS`, `DATABASE_POOL_RECYCLE_SECONDS`.
 6. Если хотите управлять системными промптами **без админки**, создайте файл `/var/www/numerolog_bot/.env.prompts` (или рядом с репозиторием) и заполните `PROMPT_T0`–`PROMPT_T3`. Файл сохраняется при деплое благодаря исключению `.env.*` в workflow. При наличии хотя бы одного промпта в админке файл `.env.prompts` полностью игнорируется.
 7. Проверьте, что `PAYMENT_WEBHOOK_URL` указывает на внешний HTTPS-адрес вашего backend (например, `https://api.example.com/webhooks/payments`).
 8. Для Prodamus укажите `PRODAMUS_STATUS_URL` (эндпоинт проверки статуса платежа по order_id) и `PRODAMUS_SECRET` из кабинета.
