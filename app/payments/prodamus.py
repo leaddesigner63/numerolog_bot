@@ -48,9 +48,9 @@ class ProdamusProvider(PaymentProvider):
             "products[0][quantity]": "1",
             "products[0][sum]": amount,
         }
-        if self._settings.prodamus_api_key:
+        if self._settings.prodamus_unified_key:
             params["do"] = "link"
-            params["key"] = self._settings.prodamus_api_key
+            params["key"] = self._settings.prodamus_unified_key
         if user:
             params["customer_id"] = str(user.telegram_user_id)
             if user.telegram_username:
@@ -68,12 +68,12 @@ class ProdamusProvider(PaymentProvider):
         return PaymentLink(url=url)
 
     def _create_api_generated_payment_link(self, base_params: dict[str, str]) -> str | None:
-        if not self._settings.prodamus_api_key:
+        if not self._settings.prodamus_unified_key:
             return None
 
         api_params = dict(base_params)
         api_params["do"] = "link"
-        api_params["key"] = self._settings.prodamus_api_key
+        api_params["key"] = self._settings.prodamus_unified_key
 
         try:
             with httpx.Client(timeout=10.0, follow_redirects=True) as client:
@@ -85,11 +85,7 @@ class ProdamusProvider(PaymentProvider):
         return _extract_payment_link_from_response(response)
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str]) -> WebhookResult:
-        secret = (
-            self._settings.prodamus_webhook_secret
-            or self._settings.prodamus_secret
-            or self._settings.prodamus_api_key
-        )
+        secret = self._settings.prodamus_unified_key
         payload = _parse_payload(raw_body)
         if secret:
             signature_data = _find_signature(headers, payload)
@@ -112,7 +108,7 @@ class ProdamusProvider(PaymentProvider):
 
     def check_payment_status(self, order: Order) -> WebhookResult | None:
         status_url = self._settings.prodamus_status_url
-        secret = self._settings.prodamus_secret or self._settings.prodamus_api_key
+        secret = self._settings.prodamus_unified_key
         if not status_url or not secret:
             self._logger.warning(
                 "prodamus_status_config_missing",
