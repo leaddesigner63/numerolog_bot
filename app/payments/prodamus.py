@@ -8,7 +8,7 @@ import logging
 import re
 from dataclasses import dataclass
 from typing import Any, Mapping
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode
 
 import httpx
 
@@ -85,7 +85,11 @@ class ProdamusProvider(PaymentProvider):
         return _extract_payment_link_from_response(response)
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str]) -> WebhookResult:
-        secret = self._settings.prodamus_webhook_secret or self._settings.prodamus_api_key
+        secret = (
+            self._settings.prodamus_webhook_secret
+            or self._settings.prodamus_secret
+            or self._settings.prodamus_api_key
+        )
         payload = _parse_payload(raw_body)
         if secret:
             signature_data = _find_signature(headers, payload)
@@ -142,7 +146,13 @@ class ProdamusProvider(PaymentProvider):
 
 def _find_signature(headers: Mapping[str, str], payload: Mapping[str, Any]) -> tuple[str, str] | None:
     lowered = {key.lower(): value for key, value in headers.items()}
-    for key in ("x-prodamus-signature", "x-signature", "x-webhook-signature"):
+    for key in (
+        "x-prodamus-signature",
+        "x-signature",
+        "x-webhook-signature",
+        "signature",
+        "sign",
+    ):
         if key in lowered:
             return lowered[key], "header"
     for key in ("signature", "sign"):
@@ -171,8 +181,16 @@ def _matches_signature(
     hmac_digest = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).digest()
     fallback_hmac_hex = hmac_digest.hex()
     fallback_hmac_base64 = base64.b64encode(hmac_digest).decode("utf-8")
+    fallback_md5_secret_body = hashlib.md5(secret.encode("utf-8") + raw_body).hexdigest()
+    fallback_md5_body_secret = hashlib.md5(raw_body + secret.encode("utf-8")).hexdigest()
     fallback_sha256 = hashlib.sha256(raw_body + secret.encode("utf-8")).hexdigest()
-    for candidate in (fallback_hmac_hex, fallback_hmac_base64, fallback_sha256):
+    for candidate in (
+        fallback_hmac_hex,
+        fallback_hmac_base64,
+        fallback_md5_secret_body,
+        fallback_md5_body_secret,
+        fallback_sha256,
+    ):
         if signature.casefold() == candidate.casefold():
             return True
     return False
@@ -191,8 +209,7 @@ def _parse_payload(raw_body: bytes) -> dict[str, Any]:
         pass
     try:
         decoded = raw_body.decode("utf-8")
-        pairs = [chunk.split("=", 1) for chunk in decoded.split("&") if chunk]
-        return {key: value for key, value in pairs if len(key) > 0}
+        return {key: value for key, value in parse_qsl(decoded, keep_blank_values=True)}
     except Exception:
         return {}
 

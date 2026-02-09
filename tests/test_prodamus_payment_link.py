@@ -123,3 +123,29 @@ def test_prodamus_webhook_rejects_invalid_signature() -> None:
         assert str(exc) == "Invalid Prodamus signature"
     else:
         raise AssertionError("Expected invalid signature error")
+
+
+def test_prodamus_webhook_accepts_signature_header_name_and_prodamus_secret() -> None:
+    secret = "prodamus_secret"
+    payload = b'{"order_id":"321","status":"paid","payment_id":"p-9"}'
+    sign = hashlib.md5(secret.encode("utf-8") + payload).hexdigest()
+    settings = Settings(prodamus_secret=secret)
+    provider = ProdamusProvider(settings)
+
+    result = provider.verify_webhook(payload, {"Signature": sign})
+
+    assert result.order_id == 321
+    assert result.provider_payment_id == "p-9"
+    assert result.is_paid is True
+
+
+def test_prodamus_webhook_accepts_urlencoded_payload() -> None:
+    settings = Settings()
+    provider = ProdamusProvider(settings)
+    payload = b"order_id=77&status=paid&payment_id=abc%2F123"
+
+    result = provider.verify_webhook(payload, {})
+
+    assert result.order_id == 77
+    assert result.provider_payment_id == "abc/123"
+    assert result.is_paid is True
