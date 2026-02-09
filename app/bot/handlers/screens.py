@@ -1219,56 +1219,25 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 )
                 await _safe_callback_answer(callback)
                 return
-            if not settings.payment_enabled:
-                if order.status != OrderStatus.PAID:
-                    order.status = OrderStatus.PAID
-                    order.paid_at = now_app_timezone()
-                    session.add(order)
-            elif order.status != OrderStatus.PAID:
-                missing_status = _missing_payment_status_config(order.provider)
-                if missing_status:
-                    logger.warning(
-                        "payment_status_config_missing",
-                        extra={
-                            "order_id": order.id,
-                            "provider": order.provider.value,
-                            "missing": missing_status,
-                        },
-                    )
-                    await _send_notice(
-                        callback,
-                        "Проверка оплаты недоступна: не настроены ключи платёжного провайдера. "
-                        f"Добавьте {', '.join(missing_status)}.",
-                    )
-                    await _show_screen_for_callback(
-                        callback,
-                        screen_id="S3",
-                    )
-                    await _safe_callback_answer(callback)
-                    return
-                provider = get_payment_provider(order.provider.value)
-                result = provider.check_payment_status(order)
-                if result and result.is_paid:
-                    order.status = OrderStatus.PAID
-                    order.paid_at = now_app_timezone()
-                    if result.provider_payment_id:
-                        order.provider_payment_id = result.provider_payment_id
-                    order.provider = PaymentProviderEnum(provider.provider.value)
-                    session.add(order)
-                else:
-                    screen_manager.update_state(
-                        callback.from_user.id, **_refresh_order_state(order)
-                    )
-                    await _send_notice(
-                        callback,
-                        "Оплата ещё не подтверждена. Мы проверим статус и сообщим, когда всё будет готово.",
-                    )
-                    await _show_screen_for_callback(
-                        callback,
-                        screen_id="S3",
-                    )
-                    await _safe_callback_answer(callback)
-                    return
+            if not settings.payment_enabled and order.status != OrderStatus.PAID:
+                order.status = OrderStatus.PAID
+                order.paid_at = now_app_timezone()
+                session.add(order)
+
+            if settings.payment_enabled and order.status != OrderStatus.PAID:
+                screen_manager.update_state(
+                    callback.from_user.id, **_refresh_order_state(order)
+                )
+                await _send_notice(
+                    callback,
+                    "Оплата ещё не подтверждена. Дождитесь webhook от провайдера и нажмите «Я оплатил(а)» ещё раз.",
+                )
+                await _show_screen_for_callback(
+                    callback,
+                    screen_id="S3",
+                )
+                await _safe_callback_answer(callback)
+                return
             screen_manager.update_state(
                 callback.from_user.id, **_refresh_order_state(order)
             )
