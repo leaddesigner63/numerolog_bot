@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 from io import BytesIO
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from importlib.util import find_spec
 from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import simpleSplit
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 from app.core.config import settings
+from app.core.pdf_themes import PdfTheme, resolve_pdf_theme
 
 
 _FONT_NAME = "DejaVuSans"
@@ -145,7 +148,23 @@ class PdfService:
         self._storage = self._build_storage()
         self._fallback_storage = self._build_fallback_storage()
 
-    def generate_pdf(self, text: str) -> bytes:
+    def generate_pdf(
+        self,
+        text: str,
+        tariff: Any = None,
+        meta: dict[str, Any] | None = None,
+    ) -> bytes:
+        renderer = PdfThemeRenderer(logger=self._logger)
+        try:
+            return renderer.render(text, tariff, meta)
+        except Exception as exc:
+            self._logger.warning(
+                "pdf_theme_render_failed",
+                extra={"error": str(exc), "tariff": str(tariff or "unknown")},
+            )
+            return self._generate_legacy_pdf(text)
+
+    def _generate_legacy_pdf(self, text: str) -> bytes:
         font_name = _register_font()
         if font_name != _FONT_NAME:
             custom_path = settings.pdf_font_path
@@ -255,3 +274,144 @@ class PdfService:
 
 
 pdf_service = PdfService()
+
+
+class PdfThemeRenderer:
+    def __init__(self, logger: logging.Logger | None = None) -> None:
+        self._logger = logger or logging.getLogger(__name__)
+
+    def render(
+        self,
+        report_text: str,
+        tariff: Any,
+        meta: dict[str, Any] | None,
+    ) -> bytes:
+        font_name = _register_font()
+        theme = resolve_pdf_theme(tariff)
+        payload_meta = meta or {}
+        seed_basis = f"{payload_meta.get('id', '')}-{payload_meta.get('created_at', '')}-{tariff}"
+        randomizer = random.Random(seed_basis)
+
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4)
+        page_width, page_height = A4
+
+        self._draw_background(pdf, theme, page_width, page_height, randomizer)
+        self._draw_decorative_layers(pdf, theme, page_width, page_height, randomizer)
+        self._draw_header(pdf, theme, font_name, payload_meta, tariff, page_height)
+        self._draw_body(pdf, theme, font_name, report_text, page_width, page_height)
+
+        pdf.save()
+        return buffer.getvalue()
+
+    def _draw_background(
+        self,
+        pdf: canvas.Canvas,
+        theme: PdfTheme,
+        page_width: float,
+        page_height: float,
+        randomizer: random.Random,
+    ) -> None:
+        for idx, color in enumerate(theme.palette[:2]):
+            alpha = max(theme.overlay_alpha * (idx + 1), 0.03)
+            pdf.saveState()
+            pdf.setFillColor(color, alpha=alpha)
+            pdf.rect(
+                -10 * idx,
+                -10 * idx,
+                page_width + 20 * idx,
+                page_height + 20 * idx,
+                fill=1,
+                stroke=0,
+            )
+            pdf.restoreState()
+
+        pdf.saveState()
+        pdf.setStrokeColor(theme.palette[2], alpha=0.08)
+        for x in range(0, int(page_width), theme.texture_step):
+            offset = randomizer.randint(-8, 8)
+            pdf.line(x, 0, x + offset, page_height)
+        pdf.restoreState()
+
+    def _draw_decorative_layers(
+        self,
+        pdf: canvas.Canvas,
+        theme: PdfTheme,
+        page_width: float,
+        page_height: float,
+        randomizer: random.Random,
+    ) -> None:
+        pdf.saveState()
+        pdf.setFillColor(theme.palette[2], alpha=0.14)
+        for _ in range(theme.splash_count):
+            x = randomizer.uniform(0, page_width)
+            y = randomizer.uniform(0, page_height)
+            r = randomizer.uniform(20, 58)
+            pdf.circle(x, y, r, stroke=0, fill=1)
+        pdf.restoreState()
+
+        pdf.saveState()
+        pdf.setFillColor(theme.palette[2], alpha=0.22)
+        for _ in range(theme.stars_count):
+            x = randomizer.uniform(20, page_width - 20)
+            y = randomizer.uniform(20, page_height - 20)
+            pdf.drawString(x, y, "✦")
+        for _ in range(theme.number_symbols_count):
+            x = randomizer.uniform(20, page_width - 20)
+            y = randomizer.uniform(20, page_height - 20)
+            pdf.drawString(x, y, str(randomizer.randint(1, 9)))
+        pdf.restoreState()
+
+    def _draw_header(
+        self,
+        pdf: canvas.Canvas,
+        theme: PdfTheme,
+        font_name: str,
+        meta: dict[str, Any],
+        tariff: Any,
+        page_height: float,
+    ) -> None:
+        margin = theme.margin
+        pdf.saveState()
+        pdf.setFillColor(theme.palette[2])
+        pdf.setFont(font_name, theme.typography.title_size)
+        pdf.drawString(margin, page_height - margin, "Персональный аналитический отчёт")
+
+        subtitle = f"Тариф: {tariff or 'N/A'}"
+        report_id = str(meta.get("id") or "")
+        if report_id:
+            subtitle = f"{subtitle} · Report #{report_id}"
+        pdf.setFont(font_name, theme.typography.subtitle_size)
+        pdf.drawString(margin, page_height - margin - 24, subtitle)
+        pdf.restoreState()
+
+    def _draw_body(
+        self,
+        pdf: canvas.Canvas,
+        theme: PdfTheme,
+        font_name: str,
+        report_text: str,
+        page_width: float,
+        page_height: float,
+    ) -> None:
+        margin = theme.margin
+        body_size = theme.typography.body_size
+        line_height = int(body_size * theme.typography.line_height_ratio)
+        max_width = page_width - margin * 2
+        y = page_height - margin - 64
+
+        pdf.setFillColor(theme.palette[2], alpha=0.96)
+        pdf.setFont(font_name, body_size)
+        for paragraph in (report_text or "").splitlines() or [""]:
+            lines = simpleSplit(paragraph or " ", font_name, body_size, max_width)
+            for line in lines:
+                if y <= margin:
+                    pdf.showPage()
+                    self._draw_background(pdf, theme, page_width, page_height, random.Random(paragraph))
+                    self._draw_decorative_layers(pdf, theme, page_width, page_height, random.Random(paragraph))
+                    pdf.setFillColor(theme.palette[2], alpha=0.96)
+                    pdf.setFont(font_name, body_size)
+                    y = page_height - margin
+                pdf.drawString(margin, y, line)
+                y -= line_height
+            y -= max(int(line_height * 0.3), 2)

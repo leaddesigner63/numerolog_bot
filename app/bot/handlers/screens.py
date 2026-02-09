@@ -775,7 +775,11 @@ def _get_report_pdf_bytes(session, report: Report) -> bytes | None:
         pdf_bytes = pdf_service.load_pdf(report.pdf_storage_key)
     if pdf_bytes is None:
         try:
-            pdf_bytes = pdf_service.generate_pdf(report.report_text or "")
+            pdf_bytes = pdf_service.generate_pdf(
+                report.report_text or "",
+                tariff=report.tariff,
+                meta=_get_report_pdf_meta(report),
+            )
         except Exception as exc:
             logger.warning(
                 "pdf_generate_failed",
