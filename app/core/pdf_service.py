@@ -19,45 +19,114 @@ from app.core.pdf_theme_config import PdfThemeAssetBundle, resolve_pdf_asset_bun
 from app.core.pdf_themes import PdfTheme, resolve_pdf_theme
 
 
-_FONT_NAME = "DejaVuSans"
-_FONT_REGISTERED = False
+_FONT_REGULAR_NAME = "NumerologRegular"
+_FONT_BOLD_NAME = "NumerologBold"
+_FONT_ACCENT_NAME = "NumerologAccent"
+_FONT_FALLBACK_NAME = "Helvetica"
+
+_FONT_FAMILY: dict[str, str] | None = None
 _BOTO3_AVAILABLE = find_spec("boto3") is not None
 if _BOTO3_AVAILABLE:
     import boto3
 
 
-def _register_font() -> str:
-    global _FONT_REGISTERED
-    if _FONT_REGISTERED:
-        return _FONT_NAME
-    if settings.pdf_font_path:
-        custom_path = Path(settings.pdf_font_path)
-        if not custom_path.exists():
-            logging.getLogger(__name__).warning(
-                "pdf_font_custom_missing",
-                extra={"font_path": str(custom_path)},
-            )
-    for font_path in _resolve_font_paths():
+def _register_font() -> dict[str, str]:
+    global _FONT_FAMILY
+    if _FONT_FAMILY is not None:
+        return _FONT_FAMILY
+
+    logger = logging.getLogger(__name__)
+    regular_font = _register_font_variant(
+        font_name=_FONT_REGULAR_NAME,
+        variant="regular",
+        paths=_resolve_font_paths_for_variant("regular"),
+        logger=logger,
+    )
+    bold_font = _register_font_variant(
+        font_name=_FONT_BOLD_NAME,
+        variant="bold",
+        paths=_resolve_font_paths_for_variant("bold"),
+        logger=logger,
+    )
+    accent_font = _register_font_variant(
+        font_name=_FONT_ACCENT_NAME,
+        variant="accent",
+        paths=_resolve_font_paths_for_variant("accent"),
+        logger=logger,
+    )
+
+    if bold_font in {_FONT_FALLBACK_NAME, "Helvetica-Bold"}:
+        bold_font = regular_font
+    if accent_font == _FONT_FALLBACK_NAME:
+        accent_font = regular_font
+
+    family: dict[str, str] = {
+        "body": regular_font,
+        "title": bold_font,
+        "subtitle": bold_font,
+        "numeric": accent_font,
+    }
+    _FONT_FAMILY = family
+    return family
+
+
+def _register_font_variant(
+    *,
+    font_name: str,
+    variant: str,
+    paths: list[Path],
+    logger: logging.Logger,
+) -> str:
+    for font_path in paths:
         if not font_path.exists():
+            logger.warning(
+                "pdf_font_path_missing",
+                extra={"variant": variant, "font_path": str(font_path)},
+            )
             continue
         try:
-            pdfmetrics.registerFont(TTFont(_FONT_NAME, str(font_path)))
-            _FONT_REGISTERED = True
-            return _FONT_NAME
+            pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
+            return font_name
         except Exception as exc:
-            logging.getLogger(__name__).warning(
+            logger.warning(
                 "pdf_font_register_failed",
-                extra={"font_path": str(font_path), "error": str(exc)},
+                extra={"variant": variant, "font_path": str(font_path), "error": str(exc)},
             )
-    return "Helvetica"
+
+    fallback = _FONT_FALLBACK_NAME
+    if variant == "bold":
+        fallback = "Helvetica-Bold"
+    logger.warning(
+        "pdf_font_variant_fallback",
+        extra={"variant": variant, "fallback": fallback},
+    )
+    return fallback
 
 
-def _resolve_font_paths() -> list[Path]:
+def _resolve_font_paths_for_variant(variant: str) -> list[Path]:
+    fonts_dir = Path(__file__).resolve().parents[1] / "assets" / "fonts"
+
+    configured_path: str | None
+    legacy_path = settings.pdf_font_path
+    if variant == "regular":
+        configured_path = settings.pdf_font_regular_path or legacy_path
+        bundled = [fonts_dir / "DejaVuSans.ttf"]
+    elif variant == "bold":
+        configured_path = settings.pdf_font_bold_path
+        bundled = [fonts_dir / "DejaVuSans-Bold.ttf", fonts_dir / "DejaVuSans.ttf"]
+    else:
+        configured_path = settings.pdf_font_accent_path
+        bundled = [
+            fonts_dir / "DejaVuSerif.ttf",
+            fonts_dir / "DejaVuSans.ttf",
+        ]
+
     paths: list[Path] = []
-    if settings.pdf_font_path:
-        paths.append(Path(settings.pdf_font_path))
-    paths.append(Path(__file__).resolve().parents[1] / "assets" / "fonts" / "DejaVuSans.ttf")
+    if configured_path:
+        paths.append(Path(configured_path))
+    paths.extend(bundled)
     return paths
+
 
 def _wrap_text(text: str, max_width: float, font_name: str, font_size: int) -> list[str]:
     lines: list[str] = []
@@ -166,13 +235,8 @@ class PdfService:
             return self._generate_legacy_pdf(text)
 
     def _generate_legacy_pdf(self, text: str) -> bytes:
-        font_name = _register_font()
-        if font_name != _FONT_NAME:
-            custom_path = settings.pdf_font_path
-            self._logger.warning(
-                "pdf_font_missing",
-                extra={"font_path": custom_path or "bundled"},
-            )
+        font_map = _register_font()
+        font_name = font_map["body"]
         buffer = BytesIO()
         page_width, page_height = A4
         margin = 40
@@ -287,7 +351,7 @@ class PdfThemeRenderer:
         tariff: Any,
         meta: dict[str, Any] | None,
     ) -> bytes:
-        font_name = _register_font()
+        font_map = _register_font()
         theme = resolve_pdf_theme(tariff)
         payload_meta = meta or {}
         seed_basis = f"{payload_meta.get('id', '')}-{payload_meta.get('created_at', '')}-{tariff}"
@@ -300,8 +364,8 @@ class PdfThemeRenderer:
 
         self._draw_background(pdf, theme, page_width, page_height, randomizer, asset_bundle)
         self._draw_decorative_layers(pdf, theme, page_width, page_height, randomizer, asset_bundle)
-        self._draw_header(pdf, theme, font_name, payload_meta, tariff, page_height)
-        self._draw_body(pdf, theme, font_name, report_text, page_width, page_height, asset_bundle)
+        self._draw_header(pdf, theme, font_map, payload_meta, tariff, page_height)
+        self._draw_body(pdf, theme, font_map, report_text, page_width, page_height, asset_bundle)
 
         pdf.save()
         return buffer.getvalue()
@@ -403,7 +467,7 @@ class PdfThemeRenderer:
         self,
         pdf: canvas.Canvas,
         theme: PdfTheme,
-        font_name: str,
+        font_map: dict[str, str],
         meta: dict[str, Any],
         tariff: Any,
         page_height: float,
@@ -411,14 +475,14 @@ class PdfThemeRenderer:
         margin = theme.margin
         pdf.saveState()
         pdf.setFillColor(theme.palette[2])
-        pdf.setFont(font_name, theme.typography.title_size)
+        pdf.setFont(font_map["title"], theme.typography.title_size)
         pdf.drawString(margin, page_height - margin, "Персональный аналитический отчёт")
 
         subtitle = f"Тариф: {tariff or 'N/A'}"
         report_id = str(meta.get("id") or "")
         if report_id:
             subtitle = f"{subtitle} · Report #{report_id}"
-        pdf.setFont(font_name, theme.typography.subtitle_size)
+        pdf.setFont(font_map["subtitle"], theme.typography.subtitle_size)
         pdf.drawString(margin, page_height - margin - 24, subtitle)
         pdf.restoreState()
 
@@ -426,7 +490,7 @@ class PdfThemeRenderer:
         self,
         pdf: canvas.Canvas,
         theme: PdfTheme,
-        font_name: str,
+        font_map: dict[str, str],
         report_text: str,
         page_width: float,
         page_height: float,
@@ -439,9 +503,9 @@ class PdfThemeRenderer:
         y = page_height - margin - 64
 
         pdf.setFillColor(theme.palette[2], alpha=0.96)
-        pdf.setFont(font_name, body_size)
+        pdf.setFont(font_map["body"], body_size)
         for paragraph in (report_text or "").splitlines() or [""]:
-            lines = simpleSplit(paragraph or " ", font_name, body_size, max_width)
+            lines = simpleSplit(paragraph or " ", font_map["body"], body_size, max_width)
             for line in lines:
                 if y <= margin:
                     pdf.showPage()
@@ -449,8 +513,10 @@ class PdfThemeRenderer:
                     self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
                     self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
                     pdf.setFillColor(theme.palette[2], alpha=0.96)
-                    pdf.setFont(font_name, body_size)
+                    pdf.setFont(font_map["body"], body_size)
                     y = page_height - margin
+                line_font = font_map["numeric"] if any(ch.isdigit() for ch in line) else font_map["body"]
+                pdf.setFont(line_font, body_size)
                 pdf.drawString(margin, y, line)
                 y -= line_height
             y -= max(int(line_height * 0.3), 2)

@@ -15,7 +15,7 @@
 9. Убедитесь, что в `.env` добавлены ключи LLM: `GEMINI_API_KEY`/`GEMINI_API_KEYS`/`GEMINI_MODEL` и `OPENAI_API_KEY`/`OPENAI_API_KEYS`/`OPENAI_MODEL` (fallback). Для команды `/fill_screen_images` отдельно задайте `GEMINI_IMAGE_MODEL`. При наличии нескольких ключей они перечисляются через запятую и перебираются автоматически. При необходимости настройте `LLM_AUTH_ERROR_BLOCK_SECONDS`, чтобы временно отключать ключи при 401/403 и избегать бесконечных повторов.
    Если планируете управлять ключами через веб-админку, всё равно оставьте минимум один ключ в `.env` на время первого запуска — после старта ключи автоматически синхронизируются в БД и будут видны в разделе **«LLM ключи»** вместе со статистикой использования. После загрузки ключей через админку они будут иметь приоритет.
 10. Если PDF хранится в bucket, добавьте `PDF_STORAGE_BUCKET`, `PDF_STORAGE_KEY`, а также AWS-переменные (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, при необходимости `AWS_ENDPOINT_URL`).
-11. Для корректной кириллицы в PDF задайте `PDF_FONT_PATH` (например, `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`).
+11. Для корректной кириллицы в PDF задайте `PDF_FONT_REGULAR_PATH`, `PDF_FONT_BOLD_PATH`, `PDF_FONT_ACCENT_PATH` (например, семейство DejaVu). Для обратной совместимости можно оставить `PDF_FONT_PATH` как legacy-путь для regular.
 12. Задайте `COMMUNITY_CHANNEL_URL`, чтобы в отчёте и личном кабинете отображалась кнопка «Сообщество» (ссылка на канал проекта).
 13. Чтобы получать обратную связь в Telegram, задайте `ADMIN_IDS` (ID администраторов через запятую).
 14. Если нужно отключить глобальное inline-меню, оставьте `GLOBAL_MENU_ENABLED=false` в `.env`.
