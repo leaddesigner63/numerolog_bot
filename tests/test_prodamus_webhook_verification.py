@@ -4,7 +4,6 @@ import unittest
 
 from app.core.config import Settings
 from app.payments.prodamus import (
-    ProdamusMissingSecretError,
     ProdamusMissingSignatureError,
     ProdamusProvider,
     ProdamusSignatureMismatchError,
@@ -12,11 +11,13 @@ from app.payments.prodamus import (
 
 
 class ProdamusWebhookVerificationTests(unittest.TestCase):
-    def test_verify_webhook_raises_missing_secret_when_not_configured(self) -> None:
+    def test_verify_webhook_accepts_unverified_when_secret_not_configured(self) -> None:
         provider = ProdamusProvider(Settings(prodamus_form_url="https://pay.example/form"))
 
-        with self.assertRaises(ProdamusMissingSecretError):
-            provider.verify_webhook(b'{"order_id":"10","status":"paid"}', {})
+        result = provider.verify_webhook(b'{"order_id":"10","status":"paid"}', {})
+
+        self.assertEqual(result.order_id, 10)
+        self.assertTrue(result.is_paid)
 
     def test_verify_webhook_raises_missing_signature_when_secret_configured(self) -> None:
         provider = ProdamusProvider(
