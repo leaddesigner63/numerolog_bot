@@ -124,3 +124,34 @@ def test_prodamus_status_check_parses_nested_and_partial_payloads(monkeypatch) -
         assert result is not None
         assert result.is_paid is expected_paid
         assert result.provider_payment_id == expected_payment_id
+
+
+def test_prodamus_status_check_uses_form_url_when_status_url_missing(monkeypatch) -> None:
+    settings = Settings(
+        prodamus_form_url="https://pay.example/form",
+        prodamus_secret="status_secret",
+    )
+    provider = ProdamusProvider(settings)
+    response = httpx.Response(
+        200,
+        json={"status": "paid", "payment_id": "p-778"},
+        request=httpx.Request("POST", "https://pay.example/form"),
+    )
+    dummy_client = _DummyClient(response)
+
+    monkeypatch.setattr(
+        "app.payments.prodamus.httpx.Client", lambda *args, **kwargs: dummy_client
+    )
+
+    result = provider.check_payment_status(_order())
+
+    assert result is not None
+    assert result.is_paid is True
+    assert result.provider_payment_id == "p-778"
+    assert dummy_client.post_calls == [
+        {
+            "url": "https://pay.example/form",
+            "data": {"order_id": "777", "secret": "status_secret"},
+            "json": None,
+        }
+    ]
