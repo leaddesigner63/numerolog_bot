@@ -208,7 +208,7 @@ async def start_profile_wizard(
     )
     sent = await message.bot.send_message(
         chat_id=message.chat.id,
-        text="Введите имя (в любом формате).",
+        text="Введите свое имя",
     )
     screen_manager.update_last_question_message_id(user_id, sent.message_id)
 
