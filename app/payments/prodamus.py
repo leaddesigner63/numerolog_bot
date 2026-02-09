@@ -553,15 +553,17 @@ def _extract_webhook(payload: Mapping[str, Any]) -> _Webhook:
     nested_order_data = result_data.get("order") if isinstance(result_data.get("order"), Mapping) else {}
     nested_payment_data = result_data.get("payment") if isinstance(result_data.get("payment"), Mapping) else {}
 
-    order_id_raw = (
-        payload.get("order_id")
-        or payload.get("order_num")
-        or order_data.get("id")
-        or order_data.get("order_id")
-        or order_data.get("order_num")
-        or nested_order_data.get("id")
-        or nested_order_data.get("order_id")
-        or nested_order_data.get("order_num")
+    # `order_id` in Prodamus webhook can contain provider-side internal identifier.
+    # Our order identifier is expected in `order_num`, so prefer it first.
+    order_id_candidates = (
+        payload.get("order_num"),
+        order_data.get("order_num"),
+        nested_order_data.get("order_num"),
+        payload.get("order_id"),
+        order_data.get("order_id"),
+        order_data.get("id"),
+        nested_order_data.get("order_id"),
+        nested_order_data.get("id"),
     )
     payment_id = (
         payload.get("payment_id")
@@ -582,11 +584,19 @@ def _extract_webhook(payload: Mapping[str, Any]) -> _Webhook:
     )
 
     order_id: int | None = None
-    if order_id_raw is not None:
+    saw_order_candidate = False
+    for order_id_raw in order_id_candidates:
+        if order_id_raw is None:
+            continue
+        saw_order_candidate = True
         try:
             order_id = int(str(order_id_raw))
+            break
         except (TypeError, ValueError):
-            raise ValueError("order_id is invalid in Prodamus payload")
+            continue
+
+    if saw_order_candidate and order_id is None:
+        raise ValueError("order_id is invalid in Prodamus payload")
 
     is_paid = False
     # Some payloads include "paid" flag
