@@ -52,7 +52,7 @@ class ProdamusProvider(PaymentProvider):
             order_phone = order_phone or user_phone
             order_customer_name = order_customer_name or user_name
 
-        order_title = getattr(order, "title", "") or f"Тариф {getattr(order.tariff, "value", order.tariff)}"
+        order_title = getattr(order, "title", "") or f"Тариф {getattr(order.tariff, 'value', order.tariff)}"
 
         params: dict[str, str] = {
             "order_id": str(order.id),
