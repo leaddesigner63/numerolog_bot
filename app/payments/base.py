@@ -10,6 +10,11 @@ from app.db.models import Order, PaymentProvider as PaymentProviderEnum, User
 @dataclass(frozen=True)
 class PaymentLink:
     url: str
+    provider: PaymentProviderEnum | None = None
+
+
+# Backward-compatible alias used by payment providers.
+PaymentLinkResult = PaymentLink
 
 
 @dataclass(frozen=True)
@@ -17,6 +22,9 @@ class WebhookResult:
     order_id: int
     provider_payment_id: str | None
     is_paid: bool
+    status: str | None = None
+    verified: bool = False
+    ok: bool = True
 
 
 class PaymentProvider(abc.ABC):
