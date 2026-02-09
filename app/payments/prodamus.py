@@ -15,13 +15,11 @@ from app.core.config import Settings
 from app.db.models import Order, PaymentProvider as PaymentProviderEnum, User
 from app.payments.base import PaymentLink, PaymentProvider, WebhookResult
 
-
 @dataclass(frozen=True)
 class ProdamusWebhook:
     order_id: int
     payment_id: str | None
     status: str | None
-
 
 class ProdamusProvider(PaymentProvider):
     provider = PaymentProviderEnum.PRODAMUS
@@ -70,10 +68,16 @@ class ProdamusProvider(PaymentProvider):
         secret = self._settings.prodamus_webhook_secret or self._settings.prodamus_api_key
         payload = _parse_payload(raw_body)
         if secret:
-            signature = _find_signature(headers, payload, raw_body)
-            if not signature:
+            signature_data = _find_signature(headers, payload)
+            if not signature_data:
                 raise ValueError("Missing Prodamus signature")
-            if not _matches_signature(signature, secret, payload, raw_body):
+            if not _matches_signature(
+                signature=signature_data[0],
+                signature_source=signature_data[1],
+                secret=secret,
+                payload=payload,
+                raw_body=raw_body,
+            ):
                 raise ValueError("Invalid Prodamus signature")
         webhook = _extract_webhook(payload)
         return WebhookResult(
@@ -113,37 +117,49 @@ class ProdamusProvider(PaymentProvider):
             is_paid=_is_paid_status(status),
         )
 
-
-def _find_signature(headers: Mapping[str, str], payload: Mapping[str, Any], raw_body: bytes) -> str | None:
+def _find_signature(headers: Mapping[str, str], payload: Mapping[str, Any]) -> tuple[str, str] | None:
     lowered = {key.lower(): value for key, value in headers.items()}
     for key in ("x-prodamus-signature", "x-signature", "x-webhook-signature"):
         if key in lowered:
-            return lowered[key]
+            return lowered[key], "header"
     for key in ("signature", "sign"):
         value = payload.get(key)
         if isinstance(value, str):
-            return value
+            return value, "payload"
     return None
 
+def _matches_signature(
+    signature: str,
+    signature_source: str,
+    secret: str,
+    payload: Mapping[str, Any],
+    raw_body: bytes,
+) -> bool:
+    # Основной каноничный алгоритм из контракта: MD5(token + secret).
+    canonical_signature = _canonical_signature(secret, payload)
+    if canonical_signature and signature.casefold() == canonical_signature.casefold():
+        return True
 
+    # Legacy-fallback применяется строго для header-подписи,
+    # если каноничная MD5(token+secret) не совпала.
+    if signature_source != "header":
+        return False
 
-def _matches_signature(signature: str, secret: str, payload: Mapping[str, Any], raw_body: bytes) -> bool:
-    candidates = _signature_candidates(secret, payload, raw_body)
-    return any(hmac.compare_digest(signature, expected) for expected in candidates)
-
-
-def _signature_candidates(secret: str, payload: Mapping[str, Any], raw_body: bytes) -> list[str]:
-    variants: list[str] = []
     hmac_digest = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).digest()
-    variants.append(hmac_digest.hex())
-    variants.append(base64.b64encode(hmac_digest).decode("utf-8"))
+    fallback_hmac_hex = hmac_digest.hex()
+    fallback_hmac_base64 = base64.b64encode(hmac_digest).decode("utf-8")
+    fallback_sha256 = hashlib.sha256(raw_body + secret.encode("utf-8")).hexdigest()
+    for candidate in (fallback_hmac_hex, fallback_hmac_base64, fallback_sha256):
+        if signature.casefold() == candidate.casefold():
+            return True
+    return False
+
+def _canonical_signature(secret: str, payload: Mapping[str, Any]) -> str | None:
     token = payload.get("token")
-    if isinstance(token, str) and token:
-        raw = f"{token}{secret}".encode("utf-8")
-        md5_value = hashlib.md5(raw).hexdigest()
-        variants.append(md5_value)
-        variants.append(md5_value.upper())
-    return variants
+    if not isinstance(token, str) or not token:
+        return None
+    return hashlib.md5(f"{token}{secret}".encode("utf-8")).hexdigest()
+
 
 def _parse_payload(raw_body: bytes) -> dict[str, Any]:
     try:
@@ -157,7 +173,6 @@ def _parse_payload(raw_body: bytes) -> dict[str, Any]:
     except Exception:
         return {}
 
-
 def _extract_webhook(payload: Mapping[str, Any]) -> ProdamusWebhook:
     order_id = payload.get("order_id") or payload.get("order")
     if order_id is None:
@@ -166,12 +181,10 @@ def _extract_webhook(payload: Mapping[str, Any]) -> ProdamusWebhook:
     status = payload.get("status") or payload.get("payment_status")
     return ProdamusWebhook(order_id=int(order_id), payment_id=payment_id, status=status)
 
-
 def _is_paid_status(status: str | None) -> bool:
     if not status:
         return False
     return status.lower() in {"paid", "success", "succeeded", "completed"}
-
 
 def _safe_json(response: httpx.Response) -> dict[str, Any]:
     try:
@@ -181,7 +194,6 @@ def _safe_json(response: httpx.Response) -> dict[str, Any]:
     if isinstance(data, dict):
         return data
     return {}
-
 
 def _extract_status_value(payload: Mapping[str, Any]) -> str | None:
     for key in ("status", "payment_status"):
@@ -194,7 +206,6 @@ def _extract_status_value(payload: Mapping[str, Any]) -> str | None:
         if isinstance(value, str):
             return value
     return None
-
 
 def _extract_payment_id_value(payload: Mapping[str, Any]) -> str | None:
     for key in ("payment_id", "transaction_id"):
