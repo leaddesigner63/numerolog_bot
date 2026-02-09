@@ -19,6 +19,24 @@ from app.db.models import PaymentProvider as PaymentProviderEnum, Order, User
 logger = logging.getLogger(__name__)
 
 
+class ProdamusWebhookError(ValueError):
+    """Base verification error for Prodamus webhooks."""
+
+    event_code = "prodamus_webhook_invalid"
+
+
+class ProdamusMissingSecretError(ProdamusWebhookError):
+    event_code = "prodamus_webhook_missing_secret"
+
+
+class ProdamusMissingSignatureError(ProdamusWebhookError):
+    event_code = "prodamus_webhook_missing_signature"
+
+
+class ProdamusSignatureMismatchError(ProdamusWebhookError):
+    event_code = "prodamus_webhook_signature_mismatch"
+
+
 @dataclass
 class ProdamusSettings:
     prodamus_form_url: str
@@ -106,9 +124,15 @@ class ProdamusProvider(PaymentProvider):
         secret = getattr(self._settings, "prodamus_webhook_secret", None) or getattr(
             self._settings, "prodamus_notify_secret", None
         ) or self._key
+        allow_unsigned = bool(getattr(self._settings, "prodamus_allow_unsigned_webhook", False))
 
-        if secret:
-            signature_data = _find_signature(headers, payload)
+        signature_data = _find_signature(headers, payload)
+        if not secret:
+            if not (allow_unsigned and _allow_unsigned_payload(payload=payload, headers=headers, settings=self._settings)):
+                logger.warning("prodamus_webhook_missing_secret", extra={"event_code": ProdamusMissingSecretError.event_code})
+                raise ProdamusMissingSecretError("Prodamus webhook secret is not configured")
+            logger.warning("prodamus_webhook_unsigned_fallback_accepted", extra={"event_code": "prodamus_webhook_unsigned_fallback_accepted"})
+        else:
             if signature_data:
                 if not _matches_signature(
                     signature=signature_data[0],
@@ -116,12 +140,15 @@ class ProdamusProvider(PaymentProvider):
                     payload=payload,
                     raw_body=raw_body,
                 ):
-                    raise ValueError("Invalid Prodamus signature")
+                    logger.warning("prodamus_webhook_signature_mismatch", extra={"event_code": ProdamusSignatureMismatchError.event_code})
+                    raise ProdamusSignatureMismatchError("Prodamus signature mismatch")
+            elif _matches_payload_secret(payload, secret):
+                pass
+            elif allow_unsigned and _allow_unsigned_payload(payload=payload, headers=headers, settings=self._settings):
+                logger.warning("prodamus_webhook_unsigned_fallback_accepted", extra={"event_code": "prodamus_webhook_unsigned_fallback_accepted"})
             else:
-                if not _matches_payload_secret(payload, secret):
-                    raise ValueError("Missing Prodamus signature")
-        else:
-            logger.warning("Prodamus secret key not configured; webhook verification skipped")
+                logger.warning("prodamus_webhook_missing_signature", extra={"event_code": ProdamusMissingSignatureError.event_code})
+                raise ProdamusMissingSignatureError("Prodamus signature is missing")
 
         webhook = _extract_webhook(payload)
         return WebhookResult(
@@ -129,7 +156,7 @@ class ProdamusProvider(PaymentProvider):
             provider_payment_id=webhook.payment_id,
             is_paid=webhook.is_paid,
             status=webhook.status,
-            verified=bool(secret),
+            verified=bool(secret and (signature_data or _matches_payload_secret(payload, secret))),
         )
 
     def _build_form_link(self, params: dict[str, str]) -> str:
@@ -251,6 +278,38 @@ def _matches_payload_secret(payload: Mapping[str, Any], secret: str) -> bool:
     """Compatibility mode: secret passed inside payload (not recommended)."""
     value = payload.get("secret")
     return bool(value) and str(value) == secret
+
+
+def _allow_unsigned_payload(payload: Mapping[str, Any], headers: Mapping[str, str], settings: Settings) -> bool:
+    if not payload.get("order_id"):
+        return False
+
+    payload_secret = getattr(settings, "prodamus_unsigned_payload_secret", None)
+    if payload_secret:
+        incoming_payload_secret = payload.get("secret")
+        if str(incoming_payload_secret or "") != str(payload_secret):
+            return False
+
+    whitelist = _split_csv(getattr(settings, "prodamus_unsigned_webhook_ips", None))
+    if not whitelist:
+        return False
+
+    remote_ip = _extract_remote_ip(headers)
+    return bool(remote_ip and remote_ip in whitelist)
+
+
+def _split_csv(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    return {part.strip() for part in str(value).split(",") if part.strip()}
+
+
+def _extract_remote_ip(headers: Mapping[str, str]) -> str:
+    lowered = {str(k).lower(): str(v) for k, v in headers.items()}
+    forwarded = lowered.get("x-forwarded-for", "")
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()
+    return lowered.get("x-real-ip", "").strip()
 
 
 def _extract_payment_link_from_response(resp: httpx.Response) -> str | None:

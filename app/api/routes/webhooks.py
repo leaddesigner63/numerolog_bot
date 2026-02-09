@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import hashlib
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
 
@@ -10,6 +11,7 @@ from app.core.config import settings
 from app.db.models import Order, OrderStatus, PaymentProvider as PaymentProviderEnum
 from app.db.session import get_session
 from app.payments import get_payment_provider
+from app.payments.prodamus import _find_signature, _parse_payload
 
 
 router = APIRouter(tags=["payments"])
@@ -31,6 +33,30 @@ def _candidate_providers(explicit: Optional[str]) -> list[str]:
 
     return candidates
 
+
+
+
+def _payload_fingerprint(raw_body: bytes) -> str:
+    if not raw_body:
+        return "empty"
+    return hashlib.sha256(raw_body).hexdigest()[:12]
+
+
+def _signature_source(headers: dict[str, str], payload: dict[str, Any]) -> str:
+    signature_data = _find_signature(headers, payload)
+    if not signature_data:
+        return "missing"
+    return signature_data[1]
+
+
+def _safe_payload(raw_body: bytes) -> dict[str, Any]:
+    try:
+        payload = _parse_payload(raw_body)
+        if isinstance(payload, dict):
+            return payload
+    except Exception:
+        return {}
+    return {}
 
 def _is_prodamus_probe(explicit_provider: Optional[str], raw_body: bytes, headers: dict[str, str]) -> bool:
     """Allow Prodamus test probe requests without payment data.
@@ -74,12 +100,15 @@ async def handle_payment_webhook(request: Request) -> dict[str, str]:
             break
         except Exception as exc:  # noqa: BLE001 - webhook endpoint must be tolerant
             last_exc = exc
+            safe_payload = _safe_payload(raw_body)
             logger.warning(
                 "payment_webhook_verify_failed",
                 extra={
                     "provider": provider_name,
                     "error": str(exc),
                     "fallback_attempt": explicit_provider is None,
+                    "payload_fingerprint": _payload_fingerprint(raw_body),
+                    "signature_source": _signature_source(lowered_headers, safe_payload),
                 },
             )
             # If provider explicitly specified by query param, do not fallback

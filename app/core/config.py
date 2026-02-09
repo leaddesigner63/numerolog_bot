@@ -50,6 +50,9 @@ class Settings(BaseSettings):
     prodamus_api_key: str | None = None
     prodamus_secret: str | None = None
     prodamus_webhook_secret: str | None = None
+    prodamus_allow_unsigned_webhook: bool = False
+    prodamus_unsigned_webhook_ips: str | None = None
+    prodamus_unsigned_payload_secret: str | None = None
     cloudpayments_public_id: str | None = None
     cloudpayments_api_secret: str | None = None
     payment_webhook_url: str | None = None

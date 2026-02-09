@@ -110,5 +110,19 @@ class PaymentWebhookRouteTests(unittest.TestCase):
         self.assertEqual(response.json(), {"status": "ok"})
 
 
+    def test_payload_fingerprint_and_signature_source_helpers(self) -> None:
+        fingerprint = webhook_routes._payload_fingerprint(b'{"order_id":"1001"}')
+        self.assertEqual(len(fingerprint), 12)
+
+        source_header = webhook_routes._signature_source({"sign": "abc"}, {"order_id": "1"})
+        self.assertEqual(source_header, "header:sign")
+
+        source_payload = webhook_routes._signature_source({}, {"order_id": "1", "sign": "abc"})
+        self.assertEqual(source_payload, "payload:sign")
+
+        source_missing = webhook_routes._signature_source({}, {"order_id": "1"})
+        self.assertEqual(source_missing, "missing")
+
+
 if __name__ == "__main__":
     unittest.main()
