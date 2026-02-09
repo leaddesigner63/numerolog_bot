@@ -15,6 +15,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 from app.core.config import settings
+from app.core.report_document import ReportDocument, report_document_builder
 from app.core.pdf_theme_config import PdfThemeAssetBundle, resolve_pdf_asset_bundle
 from app.core.pdf_themes import PdfTheme, resolve_pdf_theme
 
@@ -223,10 +224,16 @@ class PdfService:
         text: str,
         tariff: Any = None,
         meta: dict[str, Any] | None = None,
+        report_document: ReportDocument | None = None,
     ) -> bytes:
         renderer = PdfThemeRenderer(logger=self._logger)
+        structured_document = report_document or report_document_builder.build(
+            text,
+            tariff=tariff,
+            meta=meta,
+        )
         try:
-            return renderer.render(text, tariff, meta)
+            return renderer.render(text, tariff, meta, report_document=structured_document)
         except Exception as exc:
             self._logger.warning(
                 "pdf_theme_render_failed",
@@ -350,6 +357,7 @@ class PdfThemeRenderer:
         report_text: str,
         tariff: Any,
         meta: dict[str, Any] | None,
+        report_document: ReportDocument | None = None,
     ) -> bytes:
         font_map = _register_font()
         theme = resolve_pdf_theme(tariff)
@@ -364,8 +372,25 @@ class PdfThemeRenderer:
 
         self._draw_background(pdf, theme, page_width, page_height, randomizer, asset_bundle)
         self._draw_decorative_layers(pdf, theme, page_width, page_height, randomizer, asset_bundle)
-        self._draw_header(pdf, theme, font_map, payload_meta, tariff, page_height)
-        self._draw_body(pdf, theme, font_map, report_text, page_width, page_height, asset_bundle)
+        self._draw_header(
+            pdf,
+            theme,
+            font_map,
+            payload_meta,
+            tariff,
+            page_height,
+            report_document=report_document,
+        )
+        self._draw_body(
+            pdf,
+            theme,
+            font_map,
+            report_text,
+            page_width,
+            page_height,
+            asset_bundle,
+            report_document=report_document,
+        )
 
         pdf.save()
         return buffer.getvalue()
@@ -471,14 +496,16 @@ class PdfThemeRenderer:
         meta: dict[str, Any],
         tariff: Any,
         page_height: float,
+        report_document: ReportDocument | None = None,
     ) -> None:
         margin = theme.margin
         pdf.saveState()
         pdf.setFillColor(theme.palette[2])
         pdf.setFont(font_map["title"], theme.typography.title_size)
-        pdf.drawString(margin, page_height - margin, "Персональный аналитический отчёт")
+        title = (report_document.title if report_document else "") or "Персональный аналитический отчёт"
+        pdf.drawString(margin, page_height - margin, title)
 
-        subtitle = f"Тариф: {tariff or 'N/A'}"
+        subtitle = (report_document.subtitle if report_document else "") or f"Тариф: {tariff or 'N/A'}"
         report_id = str(meta.get("id") or "")
         if report_id:
             subtitle = f"{subtitle} · Report #{report_id}"
@@ -495,6 +522,7 @@ class PdfThemeRenderer:
         page_width: float,
         page_height: float,
         asset_bundle: PdfThemeAssetBundle,
+        report_document: ReportDocument | None = None,
     ) -> None:
         margin = theme.margin
         body_size = theme.typography.body_size
@@ -502,24 +530,179 @@ class PdfThemeRenderer:
         max_width = page_width - margin * 2
         y = page_height - margin - 64
 
-        pdf.setFillColor(theme.palette[2], alpha=0.96)
-        pdf.setFont(font_map["body"], body_size)
-        for paragraph in (report_text or "").splitlines() or [""]:
-            lines = simpleSplit(paragraph or " ", font_map["body"], body_size, max_width)
-            for line in lines:
-                if y <= margin:
-                    pdf.showPage()
-                    page_randomizer = random.Random(paragraph)
-                    self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
-                    self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
-                    pdf.setFillColor(theme.palette[2], alpha=0.96)
-                    pdf.setFont(font_map["body"], body_size)
-                    y = page_height - margin
-                line_font = font_map["numeric"] if any(ch.isdigit() for ch in line) else font_map["body"]
-                pdf.setFont(line_font, body_size)
-                pdf.drawString(margin, y, line)
-                y -= line_height
-            y -= max(int(line_height * 0.3), 2)
+        if not report_document:
+            pdf.setFillColor(theme.palette[2], alpha=0.96)
+            pdf.setFont(font_map["body"], body_size)
+            for paragraph in (report_text or "").splitlines() or [""]:
+                lines = simpleSplit(paragraph or " ", font_map["body"], body_size, max_width)
+                for line in lines:
+                    if y <= margin:
+                        pdf.showPage()
+                        page_randomizer = random.Random(paragraph)
+                        self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+                        self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+                        pdf.setFillColor(theme.palette[2], alpha=0.96)
+                        pdf.setFont(font_map["body"], body_size)
+                        y = page_height - margin
+                    line_font = font_map["numeric"] if any(ch.isdigit() for ch in line) else font_map["body"]
+                    pdf.setFont(line_font, body_size)
+                    pdf.drawString(margin, y, line)
+                    y -= line_height
+                y -= max(int(line_height * 0.3), 2)
+            return
+
+        section_gap = max(line_height, 14)
+        key_gap = max(int(line_height * 0.6), 8)
+        effective_width = max_width - 8 * report_document.decoration_depth
+
+        y = self._draw_text_block(
+            pdf,
+            text="Ключевые выводы",
+            y=y,
+            margin=margin,
+            width=effective_width,
+            font=font_map["subtitle"],
+            size=body_size + 1,
+            page_width=page_width,
+            page_height=page_height,
+            theme=theme,
+            asset_bundle=asset_bundle,
+        )
+        for finding in report_document.key_findings:
+            y = self._draw_text_block(
+                pdf,
+                text=f"• {finding}",
+                y=y,
+                margin=margin + 8,
+                width=effective_width - 8,
+                font=font_map["body"],
+                size=body_size,
+                page_width=page_width,
+                page_height=page_height,
+                theme=theme,
+                asset_bundle=asset_bundle,
+            )
+            y -= key_gap // 2
+
+        for section in report_document.sections:
+            y -= section_gap
+            y = self._draw_text_block(
+                pdf,
+                text=section.title,
+                y=y,
+                margin=margin,
+                width=effective_width,
+                font=font_map["subtitle"],
+                size=body_size + 1,
+                page_width=page_width,
+                page_height=page_height,
+                theme=theme,
+                asset_bundle=asset_bundle,
+            )
+            for paragraph in section.paragraphs:
+                y = self._draw_text_block(
+                    pdf,
+                    text=paragraph,
+                    y=y,
+                    margin=margin + 6,
+                    width=effective_width - 6,
+                    font=font_map["body"],
+                    size=body_size,
+                    page_width=page_width,
+                    page_height=page_height,
+                    theme=theme,
+                    asset_bundle=asset_bundle,
+                )
+            for bullet in section.bullets:
+                y = self._draw_text_block(
+                    pdf,
+                    text=f"• {bullet}",
+                    y=y,
+                    margin=margin + 10,
+                    width=effective_width - 10,
+                    font=font_map["body"],
+                    size=body_size,
+                    page_width=page_width,
+                    page_height=page_height,
+                    theme=theme,
+                    asset_bundle=asset_bundle,
+                )
+            for accent in section.accent_blocks:
+                y = self._draw_text_block(
+                    pdf,
+                    text=f"Акцент: {accent.title}",
+                    y=y,
+                    margin=margin + 12,
+                    width=effective_width - 12,
+                    font=font_map["subtitle"],
+                    size=body_size,
+                    page_width=page_width,
+                    page_height=page_height,
+                    theme=theme,
+                    asset_bundle=asset_bundle,
+                )
+                for point in accent.points:
+                    y = self._draw_text_block(
+                        pdf,
+                        text=f"– {point}",
+                        y=y,
+                        margin=margin + 18,
+                        width=effective_width - 18,
+                        font=font_map["body"],
+                        size=body_size,
+                        page_width=page_width,
+                        page_height=page_height,
+                        theme=theme,
+                        asset_bundle=asset_bundle,
+                    )
+
+        y -= section_gap
+        self._draw_text_block(
+            pdf,
+            text=report_document.disclaimer,
+            y=y,
+            margin=margin,
+            width=effective_width,
+            font=font_map["body"],
+            size=max(body_size - 1, 8),
+            page_width=page_width,
+            page_height=page_height,
+            theme=theme,
+            asset_bundle=asset_bundle,
+        )
+
+    def _draw_text_block(
+        self,
+        pdf: canvas.Canvas,
+        *,
+        text: str,
+        y: float,
+        margin: float,
+        width: float,
+        font: str,
+        size: int,
+        page_width: float,
+        page_height: float,
+        theme: PdfTheme,
+        asset_bundle: PdfThemeAssetBundle,
+    ) -> float:
+        line_height = int(size * theme.typography.line_height_ratio)
+        lines = simpleSplit(text or " ", font, size, width)
+        for line in lines:
+            if y <= theme.margin:
+                pdf.showPage()
+                page_randomizer = random.Random(line)
+                self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+                self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+                y = page_height - theme.margin
+            line_font = font
+            if font != _FONT_FALLBACK_NAME and any(ch.isdigit() for ch in line):
+                line_font = font
+            pdf.setFillColor(theme.palette[2], alpha=0.96)
+            pdf.setFont(line_font, size)
+            pdf.drawString(margin, y, line)
+            y -= line_height
+        return y - max(int(line_height * 0.25), 2)
 
     def _try_draw_image_layer(
         self,
