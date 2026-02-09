@@ -193,3 +193,32 @@ def test_prodamus_webhook_accepts_urlencoded_payload() -> None:
     assert result.order_id == 77
     assert result.provider_payment_id == "abc/123"
     assert result.is_paid is True
+
+def test_prodamus_webhook_accepts_single_key_via_payload_secret_without_signature() -> None:
+    key = "single_key"
+    payload = (
+        '{"order_id": "101", "status": "paid", "payment_id": "p-1", '
+        f'"secret": "{key}"'
+        "}"
+    ).encode("utf-8")
+    settings = Settings(prodamus_key=key)
+    provider = ProdamusProvider(settings)
+
+    result = provider.verify_webhook(payload, {})
+
+    assert result.order_id == 101
+    assert result.provider_payment_id == "p-1"
+    assert result.is_paid is True
+
+
+def test_prodamus_webhook_rejects_wrong_payload_secret_without_signature() -> None:
+    payload = b'{"order_id": "101", "status": "paid", "payment_id": "p-1", "secret": "wrong"}'
+    settings = Settings(prodamus_key="single_key")
+    provider = ProdamusProvider(settings)
+
+    try:
+        provider.verify_webhook(payload, {})
+    except ValueError as exc:
+        assert str(exc) == "Missing Prodamus signature"
+    else:
+        raise AssertionError("Expected missing signature error")

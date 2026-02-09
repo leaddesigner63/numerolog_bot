@@ -89,16 +89,16 @@ class ProdamusProvider(PaymentProvider):
         payload = _parse_payload(raw_body)
         if secret:
             signature_data = _find_signature(headers, payload)
-            if not signature_data:
+            if signature_data:
+                if not _matches_signature(
+                    signature=signature_data[0],
+                    secret=secret,
+                    payload=payload,
+                    raw_body=raw_body,
+                ):
+                    raise ValueError("Invalid Prodamus signature")
+            elif not _matches_payload_secret(payload, secret):
                 raise ValueError("Missing Prodamus signature")
-            if not _matches_signature(
-                signature=signature_data[0],
-                signature_source=signature_data[1],
-                secret=secret,
-                payload=payload,
-                raw_body=raw_body,
-            ):
-                raise ValueError("Invalid Prodamus signature")
         webhook = _extract_webhook(payload)
         return WebhookResult(
             order_id=webhook.order_id,
@@ -151,15 +151,13 @@ def _find_signature(headers: Mapping[str, str], payload: Mapping[str, Any]) -> t
     ):
         if key in lowered:
             return lowered[key], "header"
-    for key in ("signature", "sign"):
-        value = payload.get(key)
-        if isinstance(value, str):
-            return value, "payload"
+    payload_signature = _extract_string_by_keys(payload, keys=("signature", "sign", "sig"))
+    if payload_signature:
+        return payload_signature, "payload"
     return None
 
 def _matches_signature(
     signature: str,
-    signature_source: str,
     secret: str,
     payload: Mapping[str, Any],
     raw_body: bytes,
@@ -168,11 +166,6 @@ def _matches_signature(
     canonical_signature = _canonical_signature(secret, payload)
     if canonical_signature and signature.casefold() == canonical_signature.casefold():
         return True
-
-    # Legacy-fallback применяется строго для header-подписи,
-    # если каноничная MD5(token+secret) не совпала.
-    if signature_source != "header":
-        return False
 
     hmac_digest = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).digest()
     fallback_hmac_hex = hmac_digest.hex()
@@ -190,6 +183,16 @@ def _matches_signature(
         if signature.casefold() == candidate.casefold():
             return True
     return False
+
+
+def _matches_payload_secret(payload: Mapping[str, Any], secret: str) -> bool:
+    candidates = _extract_strings_by_keys(
+        payload,
+        keys=("secret", "webhook_secret", "callback_secret", "merchant_secret", "password"),
+    )
+    if not candidates:
+        return False
+    return any(candidate == secret for candidate in candidates)
 
 def _canonical_signature(secret: str, payload: Mapping[str, Any]) -> str | None:
     token = payload.get("token")
@@ -256,6 +259,35 @@ def _extract_payment_id_value(payload: Mapping[str, Any]) -> str | None:
         payload,
         keys=("payment_id", "transaction_id", "id", "payment", "paymentId"),
     )
+
+
+def _extract_string_by_keys(payload: Mapping[str, Any], keys: tuple[str, ...]) -> str | None:
+    values = _extract_strings_by_keys(payload, keys=keys)
+    if values:
+        return values[0]
+    return None
+
+
+def _extract_strings_by_keys(payload: Mapping[str, Any], keys: tuple[str, ...]) -> list[str]:
+    normalized = {key.casefold() for key in keys}
+    results: list[str] = []
+
+    def _walk(value: Any) -> None:
+        if isinstance(value, Mapping):
+            for key, nested in value.items():
+                if key.casefold() in normalized:
+                    if isinstance(nested, str) and nested:
+                        results.append(nested)
+                    elif isinstance(nested, (int, float)):
+                        results.append(str(nested))
+                _walk(nested)
+            return
+        if isinstance(value, list):
+            for item in value:
+                _walk(item)
+
+    _walk(payload)
+    return results
 
 
 def _extract_first_string(payload: Mapping[str, Any], keys: tuple[str, ...]) -> str | None:
