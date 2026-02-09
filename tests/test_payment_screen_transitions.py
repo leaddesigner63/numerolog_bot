@@ -123,21 +123,21 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             jobs_count = session.execute(select(func.count(ReportJob.id))).scalar_one()
         self.assertEqual(jobs_count, 0)
 
-    async def test_payment_paid_transitions_to_profile_screen(self) -> None:
+    async def test_s3_auto_redirects_to_profile_when_order_already_paid(self) -> None:
         order_id = self._create_order(OrderStatus.PAID)
         screens.screen_manager.update_state(
             1001,
             selected_tariff=Tariff.T1.value,
             order_id=str(order_id),
             order_status=OrderStatus.PAID.value,
+            offer_seen=True,
         )
-        callback = _DummyCallback("payment:paid")
+        callback = _DummyCallback("screen:S3")
 
         with (
             patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
             patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
             patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
-            patch.object(screens, "start_profile_wizard", new=AsyncMock()),
         ):
             await screens.handle_callbacks(callback, state=SimpleNamespace())
 

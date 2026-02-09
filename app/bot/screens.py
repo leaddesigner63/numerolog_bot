@@ -362,7 +362,8 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
         f"Оплата тарифа {selected_tariff}.\n\n"
         "Перед оплатой: сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
         "Возвратов нет.\n\n"
-        f"Оплачивая, вы подтверждаете согласие с {offer_link}."
+        f"Оплачивая, вы подтверждаете согласие с {offer_link}.\n"
+        "После оплаты бот автоматически проверит статус и переведёт вас к следующему шагу."
         f"{order_block}"
     ]
     if not payment_url:
@@ -382,10 +383,6 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
         )
     rows.append(
         [
-            InlineKeyboardButton(
-                text=_with_button_icons("Я оплатил(а)", "✅"),
-                callback_data="payment:paid",
-            ),
             InlineKeyboardButton(
                 text=_with_button_icons("Назад", "⬅️"),
                 callback_data="screen:S1",
