@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -51,6 +52,9 @@ class ProdamusProvider(PaymentProvider):
             "products[0][quantity]": "1",
             "products[0][sum]": amount,
         }
+        if self._settings.prodamus_api_key:
+            params["do"] = "link"
+            params["key"] = self._settings.prodamus_api_key
         if user:
             params["customer_id"] = str(user.telegram_user_id)
             if user.telegram_username:
@@ -61,15 +65,14 @@ class ProdamusProvider(PaymentProvider):
         return PaymentLink(url=url)
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str]) -> WebhookResult:
-        secret = self._settings.prodamus_webhook_secret
-        if not secret:
-            self._logger.warning("prodamus_webhook_secret_missing")
-            raise ValueError("PRODAMUS_WEBHOOK_SECRET is not configured")
-        signature = _find_signature(headers, raw_body)
-        expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
-        if not signature or not hmac.compare_digest(signature, expected):
-            raise ValueError("Invalid Prodamus signature")
+        secret = self._settings.prodamus_webhook_secret or self._settings.prodamus_api_key
         payload = _parse_payload(raw_body)
+        if secret:
+            signature = _find_signature(headers, payload, raw_body)
+            if not signature:
+                raise ValueError("Missing Prodamus signature")
+            if not _matches_signature(signature, secret, payload, raw_body):
+                raise ValueError("Invalid Prodamus signature")
         webhook = _extract_webhook(payload)
         return WebhookResult(
             order_id=webhook.order_id,
@@ -79,7 +82,7 @@ class ProdamusProvider(PaymentProvider):
 
     def check_payment_status(self, order: Order) -> WebhookResult | None:
         status_url = self._settings.prodamus_status_url
-        secret = self._settings.prodamus_secret
+        secret = self._settings.prodamus_secret or self._settings.prodamus_api_key
         if not status_url or not secret:
             self._logger.warning(
                 "prodamus_status_config_missing",
@@ -109,18 +112,36 @@ class ProdamusProvider(PaymentProvider):
         )
 
 
-def _find_signature(headers: Mapping[str, str], raw_body: bytes) -> str | None:
+def _find_signature(headers: Mapping[str, str], payload: Mapping[str, Any], raw_body: bytes) -> str | None:
     lowered = {key.lower(): value for key, value in headers.items()}
     for key in ("x-prodamus-signature", "x-signature", "x-webhook-signature"):
         if key in lowered:
             return lowered[key]
-    payload = _parse_payload(raw_body)
     for key in ("signature", "sign"):
         value = payload.get(key)
         if isinstance(value, str):
             return value
     return None
 
+
+
+def _matches_signature(signature: str, secret: str, payload: Mapping[str, Any], raw_body: bytes) -> bool:
+    candidates = _signature_candidates(secret, payload, raw_body)
+    return any(hmac.compare_digest(signature, expected) for expected in candidates)
+
+
+def _signature_candidates(secret: str, payload: Mapping[str, Any], raw_body: bytes) -> list[str]:
+    variants: list[str] = []
+    hmac_digest = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).digest()
+    variants.append(hmac_digest.hex())
+    variants.append(base64.b64encode(hmac_digest).decode("utf-8"))
+    token = payload.get("token")
+    if isinstance(token, str) and token:
+        raw = f"{token}{secret}".encode("utf-8")
+        md5_value = hashlib.md5(raw).hexdigest()
+        variants.append(md5_value)
+        variants.append(md5_value.upper())
+    return variants
 
 def _parse_payload(raw_body: bytes) -> dict[str, Any]:
     try:
