@@ -15,6 +15,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 from app.core.config import settings
+from app.core.pdf_theme_config import PdfThemeAssetBundle, resolve_pdf_asset_bundle
 from app.core.pdf_themes import PdfTheme, resolve_pdf_theme
 
 
@@ -291,15 +292,16 @@ class PdfThemeRenderer:
         payload_meta = meta or {}
         seed_basis = f"{payload_meta.get('id', '')}-{payload_meta.get('created_at', '')}-{tariff}"
         randomizer = random.Random(seed_basis)
+        asset_bundle = resolve_pdf_asset_bundle(str(tariff or ""))
 
         buffer = BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=A4)
         page_width, page_height = A4
 
-        self._draw_background(pdf, theme, page_width, page_height, randomizer)
-        self._draw_decorative_layers(pdf, theme, page_width, page_height, randomizer)
+        self._draw_background(pdf, theme, page_width, page_height, randomizer, asset_bundle)
+        self._draw_decorative_layers(pdf, theme, page_width, page_height, randomizer, asset_bundle)
         self._draw_header(pdf, theme, font_name, payload_meta, tariff, page_height)
-        self._draw_body(pdf, theme, font_name, report_text, page_width, page_height)
+        self._draw_body(pdf, theme, font_name, report_text, page_width, page_height, asset_bundle)
 
         pdf.save()
         return buffer.getvalue()
@@ -311,7 +313,20 @@ class PdfThemeRenderer:
         page_width: float,
         page_height: float,
         randomizer: random.Random,
+        asset_bundle: PdfThemeAssetBundle,
     ) -> None:
+        if self._try_draw_image_layer(
+            pdf,
+            layer_type="background",
+            primary=asset_bundle.background_main,
+            fallback=asset_bundle.background_fallback,
+            x=0,
+            y=0,
+            width=page_width,
+            height=page_height,
+        ):
+            return
+
         for idx, color in enumerate(theme.palette[:2]):
             alpha = max(theme.overlay_alpha * (idx + 1), 0.03)
             pdf.saveState()
@@ -340,7 +355,29 @@ class PdfThemeRenderer:
         page_width: float,
         page_height: float,
         randomizer: random.Random,
+        asset_bundle: PdfThemeAssetBundle,
     ) -> None:
+        self._try_draw_image_layer(
+            pdf,
+            layer_type="overlay",
+            primary=asset_bundle.overlay_main,
+            fallback=asset_bundle.overlay_fallback,
+            x=0,
+            y=0,
+            width=page_width,
+            height=page_height,
+        )
+        self._try_draw_image_layer(
+            pdf,
+            layer_type="icon",
+            primary=asset_bundle.icon_main,
+            fallback=asset_bundle.icon_fallback,
+            x=page_width - 72,
+            y=page_height - 72,
+            width=40,
+            height=40,
+        )
+
         pdf.saveState()
         pdf.setFillColor(theme.palette[2], alpha=0.14)
         for _ in range(theme.splash_count):
@@ -393,6 +430,7 @@ class PdfThemeRenderer:
         report_text: str,
         page_width: float,
         page_height: float,
+        asset_bundle: PdfThemeAssetBundle,
     ) -> None:
         margin = theme.margin
         body_size = theme.typography.body_size
@@ -407,11 +445,54 @@ class PdfThemeRenderer:
             for line in lines:
                 if y <= margin:
                     pdf.showPage()
-                    self._draw_background(pdf, theme, page_width, page_height, random.Random(paragraph))
-                    self._draw_decorative_layers(pdf, theme, page_width, page_height, random.Random(paragraph))
+                    page_randomizer = random.Random(paragraph)
+                    self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+                    self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
                     pdf.setFillColor(theme.palette[2], alpha=0.96)
                     pdf.setFont(font_name, body_size)
                     y = page_height - margin
                 pdf.drawString(margin, y, line)
                 y -= line_height
             y -= max(int(line_height * 0.3), 2)
+
+    def _try_draw_image_layer(
+        self,
+        pdf: canvas.Canvas,
+        *,
+        layer_type: str,
+        primary: Path,
+        fallback: Path,
+        x: float,
+        y: float,
+        width: float,
+        height: float,
+    ) -> bool:
+        for candidate, source in ((primary, "main"), (fallback, "fallback")):
+            if not candidate.exists():
+                self._logger.warning(
+                    "pdf_theme_asset_missing",
+                    extra={"layer": layer_type, "source": source, "path": str(candidate)},
+                )
+                continue
+            try:
+                pdf.drawImage(
+                    str(candidate),
+                    x,
+                    y,
+                    width=width,
+                    height=height,
+                    preserveAspectRatio=False,
+                    mask="auto",
+                )
+                return True
+            except Exception as exc:
+                self._logger.warning(
+                    "pdf_theme_asset_draw_failed",
+                    extra={
+                        "layer": layer_type,
+                        "source": source,
+                        "path": str(candidate),
+                        "error": str(exc),
+                    },
+                )
+        return False
