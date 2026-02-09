@@ -41,7 +41,6 @@ class ProdamusProvider(PaymentProvider):
             "order_id": str(order.id),
             "amount": amount,
             "sum": amount,
-            "currency": order.currency,
             "description": description,
             "products[0][name]": description,
             "products[0][price]": amount,
