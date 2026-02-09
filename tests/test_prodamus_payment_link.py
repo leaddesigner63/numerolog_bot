@@ -62,6 +62,34 @@ def test_prodamus_payment_link_includes_api_key_params() -> None:
     assert "do=link" in payment_link.url
     assert "key=test_api_key" in payment_link.url
 
+
+def test_prodamus_payment_link_prefers_api_generated_link(monkeypatch) -> None:
+    settings = Settings(
+        prodamus_form_url="https://pay.example/prodamus",
+        prodamus_api_key="test_api_key",
+    )
+    provider = ProdamusProvider(settings)
+    order = Order(
+        id=520,
+        user_id=1,
+        tariff=Tariff.T1,
+        amount=560.00,
+        currency="RUB",
+        provider=PaymentProvider.PRODAMUS,
+        status=OrderStatus.CREATED,
+    )
+
+    monkeypatch.setattr(
+        provider,
+        "_create_api_generated_payment_link",
+        lambda base_params: "https://payform.ru/b7aCNPs/",
+    )
+
+    payment_link = provider.create_payment_link(order)
+
+    assert payment_link is not None
+    assert payment_link.url == "https://payform.ru/b7aCNPs/"
+
 def test_prodamus_webhook_accepts_sign_with_api_key() -> None:
     api_key = "test_api_key"
     token = "abc123"

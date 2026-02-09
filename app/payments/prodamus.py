@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Mapping
 from urllib.parse import urlencode
@@ -60,8 +61,28 @@ class ProdamusProvider(PaymentProvider):
             params["success_url"] = self._settings.payment_success_url
         if self._settings.payment_fail_url:
             params["fail_url"] = self._settings.payment_fail_url
+        api_generated_link = self._create_api_generated_payment_link(params)
+        if api_generated_link:
+            return PaymentLink(url=api_generated_link)
         url = f"{self._settings.prodamus_form_url}?{urlencode(params)}"
         return PaymentLink(url=url)
+
+    def _create_api_generated_payment_link(self, base_params: dict[str, str]) -> str | None:
+        if not self._settings.prodamus_api_key:
+            return None
+
+        api_params = dict(base_params)
+        api_params["do"] = "link"
+        api_params["key"] = self._settings.prodamus_api_key
+
+        try:
+            with httpx.Client(timeout=10.0, follow_redirects=True) as client:
+                response = client.get(self._settings.prodamus_form_url, params=api_params)
+                response.raise_for_status()
+        except httpx.HTTPError:
+            return None
+
+        return _extract_payment_link_from_response(response)
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str]) -> WebhookResult:
         secret = self._settings.prodamus_webhook_secret or self._settings.prodamus_api_key
@@ -196,6 +217,23 @@ def _safe_json(response: httpx.Response) -> dict[str, Any]:
     if isinstance(data, dict):
         return data
     return {}
+
+
+def _extract_payment_link_from_response(response: httpx.Response) -> str | None:
+    data = _safe_json(response)
+    for key in ("url", "link", "payment_url", "paymentLink"):
+        value = data.get(key)
+        if isinstance(value, str) and value.startswith(("http://", "https://")):
+            return value
+
+    body = response.text.strip()
+    if body.startswith(("http://", "https://")):
+        return body
+
+    match = re.search(r"https?://[^\s\"'<>]+", body)
+    if match:
+        return match.group(0)
+    return None
 
 def _extract_status_value(payload: Mapping[str, Any]) -> str | None:
     return _extract_first_string(payload, keys=("status", "payment_status", "state"))
