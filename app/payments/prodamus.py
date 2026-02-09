@@ -14,7 +14,7 @@ import httpx
 
 from app.core.config import Settings
 from app.payments.base import PaymentProvider, WebhookResult, PaymentLinkResult
-from app.db.models import PaymentProvider as PaymentProviderEnum, Order
+from app.db.models import PaymentProvider as PaymentProviderEnum, Order, User
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ class ProdamusProvider(PaymentProvider):
         # unified key (also used as webhook secret by default, unless a dedicated secret is configured)
         self._key = getattr(settings, "prodamus_unified_key", None)
 
-    def create_payment_link(self, order: Order) -> PaymentLinkResult:
+    def create_payment_link(self, order: Order, user: User | None = None) -> PaymentLinkResult:
         # Payment form url
         if not getattr(self._settings, "prodamus_form_url", None):
             raise ValueError("Missing prodamus_form_url")
@@ -63,6 +63,14 @@ class ProdamusProvider(PaymentProvider):
             link = self._build_form_link(params)
 
         return PaymentLinkResult(url=link, provider=self.provider)
+
+    def check_payment_status(self, order: Order) -> WebhookResult | None:
+        """MVP: активная проверка статуса в Prodamus не используется.
+
+        Подтверждение оплаты идёт через webhook, поэтому метод возвращает `None`.
+        """
+
+        return None
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str]) -> WebhookResult:
         payload = _parse_payload(raw_body)
