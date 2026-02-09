@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     payment_enabled: bool = True
     payment_provider: str = "prodamus"
     prodamus_form_url: str | None = None
+    prodamus_api_key: str | None = None
     prodamus_secret: str | None = None
     prodamus_status_url: str | None = None
     prodamus_webhook_secret: str | None = None

@@ -1,5 +1,7 @@
 from app.core.config import Settings
 from app.db.models import Order, OrderStatus, PaymentProvider, Tariff, User
+import hashlib
+
 from app.payments.prodamus import ProdamusProvider
 
 
@@ -35,3 +37,45 @@ def test_prodamus_payment_link_contains_invoice_data() -> None:
     assert "callback_url=https%3A%2F%2Fbot.example%2Fwebhooks%2Fpayments" in payment_link.url
     assert "customer_id=777000" in payment_link.url
     assert "customer_username=demo_user" in payment_link.url
+
+
+def test_prodamus_payment_link_includes_api_key_params() -> None:
+    settings = Settings(
+        prodamus_form_url="https://pay.example/prodamus",
+        prodamus_api_key="test_api_key",
+    )
+    provider = ProdamusProvider(settings)
+    order = Order(
+        id=202,
+        user_id=1,
+        tariff=Tariff.T1,
+        amount=990.00,
+        currency="RUB",
+        provider=PaymentProvider.PRODAMUS,
+        status=OrderStatus.CREATED,
+    )
+
+    payment_link = provider.create_payment_link(order)
+
+    assert payment_link is not None
+    assert "do=link" in payment_link.url
+    assert "key=test_api_key" in payment_link.url
+
+
+def test_prodamus_webhook_accepts_sign_with_api_key() -> None:
+    api_key = "test_api_key"
+    token = "abc123"
+    sign = hashlib.md5(f"{token}{api_key}".encode("utf-8")).hexdigest()
+    payload = (
+        '{"order_id": "101", "status": "paid", "payment_id": "p-1", '
+        f'"token": "{token}", "sign": "{sign}"'
+        "}"
+    ).encode("utf-8")
+    settings = Settings(prodamus_api_key=api_key)
+    provider = ProdamusProvider(settings)
+
+    result = provider.verify_webhook(payload, {})
+
+    assert result.order_id == 101
+    assert result.provider_payment_id == "p-1"
+    assert result.is_paid is True
