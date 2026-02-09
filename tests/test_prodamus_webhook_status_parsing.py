@@ -21,3 +21,16 @@ def test_extract_webhook_supports_localized_success_type() -> None:
 
     assert webhook.order_id == 17
     assert webhook.is_paid is True
+
+
+def test_extract_webhook_prefers_order_num_over_provider_order_id() -> None:
+    webhook = _extract_webhook(
+        {
+            "order_id": "provider-internal-555",
+            "order_num": "2048",
+            "payment_status": "paid",
+        }
+    )
+
+    assert webhook.order_id == 2048
+    assert webhook.is_paid is True
