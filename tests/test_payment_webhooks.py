@@ -99,6 +99,16 @@ class PaymentWebhookRouteTests(unittest.TestCase):
             self.assertEqual(order.provider_payment_id, "pay-1")
             self.assertIsNotNone(order.paid_at)
 
+    def test_prodamus_probe_with_sign_test_returns_ok(self) -> None:
+        response = self.client.post(
+            "/webhooks/payments?provider=prodamus",
+            data="a=1",
+            headers={"Sign": "test", "Content-Type": "application/x-www-form-urlencoded"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "ok"})
+
 
 if __name__ == "__main__":
     unittest.main()
