@@ -54,17 +54,30 @@ class ProdamusProvider(PaymentProvider):
 
         order_title = getattr(order, "title", "") or f"Тариф {getattr(order.tariff, 'value', order.tariff)}"
 
+        success_url = _as_non_empty_str(getattr(self._settings, "payment_success_url", None))
+        fail_url = _as_non_empty_str(getattr(self._settings, "payment_fail_url", None))
+        webhook_url = _as_non_empty_str(getattr(self._settings, "payment_webhook_url", None))
+
         params: dict[str, str] = {
             "order_id": str(order.id),
+            "amount": f"{order.amount:.2f}",
+            "sum": f"{order.amount:.2f}",
             "customer_email": order_email,
             "customer_phone": order_phone,
             "customer_extra": order_customer_name,
+            "customer_id": str(getattr(user, "telegram_user_id", "") or ""),
+            "customer_username": str(getattr(user, "telegram_username", "") or ""),
             "products[0][name]": order_title,
             "products[0][price]": f"{order.amount:.2f}",
             "products[0][quantity]": "1",
-            "urlSuccess": getattr(self._settings, "payment_success_url", ""),
-            "urlReturn": getattr(self._settings, "payment_return_url", ""),
-            "urlNotification": getattr(self._settings, "payment_webhook_url", ""),
+            "products[0][sum]": f"{order.amount:.2f}",
+            "success_url": success_url,
+            "fail_url": fail_url,
+            "callback_url": webhook_url,
+            # Backward-compatible aliases used by some Prodamus form presets.
+            "urlSuccess": success_url,
+            "urlReturn": fail_url,
+            "urlNotification": webhook_url,
         }
 
         # Filter empty
@@ -103,10 +116,10 @@ class ProdamusProvider(PaymentProvider):
                     payload=payload,
                     raw_body=raw_body,
                 ):
-                    raise ValueError(f"Invalid Prodamus signature from {signature_data[1]}")
+                    raise ValueError("Invalid Prodamus signature")
             else:
                 if not _matches_payload_secret(payload, secret):
-                    raise ValueError("Missing Prodamus signature (header Sign)")
+                    raise ValueError("Missing Prodamus signature")
         else:
             logger.warning("Prodamus secret key not configured; webhook verification skipped")
 
@@ -128,6 +141,9 @@ class ProdamusProvider(PaymentProvider):
         if self._key and "key" not in params:
             params = dict(params)
             params["key"] = self._key
+        if self._key and "do" not in params:
+            params = dict(params)
+            params["do"] = "link"
         return f"{base}?{urlencode(params)}"
 
     def _create_api_generated_payment_link(self, params: dict[str, str]) -> str | None:
@@ -155,7 +171,7 @@ def _find_signature(headers: Mapping[str, str], payload: Mapping[str, Any]) -> t
     """
     lowered = {str(k).lower(): str(v) for k, v in headers.items()}
 
-    for key in ("sign", "x-sign", "x-signature", "x-prodamus-signature", "x-prodamus-sign"):
+    for key in ("sign", "signature", "x-sign", "x-signature", "x-prodamus-signature", "x-prodamus-sign"):
         value = lowered.get(key)
         if value:
             value = value.strip()
@@ -216,6 +232,14 @@ def _matches_signature(signature: str, secret: str, payload: Mapping[str, Any], 
     try:
         raw_expected = hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
         if hmac.compare_digest(raw_expected.lower(), sig.lower()):
+            return True
+    except Exception:
+        pass
+
+    # 5) Legacy compatibility seen in older integrations: md5(secret + raw_body)
+    try:
+        legacy_raw = hashlib.md5(secret.encode("utf-8") + raw_body).hexdigest()
+        if hmac.compare_digest(legacy_raw.lower(), sig.lower()):
             return True
     except Exception:
         pass
@@ -438,16 +462,29 @@ def _extract_webhook(payload: Mapping[str, Any]) -> _Webhook:
     # - order_id
     # - payment_id
     # - payment_status
-    order_id_raw = payload.get("order_id")
-    payment_id = payload.get("payment_id") or payload.get("invoice_id") or payload.get("transaction_id")
-    status = payload.get("payment_status") or payload.get("status")
+    order_data = payload.get("order") if isinstance(payload.get("order"), Mapping) else {}
+    payment_data = payload.get("payment") if isinstance(payload.get("payment"), Mapping) else {}
+    result_data = payload.get("result") if isinstance(payload.get("result"), Mapping) else {}
+
+    nested_order_data = result_data.get("order") if isinstance(result_data.get("order"), Mapping) else {}
+    nested_payment_data = result_data.get("payment") if isinstance(result_data.get("payment"), Mapping) else {}
+
+    order_id_raw = payload.get("order_id") or order_data.get("id") or nested_order_data.get("id")
+    payment_id = (
+        payload.get("payment_id")
+        or payload.get("invoice_id")
+        or payload.get("transaction_id")
+        or payment_data.get("id")
+        or nested_payment_data.get("id")
+    )
+    status = payload.get("payment_status") or payload.get("status") or payment_data.get("state") or nested_payment_data.get("state")
 
     order_id: int | None = None
     if order_id_raw is not None:
         try:
             order_id = int(str(order_id_raw))
         except (TypeError, ValueError):
-            order_id = None
+            raise ValueError("order_id is invalid in Prodamus payload")
 
     is_paid = False
     # Some payloads include "paid" flag
@@ -463,3 +500,10 @@ def _extract_webhook(payload: Mapping[str, Any]) -> _Webhook:
         status=str(status) if status is not None else None,
         is_paid=is_paid,
     )
+
+
+def _as_non_empty_str(value: Any) -> str:
+    if value is None:
+        return ""
+    text = str(value)
+    return "" if text in ("", "None") else text
