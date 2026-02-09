@@ -518,7 +518,19 @@ def _is_paid_status(status: str | None) -> bool:
     if not status:
         return False
     s = str(status).strip().lower()
-    return s in ("paid", "success", "succeeded", "ok", "completed", "1", "true", "yes")
+    if s in ("paid", "success", "succeeded", "ok", "completed", "1", "true", "yes"):
+        return True
+
+    # Prodamus may send localized descriptors instead of strict machine statuses.
+    return any(
+        marker in s
+        for marker in (
+            "успеш",
+            "оплачен",
+            "оплата прош",
+            "payment.succeeded",
+        )
+    )
 
 
 @dataclass
@@ -541,7 +553,18 @@ def _extract_webhook(payload: Mapping[str, Any]) -> _Webhook:
     nested_order_data = result_data.get("order") if isinstance(result_data.get("order"), Mapping) else {}
     nested_payment_data = result_data.get("payment") if isinstance(result_data.get("payment"), Mapping) else {}
 
-    order_id_raw = payload.get("order_id") or order_data.get("id") or nested_order_data.get("id")
+    # In Prodamus callbacks merchant order identifier can come as `order_num`,
+    # while `order_id` may be provider-internal.
+    order_id_raw = (
+        payload.get("order_num")
+        or payload.get("order_id")
+        or order_data.get("order_num")
+        or order_data.get("order_id")
+        or order_data.get("id")
+        or nested_order_data.get("order_num")
+        or nested_order_data.get("order_id")
+        or nested_order_data.get("id")
+    )
     payment_id = (
         payload.get("payment_id")
         or payload.get("invoice_id")
@@ -549,7 +572,16 @@ def _extract_webhook(payload: Mapping[str, Any]) -> _Webhook:
         or payment_data.get("id")
         or nested_payment_data.get("id")
     )
-    status = payload.get("payment_status") or payload.get("status") or payment_data.get("state") or nested_payment_data.get("state")
+    status = (
+        payload.get("payment_status")
+        or payload.get("status")
+        or payload.get("payment_status_description")
+        or payload.get("type")
+        or payment_data.get("state")
+        or payment_data.get("status")
+        or nested_payment_data.get("state")
+        or nested_payment_data.get("status")
+    )
 
     order_id: int | None = None
     if order_id_raw is not None:
