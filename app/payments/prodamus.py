@@ -99,10 +99,13 @@ class ProdamusProvider(PaymentProvider):
                 },
             )
             return None
+        # Контракт status API: order_id + secret в теле запроса.
+        # Используем form-urlencoded формат, чтобы соответствовать
+        # типичному формату endpoint Prodamus.
         payload = {"order_id": str(order.id), "secret": secret}
         try:
             with httpx.Client(timeout=10.0) as client:
-                response = client.post(status_url, json=payload)
+                response = client.post(status_url, data=payload)
                 response.raise_for_status()
         except httpx.RequestError:
             return None
@@ -196,25 +199,52 @@ def _safe_json(response: httpx.Response) -> dict[str, Any]:
     return {}
 
 def _extract_status_value(payload: Mapping[str, Any]) -> str | None:
-    for key in ("status", "payment_status"):
-        value = payload.get(key)
-        if isinstance(value, str):
-            return value
-    result = payload.get("result")
-    if isinstance(result, dict):
-        value = result.get("status")
-        if isinstance(value, str):
-            return value
-    return None
+    return _extract_first_string(payload, keys=("status", "payment_status", "state"))
 
 def _extract_payment_id_value(payload: Mapping[str, Any]) -> str | None:
-    for key in ("payment_id", "transaction_id"):
+    return _extract_first_string(
+        payload,
+        keys=("payment_id", "transaction_id", "id", "payment", "paymentId"),
+    )
+
+
+def _extract_first_string(payload: Mapping[str, Any], keys: tuple[str, ...]) -> str | None:
+    direct = _extract_string_from_mapping(payload, keys)
+    if direct:
+        return direct
+
+    for container_key in (
+        "result",
+        "data",
+        "payment",
+        "payments",
+        "order",
+        "invoice",
+        "response",
+    ):
+        nested = payload.get(container_key)
+        candidate = _extract_string_from_unknown(nested, keys)
+        if candidate:
+            return candidate
+    return None
+
+
+def _extract_string_from_unknown(value: Any, keys: tuple[str, ...]) -> str | None:
+    if isinstance(value, Mapping):
+        return _extract_first_string(value, keys)
+    if isinstance(value, list):
+        for item in value:
+            candidate = _extract_string_from_unknown(item, keys)
+            if candidate:
+                return candidate
+    return None
+
+
+def _extract_string_from_mapping(payload: Mapping[str, Any], keys: tuple[str, ...]) -> str | None:
+    for key in keys:
         value = payload.get(key)
-        if isinstance(value, str):
+        if isinstance(value, str) and value.strip():
             return value
-    result = payload.get("result")
-    if isinstance(result, dict):
-        value = result.get("payment_id") or result.get("transaction_id")
-        if isinstance(value, str):
-            return value
+        if isinstance(value, int):
+            return str(value)
     return None
