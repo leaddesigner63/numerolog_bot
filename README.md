@@ -31,6 +31,7 @@ app/
     llm_router.py     # LLM-маршрутизатор (Gemini -> ChatGPT)
     pdf_theme_config.py # карта PDF-ассетов по тарифам + fallback
     pdf_service.py    # генерация PDF и слой хранения (bucket/local)
+    report_document.py # структуризация отчёта (титул/выводы/секции/акценты) для рендера PDF
     report_safety.py  # фильтрация запрещённых слов, гарантий и красных зон
     report_service.py # сервис генерации отчёта и каркаса T0-T3
   db/                 # модели и подключение к БД

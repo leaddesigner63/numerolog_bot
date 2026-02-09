@@ -18,6 +18,7 @@ from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
 from app.core.timezone import APP_TIMEZONE, as_app_timezone, format_app_datetime, now_app_timezone
 from app.core.pdf_service import pdf_service
+from app.core.report_document import report_document_builder
 from app.db.models import (
     FreeLimit,
     Order,
@@ -775,10 +776,16 @@ def _get_report_pdf_bytes(session, report: Report) -> bytes | None:
         pdf_bytes = pdf_service.load_pdf(report.pdf_storage_key)
     if pdf_bytes is None:
         try:
+            report_document = report_document_builder.build(
+                report.report_text or "",
+                tariff=report.tariff,
+                meta=_get_report_pdf_meta(report),
+            )
             pdf_bytes = pdf_service.generate_pdf(
                 report.report_text or "",
                 tariff=report.tariff,
                 meta=_get_report_pdf_meta(report),
+                report_document=report_document,
             )
         except Exception as exc:
             logger.warning(
