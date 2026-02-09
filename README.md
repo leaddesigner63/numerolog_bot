@@ -48,6 +48,8 @@ scripts/              # вспомогательные скрипты
 docs/
   deploy/
     landing_autodeploy.md # подробный runbook по автодеплою лендинга (VPS + Nginx)
+  payments/
+    prodamus_contract.md  # контракт интеграции Prodamus (сверка полей ссылки/webhook/status)
 web/                  # one-screen лендинг для перехода в Telegram-бот
   test.html           # секции Hero/Преимущества/Тарифы/FAQ/Footer + CTA deep-link
   styles.css          # mobile-first стили (360px+, tablet, desktop)
