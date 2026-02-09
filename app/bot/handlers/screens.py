@@ -406,8 +406,8 @@ def _missing_payment_link_config(provider: PaymentProviderEnum) -> list[str]:
 def _missing_payment_status_config(provider: PaymentProviderEnum) -> list[str]:
     missing: list[str] = []
     if provider == PaymentProviderEnum.PRODAMUS:
-        if not settings.prodamus_status_url and not settings.prodamus_form_url:
-            missing.append("PRODAMUS_STATUS_URL (или PRODAMUS_FORM_URL)")
+        # Для Prodamus статус подтверждается webhook-уведомлением от формы оплаты.
+        # Дополнительный status endpoint не требуется.
         if not settings.prodamus_unified_key:
             missing.append("PRODAMUS_KEY (или PRODAMUS_API_KEY / PRODAMUS_SECRET / PRODAMUS_WEBHOOK_SECRET)")
     elif provider == PaymentProviderEnum.CLOUDPAYMENTS:

@@ -29,6 +29,10 @@ class ProdamusProvider(PaymentProvider):
         self._settings = settings
         self._logger = logging.getLogger(__name__)
 
+    @property
+    def _key(self) -> str | None:
+        return self._settings.prodamus_unified_key
+
     def create_payment_link(self, order: Order, user: User | None = None) -> PaymentLink | None:
         if not self._settings.prodamus_form_url:
             self._logger.warning(
@@ -48,9 +52,9 @@ class ProdamusProvider(PaymentProvider):
             "products[0][quantity]": "1",
             "products[0][sum]": amount,
         }
-        if self._settings.prodamus_unified_key:
+        if self._key:
             params["do"] = "link"
-            params["key"] = self._settings.prodamus_unified_key
+            params["key"] = self._key
         if user:
             params["customer_id"] = str(user.telegram_user_id)
             if user.telegram_username:
@@ -68,12 +72,12 @@ class ProdamusProvider(PaymentProvider):
         return PaymentLink(url=url)
 
     def _create_api_generated_payment_link(self, base_params: dict[str, str]) -> str | None:
-        if not self._settings.prodamus_unified_key:
+        if not self._key:
             return None
 
         api_params = dict(base_params)
         api_params["do"] = "link"
-        api_params["key"] = self._settings.prodamus_unified_key
+        api_params["key"] = self._key
 
         try:
             with httpx.Client(timeout=10.0, follow_redirects=True) as client:
@@ -85,7 +89,7 @@ class ProdamusProvider(PaymentProvider):
         return _extract_payment_link_from_response(response)
 
     def verify_webhook(self, raw_body: bytes, headers: Mapping[str, str]) -> WebhookResult:
-        secret = self._settings.prodamus_unified_key
+        secret = self._key
         payload = _parse_payload(raw_body)
         if secret:
             signature_data = _find_signature(headers, payload)
@@ -107,38 +111,11 @@ class ProdamusProvider(PaymentProvider):
         )
 
     def check_payment_status(self, order: Order) -> WebhookResult | None:
-        status_url = self._settings.prodamus_status_url or self._settings.prodamus_form_url
-        secret = self._settings.prodamus_unified_key
-        if not status_url or not secret:
-            self._logger.warning(
-                "prodamus_status_config_missing",
-                extra={
-                    "order_id": order.id,
-                    "status_url_set": bool(status_url),
-                    "secret_set": bool(secret),
-                },
-            )
-            return None
-        # Контракт status API: order_id + secret в теле запроса.
-        # Используем form-urlencoded формат, чтобы соответствовать
-        # типичному формату endpoint Prodamus.
-        payload = {"order_id": str(order.id), "secret": secret}
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                response = client.post(status_url, data=payload)
-                response.raise_for_status()
-        except httpx.RequestError:
-            return None
-        except httpx.HTTPStatusError:
-            return None
-        data = _safe_json(response)
-        status = _extract_status_value(data)
-        payment_id = _extract_payment_id_value(data)
-        return WebhookResult(
-            order_id=order.id,
-            provider_payment_id=payment_id,
-            is_paid=_is_paid_status(status),
+        self._logger.info(
+            "prodamus_status_check_disabled",
+            extra={"order_id": order.id, "reason": "webhook_only_flow"},
         )
+        return None
 
 def _find_signature(headers: Mapping[str, str], payload: Mapping[str, Any]) -> tuple[str, str] | None:
     lowered = {key.lower(): value for key, value in headers.items()}
