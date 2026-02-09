@@ -57,6 +57,9 @@ def _tariff_prices() -> dict[Tariff, int]:
 _report_wait_tasks: dict[int, asyncio.Task[None]] = {}
 
 
+_payment_wait_tasks: dict[int, asyncio.Task[None]] = {}
+
+
 def _safe_int(value: str | int | None) -> int | None:
     if value is None:
         return None
@@ -262,6 +265,54 @@ async def _edit_report_wait_message(
         reply_markup=reply_markup,
         parse_mode=parse_mode,
     )
+
+
+async def _run_payment_waiter(bot: Bot, chat_id: int, user_id: int) -> None:
+    poll_interval = max(settings.report_delay_seconds, 1)
+    while True:
+        state = screen_manager.update_state(user_id)
+        order_id = _safe_int(state.data.get("order_id"))
+        if not order_id:
+            return
+        with get_session() as session:
+            order = session.get(Order, order_id)
+            if not order:
+                return
+            screen_manager.update_state(user_id, **_refresh_order_state(order))
+            if order.status == OrderStatus.PAID:
+                _refresh_profile_state(session, user_id)
+                screen_manager.update_state(user_id, profile_flow="report")
+                await screen_manager.show_screen(
+                    bot=bot,
+                    chat_id=chat_id,
+                    user_id=user_id,
+                    screen_id="S4",
+                    trigger_type="auto",
+                    trigger_value="payment_confirmed",
+                )
+                return
+        await asyncio.sleep(poll_interval)
+
+
+async def _maybe_run_payment_waiter(callback: CallbackQuery) -> None:
+    if not callback.message:
+        return
+    user_id = callback.from_user.id
+    running_task = _payment_wait_tasks.get(user_id)
+    if running_task and not running_task.done():
+        return
+
+    async def _runner() -> None:
+        try:
+            await _run_payment_waiter(
+                bot=callback.bot,
+                chat_id=callback.message.chat.id,
+                user_id=user_id,
+            )
+        finally:
+            _payment_wait_tasks.pop(user_id, None)
+
+    _payment_wait_tasks[user_id] = asyncio.create_task(_runner())
 
 
 async def _maybe_run_report_delay(callback: CallbackQuery) -> None:
@@ -1020,6 +1071,22 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 )
                 await _safe_callback_answer(callback)
                 return
+            with get_session() as session:
+                order_id = _safe_int(state_snapshot.data.get("order_id"))
+                order = session.get(Order, order_id) if order_id else None
+                if order:
+                    screen_manager.update_state(
+                        callback.from_user.id, **_refresh_order_state(order)
+                    )
+                if order and order.status == OrderStatus.PAID:
+                    _refresh_profile_state(session, callback.from_user.id)
+                    screen_manager.update_state(callback.from_user.id, profile_flow="report")
+                    await _show_screen_for_callback(
+                        callback,
+                        screen_id="S4",
+                    )
+                    await _safe_callback_answer(callback)
+                    return
         if screen_id == "S5":
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             selected_tariff = state_snapshot.data.get("selected_tariff")
@@ -1100,6 +1167,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             callback,
             screen_id=screen_id,
         )
+        if screen_id == "S3":
+            await _maybe_run_payment_waiter(callback)
         if screen_id == "S2":
             screen_manager.update_state(callback.from_user.id, offer_seen=True)
         await _safe_callback_answer(callback)
@@ -1230,7 +1299,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 )
                 await _send_notice(
                     callback,
-                    "Оплата ещё не подтверждена. Дождитесь webhook от провайдера и нажмите «Я оплатил(а)» ещё раз.",
+                    "Оплата ещё не подтверждена. Как только провайдер подтвердит платёж, бот автоматически переведёт вас к следующему шагу.",
                 )
                 await _show_screen_for_callback(
                     callback,
