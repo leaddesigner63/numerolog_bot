@@ -107,7 +107,7 @@ class ProdamusProvider(PaymentProvider):
         )
 
     def check_payment_status(self, order: Order) -> WebhookResult | None:
-        status_url = self._settings.prodamus_status_url
+        status_url = self._settings.prodamus_status_url or self._settings.prodamus_form_url
         secret = self._settings.prodamus_unified_key
         if not status_url or not secret:
             self._logger.warning(
