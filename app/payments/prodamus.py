@@ -264,7 +264,12 @@ def _extract_payment_link_from_response(resp: httpx.Response) -> str | None:
         pass
 
     # Try HTML/text
-    return _extract_payment_link_from_html(resp.text)
+    html_link = _extract_payment_link_from_html(resp.text)
+    if html_link:
+        return html_link
+
+    # Some Prodamus setups return just a plain-text URL (without HTML wrappers).
+    return _extract_direct_url_from_text(resp.text)
 
 
 def _extract_payment_link_from_html(html: str) -> str | None:
@@ -284,6 +289,14 @@ def _extract_payment_link_from_html(html: str) -> str | None:
         m = re.search(pat, html, flags=re.IGNORECASE)
         if m:
             return m.group(1)
+    return None
+
+
+def _extract_direct_url_from_text(text: str) -> str | None:
+    for raw_url in re.findall(r"https?://[^\s\"'<>]+", text, flags=re.IGNORECASE):
+        url = raw_url.rstrip(".,;)")
+        if url:
+            return url
     return None
 
 
