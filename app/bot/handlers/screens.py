@@ -197,7 +197,8 @@ async def _run_report_delay(bot: Bot, chat_id: int, user_id: int) -> None:
         message_id = state.message_ids[-1]
         with get_session() as session:
             job = _refresh_report_job_state(session, user_id)
-        if job and job.status in {ReportJobStatus.COMPLETED, ReportJobStatus.FAILED}:
+            job_status = job.status if job else None
+        if job_status in {ReportJobStatus.COMPLETED, ReportJobStatus.FAILED}:
             return
         frame = frames[tick % len(frames)]
         raw_progress = ((tick % cycle_seconds) + 1) / cycle_seconds
