@@ -40,12 +40,26 @@ class ProdamusProvider(PaymentProvider):
 
         # For PayForm "link" generation the unified key is used as 'key' parameter.
         # (Some configs can generate link without signature, Prodamus validates by key + params.)
+        order_email = getattr(order, "email", "") or ""
+        order_phone = getattr(order, "phone", "") or ""
+        order_customer_name = getattr(order, "customer_name", "") or ""
+
+        if user is not None:
+            user_email = getattr(user, "email", "") or ""
+            user_phone = getattr(user, "phone", "") or ""
+            user_name = getattr(user, "name", "") or getattr(user, "telegram_username", "") or ""
+            order_email = order_email or user_email
+            order_phone = order_phone or user_phone
+            order_customer_name = order_customer_name or user_name
+
+        order_title = getattr(order, "title", "") or f"Тариф {getattr(order.tariff, "value", order.tariff)}"
+
         params: dict[str, str] = {
             "order_id": str(order.id),
-            "customer_email": order.email or "",
-            "customer_phone": order.phone or "",
-            "customer_extra": order.customer_name or "",
-            "products[0][name]": order.title or f"Order #{order.id}",
+            "customer_email": order_email,
+            "customer_phone": order_phone,
+            "customer_extra": order_customer_name,
+            "products[0][name]": order_title,
             "products[0][price]": f"{order.amount:.2f}",
             "products[0][quantity]": "1",
             "urlSuccess": getattr(self._settings, "payment_success_url", ""),
