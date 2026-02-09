@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request, status
 
@@ -15,59 +16,96 @@ router = APIRouter(tags=["payments"])
 logger = logging.getLogger(__name__)
 
 
+def _candidate_providers(explicit: Optional[str]) -> list[str]:
+    """Return provider names to try in order."""
+    if explicit:
+        return [explicit]
+
+    primary = settings.payment_provider
+    candidates: list[str] = [primary]
+
+    # Add common alternates (avoid duplicates)
+    for alt in (PaymentProviderEnum.PRODAMUS.value, PaymentProviderEnum.CLOUDPAYMENTS.value):
+        if alt and alt not in candidates:
+            candidates.append(alt)
+
+    return candidates
+
+
 @router.post("/webhooks/payments")
 async def handle_payment_webhook(request: Request) -> dict[str, str]:
     raw_body = await request.body()
-    provider_name = request.query_params.get("provider")
-    provider = get_payment_provider(provider_name)
+    explicit_provider = request.query_params.get("provider")
 
-    try:
-        result = provider.verify_webhook(raw_body, request.headers)
-    except ValueError as exc:
-        logger.warning(
-            "payment_webhook_verify_failed",
-            extra={
-                "provider": provider.provider.value,
-                "error": str(exc),
-                "fallback_attempt": not bool(provider_name),
-            },
-        )
-        if provider_name:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
-            ) from exc
-        fallback_provider_name = (
-            PaymentProviderEnum.CLOUDPAYMENTS.value
-            if provider.provider == PaymentProviderEnum.PRODAMUS
-            else PaymentProviderEnum.PRODAMUS.value
-        )
-        fallback_provider = get_payment_provider(fallback_provider_name)
+    last_exc: Optional[Exception] = None
+    provider = None
+    result = None
+
+    for provider_name in _candidate_providers(explicit_provider):
         try:
-            result = fallback_provider.verify_webhook(raw_body, request.headers)
-            provider = fallback_provider
-        except ValueError as fallback_exc:
+            provider = get_payment_provider(provider_name)
+            result = provider.verify_webhook(raw_body, request.headers)
+            # Some providers may return result.ok=False instead of raising
+            if getattr(result, "ok", True) is False:
+                raise ValueError("Webhook verification failed")
+            break
+        except Exception as exc:  # noqa: BLE001 - webhook endpoint must be tolerant
+            last_exc = exc
             logger.warning(
-                "payment_webhook_fallback_failed",
-                extra={"provider": fallback_provider.provider.value, "error": str(fallback_exc)},
+                "payment_webhook_verify_failed",
+                extra={
+                    "provider": provider_name,
+                    "error": str(exc),
+                    "fallback_attempt": explicit_provider is None,
+                },
             )
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, detail=str(fallback_exc)
-            ) from fallback_exc
+            # If provider explicitly specified by query param, do not fallback
+            if explicit_provider:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED, detail=str(exc)
+                ) from exc
+            continue
+
+    if provider is None or result is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(last_exc) if last_exc else "Invalid webhook",
+        )
+
+    order_id = getattr(result, "order_id", None)
+    if order_id is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing order_id")
+
+    is_paid = getattr(result, "is_paid", None)
+    if is_paid is None:
+        is_paid = bool(getattr(result, "paid", False))
+
+    provider_payment_id = getattr(result, "provider_payment_id", None)
 
     with get_session() as session:
-        order = session.get(Order, result.order_id)
+        order = session.get(Order, order_id)
         if not order:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
-        if result.is_paid:
+
+        if is_paid:
             if order.status != OrderStatus.PAID:
                 order.status = OrderStatus.PAID
                 order.paid_at = datetime.now(timezone.utc)
-            if result.provider_payment_id and not order.provider_payment_id:
-                order.provider_payment_id = result.provider_payment_id
+
+            if provider_payment_id and not order.provider_payment_id:
+                order.provider_payment_id = str(provider_payment_id)
+
+            # Persist provider used to validate this webhook
             order.provider = PaymentProviderEnum(provider.provider.value)
+
         else:
+            # Don't downgrade from PAID
             if order.status != OrderStatus.PAID:
                 order.status = OrderStatus.PENDING
+
+        session.add(order)
+        session.commit()
+
     return {"status": "ok"}
 
 
