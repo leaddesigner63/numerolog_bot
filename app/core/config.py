@@ -49,7 +49,6 @@ class Settings(BaseSettings):
     prodamus_key: str | None = None
     prodamus_api_key: str | None = None
     prodamus_secret: str | None = None
-    prodamus_status_url: str | None = None
     prodamus_webhook_secret: str | None = None
     cloudpayments_public_id: str | None = None
     cloudpayments_api_secret: str | None = None

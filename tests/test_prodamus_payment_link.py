@@ -133,6 +133,25 @@ def test_prodamus_webhook_accepts_sign_with_api_key() -> None:
     assert result.is_paid is True
 
 
+def test_prodamus_webhook_accepts_single_unified_key() -> None:
+    key = "single_key"
+    token = "abc123"
+    sign = hashlib.md5(f"{token}{key}".encode("utf-8")).hexdigest()
+    payload = (
+        '{"order_id": "101", "status": "paid", "payment_id": "p-1", '
+        f'"token": "{token}", "sign": "{sign}"'
+        "}"
+    ).encode("utf-8")
+    settings = Settings(prodamus_key=key)
+    provider = ProdamusProvider(settings)
+
+    result = provider.verify_webhook(payload, {})
+
+    assert result.order_id == 101
+    assert result.provider_payment_id == "p-1"
+    assert result.is_paid is True
+
+
 
 def test_prodamus_webhook_accepts_sign_with_unified_key() -> None:
     key = "single_key"
