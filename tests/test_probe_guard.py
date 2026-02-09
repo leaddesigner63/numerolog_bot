@@ -14,6 +14,12 @@ class ProbeGuardMiddlewareTests(unittest.TestCase):
         self.assertEqual(response.status_code, 410)
         self.assertEqual(response.json()["detail"], "Resource not available")
 
+
+    def test_root_endpoint_available_for_external_probes(self) -> None:
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "ok")
+
     def test_health_remains_available(self) -> None:
         response = self.client.get("/health")
         self.assertEqual(response.status_code, 200)
