@@ -63,6 +63,30 @@ def test_prodamus_payment_link_includes_api_key_params() -> None:
     assert "key=test_api_key" in payment_link.url
 
 
+
+
+def test_prodamus_payment_link_uses_unified_single_key() -> None:
+    settings = Settings(
+        prodamus_form_url="https://pay.example/prodamus",
+        prodamus_key="single_key",
+    )
+    provider = ProdamusProvider(settings)
+    order = Order(
+        id=203,
+        user_id=1,
+        tariff=Tariff.T1,
+        amount=990.00,
+        currency="RUB",
+        provider=PaymentProvider.PRODAMUS,
+        status=OrderStatus.CREATED,
+    )
+
+    payment_link = provider.create_payment_link(order)
+
+    assert payment_link is not None
+    assert "do=link" in payment_link.url
+    assert "key=single_key" in payment_link.url
+
 def test_prodamus_payment_link_prefers_api_generated_link(monkeypatch) -> None:
     settings = Settings(
         prodamus_form_url="https://pay.example/prodamus",
@@ -100,6 +124,26 @@ def test_prodamus_webhook_accepts_sign_with_api_key() -> None:
         "}"
     ).encode("utf-8")
     settings = Settings(prodamus_api_key=api_key)
+    provider = ProdamusProvider(settings)
+
+    result = provider.verify_webhook(payload, {})
+
+    assert result.order_id == 101
+    assert result.provider_payment_id == "p-1"
+    assert result.is_paid is True
+
+
+
+def test_prodamus_webhook_accepts_sign_with_unified_key() -> None:
+    key = "single_key"
+    token = "abc123"
+    sign = hashlib.md5(f"{token}{key}".encode("utf-8")).hexdigest()
+    payload = (
+        '{"order_id": "101", "status": "paid", "payment_id": "p-1", '
+        f'"token": "{token}", "sign": "{sign}"'
+        "}"
+    ).encode("utf-8")
+    settings = Settings(prodamus_key=key)
     provider = ProdamusProvider(settings)
 
     result = provider.verify_webhook(payload, {})

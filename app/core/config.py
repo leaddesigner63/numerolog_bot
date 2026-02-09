@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     payment_enabled: bool = True
     payment_provider: str = "prodamus"
     prodamus_form_url: str | None = None
+    prodamus_key: str | None = None
     prodamus_api_key: str | None = None
     prodamus_secret: str | None = None
     prodamus_status_url: str | None = None
@@ -77,5 +78,14 @@ class Settings(BaseSettings):
 
     env: str = "dev"
     log_level: str = "info"
+
+    @property
+    def prodamus_unified_key(self) -> str | None:
+        return (
+            self.prodamus_key
+            or self.prodamus_api_key
+            or self.prodamus_secret
+            or self.prodamus_webhook_secret
+        )
 
 settings = Settings()

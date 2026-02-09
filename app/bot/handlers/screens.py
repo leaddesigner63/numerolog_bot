@@ -406,8 +406,8 @@ def _missing_payment_status_config(provider: PaymentProviderEnum) -> list[str]:
     if provider == PaymentProviderEnum.PRODAMUS:
         if not settings.prodamus_status_url:
             missing.append("PRODAMUS_STATUS_URL")
-        if not settings.prodamus_secret and not settings.prodamus_api_key:
-            missing.append("PRODAMUS_SECRET или PRODAMUS_API_KEY")
+        if not settings.prodamus_unified_key:
+            missing.append("PRODAMUS_KEY (или PRODAMUS_API_KEY / PRODAMUS_SECRET / PRODAMUS_WEBHOOK_SECRET)")
     elif provider == PaymentProviderEnum.CLOUDPAYMENTS:
         if not settings.cloudpayments_public_id:
             missing.append("CLOUDPAYMENTS_PUBLIC_ID")
