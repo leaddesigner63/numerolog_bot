@@ -228,7 +228,7 @@ def _is_paid_status(status: str | None) -> bool:
 def _safe_json(response: httpx.Response) -> dict[str, Any]:
     try:
         data = response.json()
-    except json.JSONDecodeError:
+    except (json.JSONDecodeError, UnicodeDecodeError):
         return {}
     if isinstance(data, dict):
         return data

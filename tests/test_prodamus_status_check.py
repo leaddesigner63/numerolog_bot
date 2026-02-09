@@ -155,3 +155,24 @@ def test_prodamus_status_check_uses_form_url_when_status_url_missing(monkeypatch
             "json": None,
         }
     ]
+
+
+def test_prodamus_status_check_handles_non_utf8_response_body(monkeypatch) -> None:
+    settings = Settings(
+        prodamus_status_url="https://pay.example/status",
+        prodamus_secret="status_secret",
+    )
+    provider = ProdamusProvider(settings)
+
+    response = httpx.Response(
+        200,
+        content=b'{"status":"paid"}\xce',
+        request=httpx.Request("POST", "https://pay.example/status"),
+    )
+    monkeypatch.setattr("app.payments.prodamus.httpx.Client", lambda *args, **kwargs: _DummyClient(response))
+
+    result = provider.check_payment_status(_order())
+
+    assert result is not None
+    assert result.is_paid is False
+    assert result.provider_payment_id is None
