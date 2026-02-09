@@ -22,7 +22,7 @@ class ScreenContent:
 TARIFF_META: dict[str, dict[str, Any]] = {
     "T0": {
         "title": "Твоё новое начало",
-        "price": 0,
+        "price": settings.tariff_prices_rub["T0"],
         "bullets": [
             "структура полного отчёта (витрина)",
             "краткое резюме (5–7 пунктов)",
@@ -34,7 +34,7 @@ TARIFF_META: dict[str, dict[str, Any]] = {
     },
     "T1": {
         "title": "В чём твоя сила?",
-        "price": 560,
+        "price": settings.tariff_prices_rub["T1"],
         "bullets": [
             "А ты уже знаешь в чём твоя сила? Ты ярче, чем думаешь. ИИ уже видит твой потенциал. "
             "Он раскроет твои предрасположенности, таланты и зоны роста. "
@@ -45,7 +45,7 @@ TARIFF_META: dict[str, dict[str, Any]] = {
     },
     "T2": {
         "title": "Где твои деньги?",
-        "price": 2190,
+        "price": settings.tariff_prices_rub["T2"],
         "bullets": [
             "Беспокоишься о деньгах и будущем? Остынь!😏\n"
             "Здесь ИИ копает намного глубже: Анализирует тебя с упором на доход и моделирует сценарии "
@@ -57,7 +57,7 @@ TARIFF_META: dict[str, dict[str, Any]] = {
     },
     "T3": {
         "title": "Твой путь к себе!",
-        "price": 5930,
+        "price": settings.tariff_prices_rub["T3"],
         "bullets": [
             "А ты знаешь, что можешь достичь большего, но не представляешь, с чего начать? Хватит действовать вслепую — "
             "тебе нужен чёткий план!🗓\n"
@@ -196,10 +196,10 @@ def _format_price(state: dict[str, Any], tariff: str) -> str:
     if order_amount:
         return f"{order_amount} {order_currency}"
     # Fallback — из справочника
-    meta = TARIFF_META.get(tariff)
-    if not meta:
+    price = settings.tariff_prices_rub.get(tariff)
+    if price is None:
         return ""
-    return f"{meta.get('price')} RUB"
+    return f"{price} RUB"
 
 
 def _apply_spoiler_markdown(text: str, spoiler_text: str) -> str:

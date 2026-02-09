@@ -123,6 +123,11 @@ REPORT_DELAY_SECONDS=10
 # Report job worker (фоновые задания генерации отчёта)
 REPORT_JOB_POLL_INTERVAL_SECONDS=5
 REPORT_JOB_LOCK_TIMEOUT_SECONDS=600
+# Стоимость тарифов в рублях (настраивается через .env)
+TARIFF_T0_PRICE_RUB=0
+TARIFF_T1_PRICE_RUB=560
+TARIFF_T2_PRICE_RUB=2190
+TARIFF_T3_PRICE_RUB=5930
 # Временная блокировка LLM-ключа при ошибке авторизации (секунды):
 LLM_AUTH_ERROR_BLOCK_SECONDS=3600
 # Отдельная модель Gemini для генерации изображений экранов:
@@ -536,6 +541,7 @@ sudo systemctl restart numerolog.target
 - `PAYMENT_PROVIDER`, `PRODAMUS_FORM_URL`, `PRODAMUS_KEY` (или legacy: `PRODAMUS_API_KEY`/`PRODAMUS_SECRET`/`PRODAMUS_WEBHOOK_SECRET`),
   `PRODAMUS_STATUS_URL`, `CLOUDPAYMENTS_PUBLIC_ID`, `CLOUDPAYMENTS_API_SECRET`,
   `PAYMENT_WEBHOOK_URL`, `PAYMENT_SUCCESS_URL`, `PAYMENT_FAIL_URL`
+- `TARIFF_T0_PRICE_RUB`, `TARIFF_T1_PRICE_RUB`, `TARIFF_T2_PRICE_RUB`, `TARIFF_T3_PRICE_RUB`
 - `FREE_T0_COOLDOWN_HOURS`
 - `DATABASE_URL`, `PDF_STORAGE_BUCKET`, `PDF_STORAGE_KEY`
 - `PDF_FONT_PATH` (legacy-путь для regular, обратная совместимость)

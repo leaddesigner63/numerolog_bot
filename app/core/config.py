@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     payment_fail_url: str | None = None
 
     free_t0_cooldown_hours: int = 720
+    tariff_t0_price_rub: int = 0
+    tariff_t1_price_rub: int = 560
+    tariff_t2_price_rub: int = 2190
+    tariff_t3_price_rub: int = 5930
 
     database_url: str | None = None
     database_pool_size: int = 5
@@ -87,5 +91,14 @@ class Settings(BaseSettings):
             or self.prodamus_secret
             or self.prodamus_webhook_secret
         )
+
+    @property
+    def tariff_prices_rub(self) -> dict[str, int]:
+        return {
+            "T0": self.tariff_t0_price_rub,
+            "T1": self.tariff_t1_price_rub,
+            "T2": self.tariff_t2_price_rub,
+            "T3": self.tariff_t3_price_rub,
+        }
 
 settings = Settings()

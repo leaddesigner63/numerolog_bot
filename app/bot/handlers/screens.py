@@ -44,13 +44,15 @@ from app.payments import get_payment_provider
 router = Router()
 logger = logging.getLogger(__name__)
 
-TARIFF_PRICES = {
-    Tariff.T1: 560,
-    Tariff.T2: 2190,
-    Tariff.T3: 5930,
-}
-
 PAID_TARIFFS = {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}
+
+
+def _tariff_prices() -> dict[Tariff, int]:
+    return {
+        Tariff.T1: settings.tariff_prices_rub["T1"],
+        Tariff.T2: settings.tariff_prices_rub["T2"],
+        Tariff.T3: settings.tariff_prices_rub["T3"],
+    }
 
 _report_wait_tasks: dict[int, asyncio.Task[None]] = {}
 
@@ -889,7 +891,7 @@ def _create_order(session, user: User, tariff: Tariff) -> Order:
     order = Order(
         user_id=user.id,
         tariff=tariff,
-        amount=TARIFF_PRICES[tariff],
+        amount=_tariff_prices()[tariff],
         currency="RUB",
         provider=_get_payment_provider(),
         status=OrderStatus.CREATED,
