@@ -8,8 +8,6 @@
 | Поле | Тип / пример | Обязательность | Источник |
 |---|---|---|---|
 | `order_id` | `"123"` | обязательно | реализация (`app/payments/prodamus.py`) |
-| `order_num` | `"123"` | обязательно (в текущем контракте дублирует order) | реализация (`app/payments/prodamus.py`) |
-| `invoice_id` | `"123"` | обязательно (в текущем контракте дублирует order) | реализация (`app/payments/prodamus.py`) |
 | `amount` | `"990.00"` | обязательно | реализация (`app/payments/prodamus.py`) |
 | `sum` | `"990.00"` | обязательно (в текущем контракте дублирует amount) | реализация (`app/payments/prodamus.py`) |
 | `currency` | `"RUB"` | обязательно | реализация (`app/payments/prodamus.py`) |
@@ -20,12 +18,14 @@
 | `products[0][sum]` | `"990.00"` | обязательно | реализация (`app/payments/prodamus.py`) |
 | `do` | `"link"` | условно обязательно (когда используется API-ключ) | реализация (`app/payments/prodamus.py`) |
 | `key` | `"<api_key>"` | условно обязательно (когда используется API-ключ) | реализация (`app/payments/prodamus.py`) |
-| `callback_url` | `"https://bot.example/webhooks/payments"` | рекомендуется как обязательное для backend-потока оплаты | ТЗ + реализация |
+| `callback_url` | `"https://bot.example/webhooks/payments"` | обязательно для backend-потока оплаты | ТЗ + реализация |
+| `success_url` | `"https://example.com/payments/success"` | опционально (редирект при успешной оплате) | реализация (`app/payments/prodamus.py`) |
+| `fail_url` | `"https://example.com/payments/fail"` | опционально (редирект при ошибке/отмене оплаты) | реализация (`app/payments/prodamus.py`) |
 | `customer_id` | `"123456789"` | опционально | реализация (`app/payments/prodamus.py`) |
 | `customer_username` | `"username"` | опционально | реализация (`app/payments/prodamus.py`) |
 
 ### Что обязательно сверить в кабинете Prodamus
-- Набор реально обязательных полей среди `order_id`/`order_num`/`invoice_id` и `amount`/`sum`.
+- Набор реально обязательных полей среди `order_id` и `amount`/`sum`.
 - Требуется ли строго `products` для платёжной формы в вашем тарифе/типе интеграции.
 - Нужен ли отдельный параметр успеха/неуспеха редиректа (если используется).
 
@@ -33,7 +33,7 @@
 
 | Поле | Тип / пример | Обязательность | Источник |
 |---|---|---|---|
-| `order_id` (или `order`, `order_num`) | `"123"` | обязательно | реализация (`_extract_webhook`) |
+| `order_id` (или `order`) | `"123"` | обязательно | реализация (`_extract_webhook`) |
 | `status` (или `payment_status`) | `"paid"` | обязательно для определения оплаты | реализация (`_extract_webhook`, `_is_paid_status`) |
 | `payment_id` (или `transaction_id`) | `"p-1"` | желательно (идентификатор операции) | реализация (`_extract_webhook`) |
 | Подпись (`X-Prodamus-Signature` / `X-Signature` / `X-Webhook-Signature` / `signature` / `sign`) | строка | обязательно при включённой проверке секрета | реализация (`verify_webhook`) |
@@ -73,7 +73,7 @@
 2. **Подпись ищется в нескольких заголовках и полях payload одновременно.**
    Это удобно для миграций, но может быть избыточным и менее строгим, чем требуется в проде.
 
-3. **Платёжная ссылка отправляет дублирующиеся поля (`order_id` + `order_num` + `invoice_id`, `amount` + `sum`).**
+3. **Платёжная ссылка отправляет дублирующие сумму поля (`amount` + `sum`).**
    Такое поведение работает как «универсальный» вариант, но нуждается в сверке с официально обязательным минимумом.
 
 4. **Проверка статуса оплаты завязана только на `order_id` + `secret`.**

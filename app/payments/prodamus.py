@@ -41,8 +41,6 @@ class ProdamusProvider(PaymentProvider):
         amount = f"{order.amount:.2f}"
         params = {
             "order_id": str(order.id),
-            "order_num": str(order.id),
-            "invoice_id": str(order.id),
             "amount": amount,
             "sum": amount,
             "currency": order.currency,
@@ -61,6 +59,10 @@ class ProdamusProvider(PaymentProvider):
                 params["customer_username"] = user.telegram_username
         if self._settings.payment_webhook_url:
             params["callback_url"] = self._settings.payment_webhook_url
+        if self._settings.payment_success_url:
+            params["success_url"] = self._settings.payment_success_url
+        if self._settings.payment_fail_url:
+            params["fail_url"] = self._settings.payment_fail_url
         url = f"{self._settings.prodamus_form_url}?{urlencode(params)}"
         return PaymentLink(url=url)
 
@@ -157,7 +159,7 @@ def _parse_payload(raw_body: bytes) -> dict[str, Any]:
 
 
 def _extract_webhook(payload: Mapping[str, Any]) -> ProdamusWebhook:
-    order_id = payload.get("order_id") or payload.get("order") or payload.get("order_num")
+    order_id = payload.get("order_id") or payload.get("order")
     if order_id is None:
         raise ValueError("order_id is missing in Prodamus payload")
     payment_id = payload.get("payment_id") or payload.get("transaction_id")

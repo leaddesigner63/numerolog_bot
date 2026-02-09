@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     cloudpayments_public_id: str | None = None
     cloudpayments_api_secret: str | None = None
     payment_webhook_url: str | None = None
+    payment_success_url: str | None = None
+    payment_fail_url: str | None = None
 
     free_t0_cooldown_hours: int = 720
 
