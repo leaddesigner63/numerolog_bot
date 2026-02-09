@@ -72,8 +72,16 @@ class ProdamusProvider(PaymentProvider):
 
         order_title = getattr(order, "title", "") or f"Тариф {getattr(order.tariff, 'value', order.tariff)}"
 
-        success_url = _as_non_empty_str(getattr(self._settings, "payment_success_url", None))
-        fail_url = _as_non_empty_str(getattr(self._settings, "payment_fail_url", None))
+        success_url = _build_bot_start_url(
+            bot_username=_as_non_empty_str(getattr(self._settings, "telegram_bot_username", None)),
+            payload=f"paywait_{order.id}",
+            fallback_url=_as_non_empty_str(getattr(self._settings, "payment_success_url", None)),
+        )
+        fail_url = _build_bot_start_url(
+            bot_username=_as_non_empty_str(getattr(self._settings, "telegram_bot_username", None)),
+            payload=f"payfail_{order.id}",
+            fallback_url=_as_non_empty_str(getattr(self._settings, "payment_fail_url", None)),
+        )
         webhook_url = _as_non_empty_str(getattr(self._settings, "payment_webhook_url", None))
 
         params: dict[str, str] = {
@@ -188,6 +196,15 @@ class ProdamusProvider(PaymentProvider):
             return None
 
         return _extract_payment_link_from_response(resp)
+
+
+def _build_bot_start_url(bot_username: str, payload: str, fallback_url: str) -> str:
+    if not bot_username:
+        return fallback_url
+    clean_username = bot_username.lstrip("@")
+    if not clean_username:
+        return fallback_url
+    return f"https://t.me/{clean_username}?start={payload}"
 
 
 def _find_signature(headers: Mapping[str, str], payload: Mapping[str, Any]) -> tuple[str, str] | None:

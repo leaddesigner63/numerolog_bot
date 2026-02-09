@@ -539,7 +539,8 @@ sudo systemctl restart numerolog.target
 - `OPENAI_API_KEY`, `OPENAI_API_KEYS`, `OPENAI_MODEL`
 - `PAYMENT_PROVIDER`, `PRODAMUS_FORM_URL`, `PRODAMUS_KEY` (или legacy: `PRODAMUS_API_KEY`/`PRODAMUS_SECRET`/`PRODAMUS_WEBHOOK_SECRET`),
   `CLOUDPAYMENTS_PUBLIC_ID`, `CLOUDPAYMENTS_API_SECRET`,
-  `PAYMENT_WEBHOOK_URL`, `PAYMENT_SUCCESS_URL`, `PAYMENT_FAIL_URL`
+  `PAYMENT_WEBHOOK_URL`, `PAYMENT_SUCCESS_URL`, `PAYMENT_FAIL_URL`, `TELEGRAM_BOT_USERNAME`
+- `TELEGRAM_BOT_USERNAME` (без/с `@`) — если задан, Prodamus `success_url`/`fail_url` формируются как deep-link в бота: `https://t.me/<username>?start=paywait_<order_id>` и `https://t.me/<username>?start=payfail_<order_id>`. Если не задан, используются `PAYMENT_SUCCESS_URL` и `PAYMENT_FAIL_URL`.
 - `TARIFF_T0_PRICE_RUB`, `TARIFF_T1_PRICE_RUB`, `TARIFF_T2_PRICE_RUB`, `TARIFF_T3_PRICE_RUB`
 - `FREE_T0_COOLDOWN_HOURS`
 - `DATABASE_URL`, `PDF_STORAGE_BUCKET`, `PDF_STORAGE_KEY`
