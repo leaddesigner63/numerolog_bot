@@ -521,7 +521,7 @@ sudo systemctl restart numerolog.target
 - `BOT_TOKEN` — токен Telegram-бота.
 - `GEMINI_API_KEY`/`GEMINI_API_KEYS`, `OPENAI_API_KEY`/`OPENAI_API_KEYS` — ключи LLM (если ключей нет и в `.env`,
   и в админке, генерация отчёта блокируется и показывается экран “Сервис временно недоступен”).
-- `PRODAMUS_FORM_URL` + `PRODAMUS_API_KEY` (или `CLOUDPAYMENTS_PUBLIC_ID`) — параметры для формирования платёжной ссылки (при отсутствии бот сообщает, что оплата недоступна).
+- `PRODAMUS_FORM_URL` + `PRODAMUS_KEY` (или legacy `PRODAMUS_API_KEY`) / `CLOUDPAYMENTS_PUBLIC_ID` — параметры для формирования платёжной ссылки (при отсутствии бот сообщает, что оплата недоступна).
   Если в веб-админке заведены LLM-ключи, значения из `.env` для LLM игнорируются.
 - `ADMIN_LOGIN` — логин доступа к веб-админке.
 - `ADMIN_PASSWORD` — пароль доступа к веб-админке.
@@ -533,7 +533,7 @@ sudo systemctl restart numerolog.target
 - `SCREEN_IMAGES_DIR` (путь к локальному хранилищу изображений экранов)
 - `GEMINI_API_KEY`, `GEMINI_API_KEYS`, `GEMINI_MODEL`, `GEMINI_IMAGE_MODEL`
 - `OPENAI_API_KEY`, `OPENAI_API_KEYS`, `OPENAI_MODEL`
-- `PAYMENT_PROVIDER`, `PRODAMUS_FORM_URL`, `PRODAMUS_API_KEY`, `PRODAMUS_SECRET`, `PRODAMUS_WEBHOOK_SECRET`,
+- `PAYMENT_PROVIDER`, `PRODAMUS_FORM_URL`, `PRODAMUS_KEY` (или legacy: `PRODAMUS_API_KEY`/`PRODAMUS_SECRET`/`PRODAMUS_WEBHOOK_SECRET`),
   `PRODAMUS_STATUS_URL`, `CLOUDPAYMENTS_PUBLIC_ID`, `CLOUDPAYMENTS_API_SECRET`,
   `PAYMENT_WEBHOOK_URL`, `PAYMENT_SUCCESS_URL`, `PAYMENT_FAIL_URL`
 - `FREE_T0_COOLDOWN_HOURS`
