@@ -23,11 +23,13 @@ app/
     markdown.py       # рендеринг Markdown-разметки в Telegram-HTML
     questionnaire/    # конфиг и вспомогательные модули анкеты
   assets/
+    pdf/              # PDF-ассеты (backgrounds/overlays/icons + требования)
     screen_images/    # изображения экранов (папки S0/S1/... и S2_T1 и т.д.)
   core/               # конфигурация и общие утилиты
     gemini_image_service.py # сервис генерации изображений через Gemini
     llm_key_store.py  # хранилище и статистика LLM API-ключей (админка -> рантайм)
     llm_router.py     # LLM-маршрутизатор (Gemini -> ChatGPT)
+    pdf_theme_config.py # карта PDF-ассетов по тарифам + fallback
     pdf_service.py    # генерация PDF и слой хранения (bucket/local)
     report_safety.py  # фильтрация запрещённых слов, гарантий и красных зон
     report_service.py # сервис генерации отчёта и каркаса T0-T3
@@ -630,4 +632,12 @@ Workflow по умолчанию запускается на push в `main` и �
 - Документация по UTM, KPI и валидации: `docs/landing/analytics.md`.
 - Frontend автоматически формирует `start` для Telegram deep-link с `source/campaign/placement`.
 - Отправляются события: `landing_hero_view`, `landing_cta_click`, `landing_tariff_click`, `landing_faq_reach` (через `dataLayer`/`gtag`, если они подключены).
+
+
+
+## PDF-ассеты и требования
+
+- Карта ассетов по тарифам и fallback-слоям: `app/core/pdf_theme_config.py`.
+- Каталоги ассетов: `app/assets/pdf/backgrounds/`, `app/assets/pdf/overlays/`, `app/assets/pdf/icons/`.
+- Полные технические требования и naming convention: `app/assets/pdf/ASSETS_REQUIREMENTS.md`.
 
