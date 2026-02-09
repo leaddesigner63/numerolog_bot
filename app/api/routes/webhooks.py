@@ -32,10 +32,33 @@ def _candidate_providers(explicit: Optional[str]) -> list[str]:
     return candidates
 
 
+def _is_prodamus_probe(explicit_provider: Optional[str], raw_body: bytes, headers: dict[str, str]) -> bool:
+    """Allow Prodamus test probe requests without payment data.
+
+    Prodamus can send a connectivity check with `Sign: test` and arbitrary
+    payload (for example `a=1`). This request does not contain `order_id`
+    and must not affect order state.
+    """
+    if explicit_provider != PaymentProviderEnum.PRODAMUS.value:
+        return False
+
+    sign = headers.get("sign", "").strip().lower()
+    if sign != "test":
+        return False
+
+    body = raw_body.decode("utf-8", errors="ignore")
+    return "order_id" not in body
+
+
 @router.post("/webhooks/payments")
 async def handle_payment_webhook(request: Request) -> dict[str, str]:
     raw_body = await request.body()
     explicit_provider = request.query_params.get("provider")
+
+    lowered_headers = {str(k).lower(): str(v) for k, v in request.headers.items()}
+    if _is_prodamus_probe(explicit_provider, raw_body, lowered_headers):
+        logger.info("prodamus_probe_webhook_accepted")
+        return {"status": "ok"}
 
     last_exc: Optional[Exception] = None
     provider = None
