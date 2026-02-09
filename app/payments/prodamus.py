@@ -213,12 +213,38 @@ def _parse_payload(raw_body: bytes) -> dict[str, Any]:
         return {}
 
 def _extract_webhook(payload: Mapping[str, Any]) -> ProdamusWebhook:
-    order_id = payload.get("order_id") or payload.get("order")
-    if order_id is None:
+    order_id_value = _extract_first_string(
+        payload,
+        keys=("order_id", "order", "orderId", "invoice_id", "invoiceId", "num"),
+    )
+    if order_id_value is None:
+        nested_order = payload.get("order") or payload.get("invoice")
+        order_id_value = _extract_string_from_unknown(nested_order, ("id", "order_id", "num"))
+    if order_id_value is None:
+        for container_key in ("result", "data", "response"):
+            container = payload.get(container_key)
+            if not isinstance(container, Mapping):
+                continue
+            nested_order = container.get("order") or container.get("invoice")
+            order_id_value = _extract_string_from_unknown(
+                nested_order,
+                ("id", "order_id", "num"),
+            )
+            if order_id_value:
+                break
+    if order_id_value is None:
         raise ValueError("order_id is missing in Prodamus payload")
-    payment_id = payload.get("payment_id") or payload.get("transaction_id")
-    status = payload.get("status") or payload.get("payment_status")
-    return ProdamusWebhook(order_id=int(order_id), payment_id=payment_id, status=status)
+    try:
+        order_id = int(order_id_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("order_id is invalid in Prodamus payload") from exc
+
+    payment_id = _extract_first_string(
+        payload,
+        keys=("payment_id", "transaction_id", "id", "payment", "paymentId"),
+    )
+    status = _extract_first_string(payload, keys=("status", "payment_status", "state"))
+    return ProdamusWebhook(order_id=order_id, payment_id=payment_id, status=status)
 
 def _is_paid_status(status: str | None) -> bool:
     if not status:

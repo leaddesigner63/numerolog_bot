@@ -222,3 +222,28 @@ def test_prodamus_webhook_rejects_wrong_payload_secret_without_signature() -> No
         assert str(exc) == "Missing Prodamus signature"
     else:
         raise AssertionError("Expected missing signature error")
+
+
+def test_prodamus_webhook_accepts_nested_order_id_payload() -> None:
+    settings = Settings()
+    provider = ProdamusProvider(settings)
+    payload = b'{"result": {"order": {"id": "445"}, "payment": {"state": "paid", "id": "pm-445"}}}'
+
+    result = provider.verify_webhook(payload, {})
+
+    assert result.order_id == 445
+    assert result.provider_payment_id == "pm-445"
+    assert result.is_paid is True
+
+
+def test_prodamus_webhook_rejects_non_numeric_order_id() -> None:
+    settings = Settings()
+    provider = ProdamusProvider(settings)
+    payload = b'{"order_id": "abc", "status": "paid", "payment_id": "p-1"}'
+
+    try:
+        provider.verify_webhook(payload, {})
+    except ValueError as exc:
+        assert str(exc) == "order_id is invalid in Prodamus payload"
+    else:
+        raise AssertionError("Expected invalid order_id error")
