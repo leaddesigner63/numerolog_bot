@@ -4,7 +4,6 @@ import hashlib
 
 from app.payments.prodamus import ProdamusProvider
 
-
 def test_prodamus_payment_link_contains_invoice_data() -> None:
     settings = Settings(
         prodamus_form_url="https://pay.example/prodamus",
@@ -40,7 +39,6 @@ def test_prodamus_payment_link_contains_invoice_data() -> None:
     assert "customer_id=777000" in payment_link.url
     assert "customer_username=demo_user" in payment_link.url
 
-
 def test_prodamus_payment_link_includes_api_key_params() -> None:
     settings = Settings(
         prodamus_form_url="https://pay.example/prodamus",
@@ -63,7 +61,6 @@ def test_prodamus_payment_link_includes_api_key_params() -> None:
     assert "do=link" in payment_link.url
     assert "key=test_api_key" in payment_link.url
 
-
 def test_prodamus_webhook_accepts_sign_with_api_key() -> None:
     api_key = "test_api_key"
     token = "abc123"
@@ -81,3 +78,19 @@ def test_prodamus_webhook_accepts_sign_with_api_key() -> None:
     assert result.order_id == 101
     assert result.provider_payment_id == "p-1"
     assert result.is_paid is True
+
+def test_prodamus_webhook_rejects_invalid_signature() -> None:
+    settings = Settings(prodamus_api_key="test_api_key")
+    provider = ProdamusProvider(settings)
+    payload = (
+        '{"order_id": "101", "status": "paid", "payment_id": "p-1", '
+        '"token": "abc123", "sign": "invalid"'
+        "}"
+    ).encode("utf-8")
+
+    try:
+        provider.verify_webhook(payload, {})
+    except ValueError as exc:
+        assert str(exc) == "Invalid Prodamus signature"
+    else:
+        raise AssertionError("Expected invalid signature error")
