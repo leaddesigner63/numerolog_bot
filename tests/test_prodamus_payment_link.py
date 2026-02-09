@@ -114,6 +114,21 @@ def test_prodamus_payment_link_prefers_api_generated_link(monkeypatch) -> None:
     assert payment_link is not None
     assert payment_link.url == "https://payform.ru/b7aCNPs/"
 
+
+
+def test_extract_payment_link_from_response_supports_plain_text_url() -> None:
+    from httpx import Request, Response
+    from app.payments import prodamus as prodamus_module
+
+    response = Response(
+        200,
+        request=Request("GET", "https://pay.example/prodamus"),
+        content=b"https://payform.ru/5kaCYbD/",
+    )
+
+    assert prodamus_module._extract_payment_link_from_response(response) == "https://payform.ru/5kaCYbD/"
+
+
 def test_prodamus_webhook_accepts_sign_with_api_key() -> None:
     api_key = "test_api_key"
     token = "abc123"
