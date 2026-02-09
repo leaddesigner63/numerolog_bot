@@ -466,7 +466,7 @@ sudo systemctl restart numerolog.target
 - По умолчанию PDF сохраняются локально в каталог `storage/pdfs` (или другой путь, заданный через `PDF_STORAGE_KEY`).
 - Если указать `PDF_STORAGE_BUCKET`, файлы сохраняются в S3-совместимом бакете. `PDF_STORAGE_KEY` используется как префикс ключа.
 - Для bucket-хранилища задайте переменные `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION` и при необходимости `AWS_ENDPOINT_URL`.
-- Для корректной кириллицы задайте `PDF_FONT_PATH` (например, `/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf`): при генерации PDF используется этот пользовательский шрифт, а при отсутствии файла — встроенный резервный.
+- Для корректной кириллицы задайте `PDF_FONT_REGULAR_PATH`, `PDF_FONT_BOLD_PATH`, `PDF_FONT_ACCENT_PATH` (например, семейство DejaVu). Для обратной совместимости поддерживается и `PDF_FONT_PATH` как источник regular. Если часть гарнитур недоступна, генерация не прерывается: сервис переключает роли шрифтов на доступные fallback-варианты.
 - PDF генерируется автоматически сразу после формирования отчёта, а повторные скачивания используют сохранённый `reports.pdf_storage_key` (если доступно хранилище). Кнопка «Выгрузить PDF» остаётся для ручной повторной выдачи.
 - При переходе на следующий экран PDF-сообщение автоматически удаляется, а пользователь получает уведомление о сохранении отчёта в личном кабинете.
 - Если `PDF_STORAGE_BUCKET` не задан, S3-хранилище не удалось инициализировать (например, отсутствует `boto3`) или запись в бакет завершилась ошибкой, сервис автоматически использует локальный каталог и всё равно сохраняет `reports.pdf_storage_key`.
@@ -533,7 +533,8 @@ sudo systemctl restart numerolog.target
   `PAYMENT_WEBHOOK_URL`
 - `FREE_T0_COOLDOWN_HOURS`
 - `DATABASE_URL`, `PDF_STORAGE_BUCKET`, `PDF_STORAGE_KEY`
-- `PDF_FONT_PATH` (путь к TTF-шрифту для PDF, например DejaVuSans)
+- `PDF_FONT_PATH` (legacy-путь для regular, обратная совместимость)
+- `PDF_FONT_REGULAR_PATH`, `PDF_FONT_BOLD_PATH`, `PDF_FONT_ACCENT_PATH`
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_ENDPOINT_URL` (если используете bucket)
 - `ENV`, `LOG_LEVEL`
 - `MONITORING_WEBHOOK_URL` (вебхук мониторинга для события `report_generate_failed`)

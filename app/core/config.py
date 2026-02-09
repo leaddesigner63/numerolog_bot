@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     pdf_storage_bucket: str | None = None
     pdf_storage_key: str | None = None
     pdf_font_path: str | None = None
+    pdf_font_regular_path: str | None = None
+    pdf_font_bold_path: str | None = None
+    pdf_font_accent_path: str | None = None
 
     monitoring_webhook_url: str | None = None
     admin_login: str | None = None
