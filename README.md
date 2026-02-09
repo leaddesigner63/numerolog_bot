@@ -258,7 +258,7 @@ bash scripts/test.sh
 - оплата → генерация,
 - регрессионные сценарии платёжных переходов (`payment:paid`, `profile:save`, `report:retry`) c проверкой правил «только после paid» и «одна оплата — один отчёт»,
 - fallback LLM,
-- webhook-валидация провайдеров (для Prodamus — каноничный `md5(token+secret)` + ограниченные legacy-fallback из заголовков),
+- webhook-валидация провайдеров (для Prodamus — каноничный `md5(token+secret)`, fallback по заголовкам и режим единого ключа через payload-secret),
 - идемпотентная обработка повторной доставки webhook по одному `order_id` (повтор не должен ломать состояние заказа),
 - повторная выдача PDF.
 
@@ -521,7 +521,7 @@ sudo systemctl restart numerolog.target
 - `BOT_TOKEN` — токен Telegram-бота.
 - `GEMINI_API_KEY`/`GEMINI_API_KEYS`, `OPENAI_API_KEY`/`OPENAI_API_KEYS` — ключи LLM (если ключей нет и в `.env`,
   и в админке, генерация отчёта блокируется и показывается экран “Сервис временно недоступен”).
-- `PRODAMUS_FORM_URL` + `PRODAMUS_KEY` (или legacy `PRODAMUS_API_KEY`) / `CLOUDPAYMENTS_PUBLIC_ID` — параметры для формирования платёжной ссылки (при отсутствии бот сообщает, что оплата недоступна).
+- `PRODAMUS_FORM_URL` + `PRODAMUS_KEY` (одного ключа достаточно для ссылок/webhook/status; legacy: `PRODAMUS_API_KEY`) / `CLOUDPAYMENTS_PUBLIC_ID` — параметры для формирования платёжной ссылки (при отсутствии бот сообщает, что оплата недоступна).
   Если в веб-админке заведены LLM-ключи, значения из `.env` для LLM игнорируются.
 - `ADMIN_LOGIN` — логин доступа к веб-админке.
 - `ADMIN_PASSWORD` — пароль доступа к веб-админке.
