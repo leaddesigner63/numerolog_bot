@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     )
 
     bot_token: str | None = None
+    telegram_bot_username: str | None = None
     webhook_url: str | None = None
 
     offer_url: str | None = None

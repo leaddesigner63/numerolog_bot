@@ -40,6 +40,34 @@ def test_prodamus_payment_link_contains_invoice_data() -> None:
     assert "customer_id=777000" in payment_link.url
     assert "customer_username=demo_user" in payment_link.url
 
+
+
+def test_prodamus_payment_link_uses_bot_deeplink_urls_when_username_configured() -> None:
+    settings = Settings(
+        prodamus_form_url="https://pay.example/prodamus",
+        telegram_bot_username="@demo_bot",
+        payment_success_url="https://bot.example/payments/success",
+        payment_fail_url="https://bot.example/payments/fail",
+    )
+    provider = ProdamusProvider(settings)
+    order = Order(
+        id=303,
+        user_id=1,
+        tariff=Tariff.T1,
+        amount=990.00,
+        currency="RUB",
+        provider=PaymentProvider.PRODAMUS,
+        status=OrderStatus.CREATED,
+    )
+
+    payment_link = provider.create_payment_link(order)
+
+    assert payment_link is not None
+    assert "success_url=https%3A%2F%2Ft.me%2Fdemo_bot%3Fstart%3Dpaywait_303" in payment_link.url
+    assert "urlSuccess=https%3A%2F%2Ft.me%2Fdemo_bot%3Fstart%3Dpaywait_303" in payment_link.url
+    assert "fail_url=https%3A%2F%2Ft.me%2Fdemo_bot%3Fstart%3Dpayfail_303" in payment_link.url
+    assert "urlReturn=https%3A%2F%2Ft.me%2Fdemo_bot%3Fstart%3Dpayfail_303" in payment_link.url
+
 def test_prodamus_payment_link_includes_api_key_params() -> None:
     settings = Settings(
         prodamus_form_url="https://pay.example/prodamus",
