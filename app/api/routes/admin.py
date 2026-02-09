@@ -373,6 +373,16 @@ def admin_ui(request: Request) -> HTMLResponse:
     td.copyable-cell:hover {
       background: rgba(59, 130, 246, 0.12);
     }
+    td.copyable-cell .cell-content {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      overflow: hidden;
+      white-space: pre-wrap;
+      word-break: break-word;
+      line-height: 1.3;
+      max-height: calc(1.3em * 3);
+    }
     .copy-toast {
       position: fixed;
       right: 24px;
@@ -1615,6 +1625,9 @@ def admin_ui(request: Request) -> HTMLResponse:
             : normalizeValue(row[column.key] ?? "—");
           const isCopyable = column.copyable !== false;
           const cellClass = isCopyable ? "copyable-cell" : "";
+          if (isCopyable) {
+            return `<td class="${cellClass}"><div class="cell-content">${cellValue || "—"}</div></td>`;
+          }
           return `<td class="${cellClass}">${cellValue || "—"}</td>`;
         }).join("");
         const rowId = rowIdentifier(row);
