@@ -37,12 +37,24 @@ class ProdamusProvider(PaymentProvider):
             )
             return None
         description = f"Тариф {order.tariff.value}"
+        amount = f"{order.amount:.2f}"
         params = {
             "order_id": str(order.id),
-            "amount": f"{order.amount:.2f}",
+            "order_num": str(order.id),
+            "invoice_id": str(order.id),
+            "amount": amount,
+            "sum": amount,
             "currency": order.currency,
             "description": description,
+            "products[0][name]": description,
+            "products[0][price]": amount,
+            "products[0][quantity]": "1",
+            "products[0][sum]": amount,
         }
+        if user:
+            params["customer_id"] = str(user.telegram_user_id)
+            if user.telegram_username:
+                params["customer_username"] = user.telegram_username
         if self._settings.payment_webhook_url:
             params["callback_url"] = self._settings.payment_webhook_url
         url = f"{self._settings.prodamus_form_url}?{urlencode(params)}"
