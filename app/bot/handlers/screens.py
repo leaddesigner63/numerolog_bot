@@ -1689,6 +1689,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if (
         callback.data.startswith("report:delete:")
         and callback.data != "report:delete:confirm"
+        and callback.data != "report:delete:confirm_all"
     ):
         report_id = _safe_int(callback.data.split("report:delete:")[-1])
         if not report_id:
@@ -1706,7 +1707,34 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 callback.from_user.id,
                 report_meta=_report_meta_payload(report),
                 report_text=report.report_text,
+                report_delete_scope="single",
             )
+        await _show_screen_for_callback(
+            callback,
+            screen_id="S14",
+        )
+        await _safe_callback_answer(callback)
+        return
+
+    if callback.data == "report:delete_all":
+        with get_session() as session:
+            _refresh_reports_list_state(session, callback.from_user.id)
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        reports = state_snapshot.data.get("reports") or []
+        if not reports:
+            await _send_notice(callback, "Список отчётов уже пуст.")
+            await _show_screen_for_callback(
+                callback,
+                screen_id="S12",
+            )
+            await _safe_callback_answer(callback)
+            return
+        screen_manager.update_state(
+            callback.from_user.id,
+            report_delete_scope="all",
+            report_meta=None,
+            report_text=None,
+        )
         await _show_screen_for_callback(
             callback,
             screen_id="S14",
@@ -1736,8 +1764,35 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             callback.from_user.id,
             report_text=None,
             report_meta=None,
+            report_delete_scope=None,
         )
         await _send_notice(callback, "Отчёт удалён.")
+        await _show_screen_for_callback(
+            callback,
+            screen_id="S12",
+        )
+        await _safe_callback_answer(callback)
+        return
+
+    if callback.data == "report:delete:confirm_all":
+        deleted_reports_count = 0
+        with get_session() as session:
+            reports = _get_reports_for_user(session, callback.from_user.id)
+            for report in reports:
+                pdf_service.delete_pdf(report.pdf_storage_key)
+                session.delete(report)
+                deleted_reports_count += 1
+            _refresh_reports_list_state(session, callback.from_user.id)
+        screen_manager.update_state(
+            callback.from_user.id,
+            report_text=None,
+            report_meta=None,
+            report_delete_scope=None,
+        )
+        if deleted_reports_count:
+            await _send_notice(callback, "Все отчёты удалены.")
+        else:
+            await _send_notice(callback, "Список отчётов уже пуст.")
         await _show_screen_for_callback(
             callback,
             screen_id="S12",
