@@ -26,5 +26,21 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertNotIn("payment:paid", callback_values)
 
 
+    def test_s3_shows_processing_notice_when_returned_from_payment_form(self) -> None:
+        content = screen_s3(
+            {
+                "selected_tariff": "T1",
+                "order_id": "42",
+                "order_status": "created",
+                "order_amount": "560",
+                "order_currency": "RUB",
+                "payment_url": "https://example.com/pay",
+                "payment_processing_notice": True,
+            }
+        )
+
+        self.assertIn("Платеж обрабатывается, пожалуйста подождите.", content.messages[0])
+
+
 if __name__ == "__main__":
     unittest.main()

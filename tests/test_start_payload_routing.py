@@ -100,6 +100,7 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.data.get("order_id"), str(order_id))
         self.assertEqual(snapshot.data.get("order_status"), OrderStatus.CREATED.value)
         self.assertEqual(snapshot.data.get("selected_tariff"), Tariff.T2.value)
+        self.assertTrue(snapshot.data.get("payment_processing_notice"))
 
     async def test_start_routes_to_s4_when_order_is_paid(self) -> None:
         order_id = self._create_order(1, OrderStatus.PAID)
@@ -110,6 +111,7 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S4")
         snapshot = screen_manager.update_state(1001)
         self.assertTrue(snapshot.data.get("s4_no_inline_keyboard"))
+        self.assertFalse(snapshot.data.get("payment_processing_notice"))
 
     async def test_start_falls_back_to_s0_for_foreign_order(self) -> None:
         order_id = self._create_order(2, OrderStatus.CREATED)

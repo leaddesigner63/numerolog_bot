@@ -358,14 +358,20 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
 
     offer_url = settings.offer_url
     offer_link = f"[офертой]({offer_url})" if offer_url else "офертой"
-    text_parts = [
+    payment_processing_notice = bool(state.get("payment_processing_notice"))
+
+    text_parts = []
+    if payment_processing_notice:
+        text_parts.append("Платеж обрабатывается, пожалуйста подождите.\n\n")
+
+    text_parts.append(
         f"Оплата тарифа {selected_tariff}.\n\n"
         "Перед оплатой: сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
         "Возвратов нет.\n\n"
         f"Оплачивая, вы подтверждаете согласие с {offer_link}.\n"
         "После оплаты бот автоматически проверит статус и переведёт вас к следующему шагу."
         f"{order_block}"
-    ]
+    )
     if not payment_url:
         text_parts.append("\n\nПлатёжная ссылка пока недоступна. Проверьте настройки провайдера.")
 
