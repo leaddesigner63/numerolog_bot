@@ -1036,6 +1036,15 @@ def screen_s12(state: dict[str, Any]) -> ScreenContent:
                 ),
             ]
         )
+    if reports:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Удалить все отчёты", "🗑️"),
+                    callback_data="report:delete_all",
+                )
+            ]
+        )
     rows.append(
         [
             InlineKeyboardButton(
@@ -1154,21 +1163,32 @@ def screen_s15(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s14(state: dict[str, Any]) -> ScreenContent:
+    delete_scope = state.get("report_delete_scope")
     report_meta = state.get("report_meta") or {}
     report_id = report_meta.get("id", "—")
-    text = _with_screen_prefix(
-        "S14",
-        f"Удалить отчёт #{report_id}? Это действие нельзя отменить.",
-    )
+    if delete_scope == "all":
+        text = _with_screen_prefix(
+            "S14",
+            "Удалить все отчёты? Это действие нельзя отменить.",
+        )
+        confirm_callback = "report:delete:confirm_all"
+        cancel_callback = "screen:S12"
+    else:
+        text = _with_screen_prefix(
+            "S14",
+            f"Удалить отчёт #{report_id}? Это действие нельзя отменить.",
+        )
+        confirm_callback = "report:delete:confirm"
+        cancel_callback = "screen:S13"
     rows = [
         [
             InlineKeyboardButton(
                 text=_with_button_icons("Удалить", "✅"),
-                callback_data="report:delete:confirm",
+                callback_data=confirm_callback,
             ),
             InlineKeyboardButton(
                 text=_with_button_icons("Отмена", "❌"),
-                callback_data="screen:S13",
+                callback_data=cancel_callback,
             ),
         ],
     ]
