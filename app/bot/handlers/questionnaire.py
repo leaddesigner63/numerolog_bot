@@ -28,6 +28,7 @@ from app.db.models import (
 from app.db.session import get_session
 
 router = Router()
+_TELEGRAM_MESSAGE_LIMIT = 4096
 
 
 class QuestionnaireStates(StatesGroup):
@@ -125,6 +126,54 @@ def _question_payload(
 
 def _update_screen_state(user_id: int, payload: dict[str, Any]) -> None:
     screen_manager.update_state(user_id, **payload)
+
+
+def _split_text_by_length(text: str, max_length: int) -> list[str]:
+    if max_length <= 0:
+        return [text]
+    if not text:
+        return [""]
+    return [text[index : index + max_length] for index in range(0, len(text), max_length)]
+
+
+def _build_answers_summary_messages(
+    *,
+    config,
+    answers: dict[str, Any] | None,
+    max_length: int = _TELEGRAM_MESSAGE_LIMIT,
+) -> list[str]:
+    current_answers = answers or {}
+    summary_items: list[str] = []
+    for index, question in enumerate(config.questions.values(), start=1):
+        has_answer = question.question_id in current_answers
+        answer_text = current_answers.get(question.question_id)
+        rendered_answer = str(answer_text) if has_answer and answer_text is not None else "(пусто)"
+        summary_items.append(
+            f"{index}. {question.text}\n"
+            f"Текущий ответ: {rendered_answer}"
+        )
+
+    if not summary_items:
+        return []
+
+    chunks: list[str] = []
+    current_chunk = ""
+    for item in summary_items:
+        candidate = item if not current_chunk else f"{current_chunk}\n\n{item}"
+        if len(candidate) <= max_length:
+            current_chunk = candidate
+            continue
+        if current_chunk:
+            chunks.append(current_chunk)
+            current_chunk = ""
+        if len(item) <= max_length:
+            current_chunk = item
+            continue
+        chunks.extend(_split_text_by_length(item, max_length))
+
+    if current_chunk:
+        chunks.append(current_chunk)
+    return chunks
 
 
 def _build_actual_answers(
@@ -490,6 +539,12 @@ async def edit_questionnaire(callback: CallbackQuery, state: FSMContext) -> None
         answers=answers,
         questionnaire_mode="edit",
     )
+    summary_messages = _build_answers_summary_messages(config=config, answers=answers)
+    for summary_message in summary_messages:
+        await callback.message.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text=summary_message,
+        )
     await _send_question(
         message=callback.message,
         user_id=callback.from_user.id,
