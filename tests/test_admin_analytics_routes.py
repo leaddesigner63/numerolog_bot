@@ -176,6 +176,74 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         )
         self.assertEqual(bad_dates.status_code, 422)
 
+    def test_admin_order_status_completed_sets_fulfillment(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=101, telegram_user_id=700701)
+            order = Order(
+                id=201,
+                user_id=101,
+                tariff=Tariff.T1,
+                amount=990,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                fulfillment_status=OrderFulfillmentStatus.PENDING,
+            )
+            session.add_all([user, order])
+            session.commit()
+
+        response = self.client.post("/admin/api/orders/201/status", json={"status": "completed"})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["updated"])
+
+        with self.SessionLocal() as session:
+            refreshed = session.get(Order, 201)
+            self.assertIsNotNone(refreshed)
+            self.assertEqual(refreshed.fulfillment_status, OrderFulfillmentStatus.COMPLETED)
+            self.assertIsNotNone(refreshed.fulfilled_at)
+
+    def test_admin_orders_bulk_status_completed_sets_fulfillment(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=102, telegram_user_id=700702)
+            first = Order(
+                id=202,
+                user_id=102,
+                tariff=Tariff.T1,
+                amount=990,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                fulfillment_status=OrderFulfillmentStatus.PENDING,
+            )
+            second = Order(
+                id=203,
+                user_id=102,
+                tariff=Tariff.T2,
+                amount=1990,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                fulfillment_status=OrderFulfillmentStatus.PENDING,
+            )
+            session.add_all([user, first, second])
+            session.commit()
+
+        response = self.client.post(
+            "/admin/api/orders/bulk-status",
+            json={"ids": [202, 203], "status": "completed"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["updated"], 2)
+
+        with self.SessionLocal() as session:
+            refreshed = session.query(Order).filter(Order.id.in_([202, 203])).all()
+            self.assertEqual(len(refreshed), 2)
+            for order in refreshed:
+                self.assertEqual(order.fulfillment_status, OrderFulfillmentStatus.COMPLETED)
+                self.assertIsNotNone(order.fulfilled_at)
+
 
 if __name__ == "__main__":
     unittest.main()

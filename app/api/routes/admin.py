@@ -26,6 +26,7 @@ from app.db.models import (
     FeedbackStatus,
     LLMApiKey,
     Order,
+    OrderFulfillmentStatus,
     OrderStatus,
     Report,
     SystemPrompt,
@@ -777,7 +778,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         </div>
         <div class="bulk-actions">
           <button class="secondary" onclick="bulkMarkOrders('paid')">Отметить выбранные как оплаченные</button>
-          <button class="secondary" onclick="bulkMarkOrders('failed')">Отметить выбранные как ошибка</button>
+          <button class="secondary" onclick="bulkMarkOrders('completed')">Отметить выбранные как исполненные</button>
         </div>
         <div id="orders" class="muted">Загрузка...</div>
       </section>
@@ -1334,7 +1335,7 @@ def admin_ui(request: Request) -> HTMLResponse:
           },
           {label: "Действия", key: null, sortable: false, copyable: false, render: (order) => `
             <button class="secondary" onclick="markOrder(${order.id}, 'paid')">Оплачен</button>
-            <button class="secondary" onclick="markOrder(${order.id}, 'failed')">Ошибка</button>
+            <button class="secondary" onclick="markOrder(${order.id}, 'completed')">Исполнен</button>
           `},
         ],
       },
@@ -3120,13 +3121,19 @@ async def admin_order_status(
     previous = order.status.value
     updated = False
     if isinstance(new_status, str):
-        try:
-            order.status = OrderStatus(new_status)
+        if new_status == OrderFulfillmentStatus.COMPLETED.value:
+            order.fulfillment_status = OrderFulfillmentStatus.COMPLETED
+            if not order.fulfilled_at:
+                order.fulfilled_at = datetime.now(timezone.utc)
             updated = True
-            if order.status == OrderStatus.PAID and not order.paid_at:
-                order.paid_at = datetime.now(timezone.utc)
-        except ValueError:
-            updated = False
+        else:
+            try:
+                order.status = OrderStatus(new_status)
+                updated = True
+                if order.status == OrderStatus.PAID and not order.paid_at:
+                    order.paid_at = datetime.now(timezone.utc)
+            except ValueError:
+                updated = False
     return {
         "order_id": order.id,
         "previous_status": previous,
@@ -3148,17 +3155,27 @@ async def admin_orders_bulk_status(
     status_value = payload.get("status")
     if not ids or not isinstance(status_value, str):
         return {"updated": 0}
-    try:
-        new_status = OrderStatus(status_value)
-    except ValueError:
-        return {"updated": 0}
+    status_update: OrderStatus | None = None
+    fulfillment_update: OrderFulfillmentStatus | None = None
+    if status_value == OrderFulfillmentStatus.COMPLETED.value:
+        fulfillment_update = OrderFulfillmentStatus.COMPLETED
+    else:
+        try:
+            status_update = OrderStatus(status_value)
+        except ValueError:
+            return {"updated": 0}
     orders = session.execute(select(Order).where(Order.id.in_(ids))).scalars().all()
     updated = 0
     now = datetime.now(timezone.utc)
     for order in orders:
-        order.status = new_status
-        if new_status == OrderStatus.PAID and not order.paid_at:
-            order.paid_at = now
+        if fulfillment_update is not None:
+            order.fulfillment_status = fulfillment_update
+            if fulfillment_update == OrderFulfillmentStatus.COMPLETED and not order.fulfilled_at:
+                order.fulfilled_at = now
+        if status_update is not None:
+            order.status = status_update
+            if status_update == OrderStatus.PAID and not order.paid_at:
+                order.paid_at = now
         updated += 1
     return {"updated": updated}
 
