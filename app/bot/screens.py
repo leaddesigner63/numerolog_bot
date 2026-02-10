@@ -471,18 +471,31 @@ def _format_reports_for_payment_step(
     if not reports:
         return "Отчётов пока нет. Вы можете продолжить и создать новый заказ."
 
+    filtered_reports = reports
+    if selected_tariff:
+        filtered_reports = [
+            report
+            for report in reports
+            if str(report.get("tariff", "")).strip() == selected_tariff
+        ]
+
+    if not filtered_reports:
+        return (
+            f"По тарифу {selected_tariff} ещё нет сохранённых отчётов. "
+            "Вы можете продолжить и создать новый заказ."
+        )
+
     lines = []
-    for index, report in enumerate(reports, start=1):
+    for index, report in enumerate(filtered_reports, start=1):
         report_id = report.get("id", "—")
         tariff = report.get("tariff", "—")
         created_at = report.get("created_at", "неизвестно")
-        is_match = bool(selected_tariff and tariff == selected_tariff)
-        marker = "✅ Совпадает с выбранным тарифом" if is_match else "•"
-        lines.append(f"{index}. Отчёт #{report_id} • {tariff} • {created_at} {marker}")
+        lines.append(f"{index}. Отчёт #{report_id} • {tariff} • {created_at}")
 
-    if total and total > len(reports):
-        lines.append(f"\nПоказаны последние {len(reports)} из {total}.")
+    if total and selected_tariff is None and total > len(filtered_reports):
+        lines.append(f"\nПоказаны последние {len(filtered_reports)} из {total}.")
     return "\n".join(lines)
+
 
 
 def screen_s4(state: dict[str, Any]) -> ScreenContent:
