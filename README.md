@@ -661,3 +661,4 @@ Workflow по умолчанию запускается на push в `main` и �
 - Карта ассетов по тарифам и fallback-слоям: `app/core/pdf_theme_config.py`.
 - Каталоги ассетов: `app/assets/pdf/backgrounds/`, `app/assets/pdf/overlays/`, `app/assets/pdf/icons/`.
 - Полные технические требования и naming convention: `app/assets/pdf/ASSETS_REQUIREMENTS.md`.
+.
