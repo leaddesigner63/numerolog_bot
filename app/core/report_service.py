@@ -11,6 +11,7 @@ from app.core.prompt_settings import resolve_tariff_prompt
 from app.core.report_safety import report_safety
 from app.db.models import (
     Order,
+    OrderFulfillmentStatus,
     OrderStatus,
     Report,
     ReportJob,
@@ -315,6 +316,14 @@ class ReportService:
                 safety_flags=safety_flags,
             )
             session.add(report)
+            session.flush()
+            if order_id:
+                order = session.get(Order, order_id)
+                if order:
+                    order.fulfillment_status = OrderFulfillmentStatus.COMPLETED
+                    order.fulfilled_at = datetime.now(timezone.utc)
+                    order.fulfilled_report_id = report.id
+                    session.add(order)
 
     def _resolve_paid_order_id(self, session, state: dict[str, Any], user_id: int) -> int | None:
         order_id = state.get("order_id")

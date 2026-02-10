@@ -46,6 +46,11 @@ class OrderStatus(enum.StrEnum):
     CANCELED = "canceled"
 
 
+class OrderFulfillmentStatus(enum.StrEnum):
+    PENDING = "pending"
+    COMPLETED = "completed"
+
+
 class ReportModel(enum.StrEnum):
     GEMINI = "gemini"
     CHATGPT = "chatgpt"
@@ -166,9 +171,32 @@ class Order(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fulfillment_status: Mapped[OrderFulfillmentStatus] = mapped_column(
+        Enum(
+            OrderFulfillmentStatus,
+            values_callable=_enum_values,
+            name="orderfulfillmentstatus",
+        ),
+        index=True,
+        default=OrderFulfillmentStatus.PENDING,
+    )
+    fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    fulfilled_report_id: Mapped[int | None] = mapped_column(
+        ForeignKey("reports.id", ondelete="SET NULL"),
+        index=True,
+        nullable=True,
+    )
 
     user: Mapped[User] = relationship(back_populates="orders")
-    report: Mapped["Report"] = relationship(back_populates="order", uselist=False)
+    report: Mapped["Report"] = relationship(
+        back_populates="order",
+        uselist=False,
+        foreign_keys="Report.order_id",
+    )
+    fulfilled_report: Mapped["Report | None"] = relationship(
+        foreign_keys=[fulfilled_report_id],
+        uselist=False,
+    )
 
 
 class Report(Base):
@@ -195,7 +223,10 @@ class Report(Base):
     safety_flags: Mapped[dict | None] = mapped_column(JSON)
 
     user: Mapped[User] = relationship(back_populates="reports")
-    order: Mapped[Order | None] = relationship(back_populates="report")
+    order: Mapped[Order | None] = relationship(
+        back_populates="report",
+        foreign_keys=[order_id],
+    )
 
 
 class ReportJob(Base):
