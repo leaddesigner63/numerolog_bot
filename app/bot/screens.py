@@ -463,6 +463,28 @@ def _format_questionnaire_profile(questionnaire: dict[str, Any] | None) -> str:
     return "\n".join(lines)
 
 
+def _format_reports_for_payment_step(
+    reports: list[dict[str, Any]] | None,
+    total: int | None,
+    selected_tariff: str | None,
+) -> str:
+    if not reports:
+        return "Отчётов пока нет. Вы можете продолжить и создать новый заказ."
+
+    lines = []
+    for index, report in enumerate(reports, start=1):
+        report_id = report.get("id", "—")
+        tariff = report.get("tariff", "—")
+        created_at = report.get("created_at", "неизвестно")
+        is_match = bool(selected_tariff and tariff == selected_tariff)
+        marker = "✅ Совпадает с выбранным тарифом" if is_match else "•"
+        lines.append(f"{index}. Отчёт #{report_id} • {tariff} • {created_at} {marker}")
+
+    if total and total > len(reports):
+        lines.append(f"\nПоказаны последние {len(reports)} из {total}.")
+    return "\n".join(lines)
+
+
 def screen_s4(state: dict[str, Any]) -> ScreenContent:
     selected_tariff_raw = state.get("selected_tariff", "T0")
     selected_tariff = _format_tariff_label(selected_tariff_raw)
@@ -1096,18 +1118,20 @@ def screen_s13(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s15(state: dict[str, Any]) -> ScreenContent:
-    report_meta = state.get("existing_tariff_report_meta") or {}
-    report_id = report_meta.get("id", "—")
-    report_tariff = report_meta.get("tariff", "—")
-    report_created_at = report_meta.get("created_at", "неизвестно")
+    selected_tariff = state.get("selected_tariff")
+    reports = state.get("reports") or []
+    reports_total = state.get("reports_total")
+    reports_list = _format_reports_for_payment_step(
+        reports,
+        reports_total,
+        selected_tariff,
+    )
     text = _with_screen_prefix(
         "S15",
         (
-            "У вас уже есть сохранённый отчёт по выбранному тарифу.\n\n"
-            f"Отчёт #{report_id} · тариф {report_tariff}\n"
-            f"Создан: {report_created_at}\n\n"
-            "Можно перейти в личный кабинет и открыть его, "
-            "или продолжить покупку и создать новый заказ."
+            f"Перед оплатой тарифа {selected_tariff or 'T1/T2/T3'} посмотрите последние отчёты:\n\n"
+            f"{reports_list}\n\n"
+            "Можно перейти в личный кабинет или продолжить к оплате и создать новый заказ."
         ),
     )
     rows = [
@@ -1119,7 +1143,7 @@ def screen_s15(state: dict[str, Any]) -> ScreenContent:
         ],
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Продолжить покупку", "💳"),
+                text=_with_button_icons("Продолжить к оплате", "💳"),
                 callback_data="existing_report:continue",
             )
         ],

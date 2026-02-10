@@ -233,6 +233,42 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
         self.assertEqual(after_orders_count, before_orders_count)
 
+    async def test_tariff_without_reports_opens_reports_step_with_empty_state_and_without_order(self) -> None:
+        with self.SessionLocal() as session:
+            before_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
+
+        callback = _DummyCallback("tariff:T2")
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S15")
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertEqual(state_snapshot.data.get("selected_tariff"), Tariff.T2.value)
+        self.assertEqual(state_snapshot.data.get("reports_total"), 0)
+        self.assertEqual(state_snapshot.data.get("reports"), [])
+        self.assertFalse(state_snapshot.data.get("existing_tariff_report_found"))
+
+        with self.SessionLocal() as session:
+            after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
+        self.assertEqual(after_orders_count, before_orders_count)
+
+    async def test_existing_report_lk_opens_personal_account_screen(self) -> None:
+        callback = _DummyCallback("existing_report:lk")
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S11")
+
     async def test_existing_report_continue_creates_new_order_and_returns_to_payment(self) -> None:
         paid_order_id = self._create_order(OrderStatus.PAID)
         with self.SessionLocal() as session:
