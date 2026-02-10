@@ -1332,6 +1332,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
 
     if callback.data.startswith("tariff:"):
         tariff = callback.data.split("tariff:")[-1]
+        existing_tariff_report_found = False
         if tariff == Tariff.T0.value:
             with get_session() as session:
                 t0_allowed, next_available = _t0_cooldown_status(
@@ -1362,6 +1363,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     callback.from_user.id,
                     existing_report,
                 )
+                existing_tariff_report_found = bool(existing_report)
 
         screen_manager.update_state(
             callback.from_user.id,
@@ -1369,7 +1371,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             profile_flow="report" if tariff == Tariff.T0.value else None,
             offer_seen=False if tariff in PAID_TARIFFS else True,
         )
-        next_screen = "S4" if tariff == Tariff.T0.value else "S15"
+        if tariff == Tariff.T0.value:
+            next_screen = "S4"
+        else:
+            next_screen = "S15" if existing_tariff_report_found else "S2"
         await _show_screen_for_callback(
             callback,
             screen_id=next_screen,

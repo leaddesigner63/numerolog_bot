@@ -233,7 +233,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
         self.assertEqual(after_orders_count, before_orders_count)
 
-    async def test_tariff_without_reports_opens_reports_step_with_empty_state_and_without_order(self) -> None:
+    async def test_tariff_without_reports_opens_offer_without_order(self) -> None:
         with self.SessionLocal() as session:
             before_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
 
@@ -246,7 +246,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         ):
             await screens.handle_callbacks(callback, state=SimpleNamespace())
 
-        show_screen.assert_awaited_with(callback, screen_id="S15")
+        show_screen.assert_awaited_with(callback, screen_id="S2")
         state_snapshot = screens.screen_manager.update_state(1001)
         self.assertEqual(state_snapshot.data.get("selected_tariff"), Tariff.T2.value)
         self.assertEqual(state_snapshot.data.get("reports_total"), 0)
