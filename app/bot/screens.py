@@ -750,6 +750,9 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
     answered_count = questionnaire.get("answered_count", 0)
     total_questions = questionnaire.get("total_questions", 0)
     status = questionnaire.get("status", "empty")
+    has_paid_order = bool(state.get("order_id")) and str(
+        state.get("order_status") or ""
+    ).lower() == "paid"
     progress_line = ""
     if total_questions:
         progress_line = f"Прогресс: {answered_count}/{total_questions}."
@@ -792,8 +795,12 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
             ]
         )
     else:
-        button_text = "Продолжить анкету" if answered_count else "Заполнить анкету"
-        button_icon = "▶️" if answered_count else "📝"
+        if has_paid_order:
+            button_text = "Продолжить"
+            button_icon = "✅"
+        else:
+            button_text = "Продолжить анкету" if answered_count else "Заполнить анкету"
+            button_icon = "▶️" if answered_count else "📝"
         rows.append(
             [
                 InlineKeyboardButton(
