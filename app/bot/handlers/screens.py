@@ -55,6 +55,24 @@ def _tariff_prices() -> dict[Tariff, int]:
         Tariff.T3: settings.tariff_prices_rub["T3"],
     }
 
+
+def _reset_tariff_runtime_state(telegram_user_id: int) -> None:
+    screen_manager.update_state(
+        telegram_user_id,
+        order_id=None,
+        order_status=None,
+        order_amount=None,
+        order_currency=None,
+        order_provider=None,
+        payment_url=None,
+        report_job_id=None,
+        report_job_status=None,
+        report_job_attempts=None,
+        report_text=None,
+        report_model=None,
+        report_meta=None,
+    )
+
 _report_wait_tasks: dict[int, asyncio.Task[None]] = {}
 
 
@@ -878,6 +896,21 @@ def _get_report_for_user(
     ).scalar_one_or_none()
 
 
+def _get_reports_for_user(session, telegram_user_id: int) -> list[Report]:
+    user = _get_user(session, telegram_user_id)
+    if not user:
+        return []
+    return (
+        session.execute(
+            select(Report)
+            .where(Report.user_id == user.id)
+            .order_by(Report.created_at.desc(), Report.id.desc())
+        )
+        .scalars()
+        .all()
+    )
+
+
 def _report_meta_payload(report: Report) -> dict[str, str]:
     tariff_value = (
         report.tariff.value if isinstance(report.tariff, Tariff) else str(report.tariff)
@@ -1382,6 +1415,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
 
     if callback.data.startswith("tariff:"):
         tariff = callback.data.split("tariff:")[-1]
+        _reset_tariff_runtime_state(callback.from_user.id)
         existing_tariff_report_found = False
         if tariff == Tariff.T0.value:
             with get_session() as session:
@@ -1508,6 +1542,23 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 return
             with get_session() as session:
                 order = session.get(Order, order_id)
+                if order and order.tariff.value != tariff:
+                    screen_manager.update_state(
+                        callback.from_user.id,
+                        order_id=None,
+                        order_status=None,
+                        payment_url=None,
+                    )
+                    await _send_notice(
+                        callback,
+                        "Для выбранного тарифа нужен новый заказ. Пожалуйста, перейдите к оплате ещё раз.",
+                    )
+                    await _show_screen_for_callback(
+                        callback,
+                        screen_id="S2",
+                    )
+                    await _safe_callback_answer(callback)
+                    return
                 if not order or order.status != OrderStatus.PAID:
                     if order:
                         screen_manager.update_state(
@@ -1629,6 +1680,23 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 return
             with get_session() as session:
                 order = session.get(Order, order_id)
+                if order and order.tariff.value != tariff:
+                    screen_manager.update_state(
+                        callback.from_user.id,
+                        order_id=None,
+                        order_status=None,
+                        payment_url=None,
+                    )
+                    await _send_notice(
+                        callback,
+                        "Для выбранного тарифа нужен новый заказ. Пожалуйста, перейдите к оплате ещё раз.",
+                    )
+                    await _show_screen_for_callback(
+                        callback,
+                        screen_id="S2",
+                    )
+                    await _safe_callback_answer(callback)
+                    return
                 if not order or order.status != OrderStatus.PAID:
                     if order:
                         screen_manager.update_state(
