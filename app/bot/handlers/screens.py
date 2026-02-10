@@ -1092,6 +1092,41 @@ def _create_order(session, user: User, tariff: Tariff) -> Order:
     return order
 
 
+def _get_reusable_paid_order(
+    session,
+    telegram_user_id: int,
+    tariff_value: str | None,
+) -> Order | None:
+    if tariff_value not in PAID_TARIFFS:
+        return None
+    user = _get_user(session, telegram_user_id)
+    if not user:
+        return None
+    try:
+        tariff = Tariff(tariff_value)
+    except ValueError:
+        return None
+    return (
+        session.execute(
+            select(Order)
+            .where(
+                Order.user_id == user.id,
+                Order.tariff == tariff,
+                Order.status == OrderStatus.PAID,
+                Order.fulfillment_status == OrderFulfillmentStatus.PENDING,
+                Order.fulfilled_report_id.is_(None),
+                ~select(Report.id)
+                .where(Report.order_id == Order.id)
+                .exists(),
+            )
+            .order_by(Order.paid_at.desc(), Order.created_at.desc(), Order.id.desc())
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
+
+
 def _refresh_order_state(order: Order) -> dict[str, str]:
     return {
         "order_id": str(order.id),
@@ -1233,6 +1268,19 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 return
             with get_session() as session:
                 order_id = _safe_int(state_snapshot.data.get("order_id"))
+                if not order_id:
+                    reusable_order = _get_reusable_paid_order(
+                        session,
+                        callback.from_user.id,
+                        selected_tariff,
+                    )
+                    if reusable_order:
+                        order_id = reusable_order.id
+                        screen_manager.update_state(
+                            callback.from_user.id,
+                            payment_url=None,
+                            **_refresh_order_state(reusable_order),
+                        )
                 if not order_id:
                     user = _get_or_create_user(
                         session,
@@ -1504,6 +1552,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         tariff = callback.data.split("tariff:")[-1]
         _reset_tariff_runtime_state(callback.from_user.id)
         existing_tariff_report_found = False
+        reusable_paid_order: Order | None = None
         if tariff == Tariff.T0.value:
             with get_session() as session:
                 t0_allowed, next_available = _t0_cooldown_status(
@@ -1524,6 +1573,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 _refresh_profile_state(session, callback.from_user.id)
         else:
             with get_session() as session:
+                reusable_paid_order = _get_reusable_paid_order(
+                    session,
+                    callback.from_user.id,
+                    tariff,
+                )
                 _refresh_reports_list_state(session, callback.from_user.id)
                 existing_report = _get_latest_report(
                     session,
@@ -1535,15 +1589,24 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     existing_report,
                 )
                 existing_tariff_report_found = bool(existing_report)
+                if reusable_paid_order:
+                    screen_manager.update_state(
+                        callback.from_user.id,
+                        payment_url=None,
+                        **_refresh_order_state(reusable_paid_order),
+                    )
 
         screen_manager.update_state(
             callback.from_user.id,
             selected_tariff=tariff,
             profile_flow="report" if tariff == Tariff.T0.value else None,
-            offer_seen=False if tariff in PAID_TARIFFS else True,
+            offer_seen=False if tariff in PAID_TARIFFS and not reusable_paid_order else True,
             existing_report_warning_seen=False,
+            existing_tariff_report_found=False if reusable_paid_order else existing_tariff_report_found,
         )
         if tariff == Tariff.T0.value:
+            next_screen = "S4"
+        elif reusable_paid_order:
             next_screen = "S4"
         else:
             next_screen = "S2"
