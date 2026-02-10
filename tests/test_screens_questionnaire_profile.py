@@ -4,7 +4,7 @@ from app.bot.screens import _format_questionnaire_profile
 
 
 class ScreensQuestionnaireProfileTests(unittest.TestCase):
-    def test_translates_status_and_answer_fields_to_russian(self) -> None:
+    def test_uses_question_text_for_russian_question_ids_from_config(self) -> None:
         text = _format_questionnaire_profile(
             {
                 "status": "completed",
@@ -13,16 +13,43 @@ class ScreensQuestionnaireProfileTests(unittest.TestCase):
                 "total_questions": 5,
                 "completed_at": "2026-02-07T06:16:32.968721+00:00",
                 "answers": {
-                    "experience": "Опытный",
-                    "skills": "4/5",
-                    "interests": "Деньги",
+                    "Ваш опыт": "Опытный",
+                    "Уровень уверенности в навыках": "4/5",
+                    "Цели": "Рост дохода",
                 },
             }
         )
 
         self.assertIn("Статус: завершена", text)
-        self.assertIn("- Навыки: 4/5", text)
-        self.assertIn("- Интересы: Деньги", text)
+        self.assertIn(
+            "- Опишите ваш опыт: проекты, роли или задачи, которые давались лучше всего.: Опытный",
+            text,
+        )
+        self.assertIn(
+            "- Опишите уровень уверенности в ключевых навыках в свободной форме (любые формулировки).: 4/5",
+            text,
+        )
+        self.assertIn(
+            "- Сформулируйте ваши цели на ближайшие 6–12 месяцев.: Рост дохода",
+            text,
+        )
+
+    def test_falls_back_to_original_key_and_keeps_long_answer(self) -> None:
+        long_answer = "А" * 500
+        text = _format_questionnaire_profile(
+            {
+                "status": "in_progress",
+                "version": "v1",
+                "answered_count": 1,
+                "total_questions": 5,
+                "completed_at": None,
+                "answers": {
+                    "Произвольный ключ": long_answer,
+                },
+            }
+        )
+
+        self.assertIn("- Произвольный ключ: " + long_answer, text)
 
 
 if __name__ == "__main__":

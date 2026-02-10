@@ -7,6 +7,7 @@ from typing import Any
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from app.bot.questionnaire.config import load_questionnaire_config
 from app.core.config import settings
 
 
@@ -443,18 +444,12 @@ def _format_questionnaire_profile(questionnaire: dict[str, Any] | None) -> str:
         f"Завершена: {completed_at}",
     ]
     if isinstance(answers, dict) and answers:
-        field_labels = {
-            "experience": "Опыт",
-            "skills_confidence": "Уверенность в навыках",
-            "skills": "Навыки",
-            "motivation": "Мотивация",
-            "interests": "Интересы",
-            "constraints": "Ограничения",
-            "goals": "Цели",
-        }
+        questionnaire_config = load_questionnaire_config()
         lines.append("Ответы:")
         for key, value in answers.items():
-            lines.append(f"- {field_labels.get(key, key)}: {value}")
+            question = questionnaire_config.get_question(key)
+            label = question.text if question and question.text else (question.question_id if question else key)
+            lines.append(f"- {label}: {value}")
     elif answers:
         lines.append(f"Ответы: {answers}")
     else:
