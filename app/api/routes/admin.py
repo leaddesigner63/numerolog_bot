@@ -779,6 +779,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         <div class="bulk-actions">
           <button class="secondary" onclick="bulkMarkOrders('paid')">Отметить выбранные как оплаченные</button>
           <button class="secondary" onclick="bulkMarkOrders('completed')">Отметить выбранные как исполненные</button>
+          <button class="secondary danger" onclick="bulkDeleteOrders()">Удалить выбранные</button>
         </div>
         <div id="orders" class="muted">Загрузка...</div>
       </section>
@@ -1761,6 +1762,29 @@ def admin_ui(request: Request) -> HTMLResponse:
         });
         selectedRows.orders.clear();
         await loadOrders();
+      } catch (error) {
+        alert(error.message);
+      }
+    }
+
+    async function bulkDeleteOrders() {
+      const ids = getSelectedIds("orders");
+      if (!ids.length) {
+        alert("Выберите хотя бы один заказ.");
+        return;
+      }
+      const confirmed = confirm(`Удалить выбранные заказы (${ids.length})?`);
+      if (!confirmed) {
+        return;
+      }
+      try {
+        await fetchJson("/orders/bulk-delete", {
+          method: "POST",
+          body: JSON.stringify({ids})
+        });
+        selectedRows.orders.clear();
+        await loadOrders();
+        await loadOverview();
       } catch (error) {
         alert(error.message);
       }
@@ -3178,6 +3202,25 @@ async def admin_orders_bulk_status(
                 order.paid_at = now
         updated += 1
     return {"updated": updated}
+
+
+@router.post("/api/orders/bulk-delete")
+async def admin_orders_bulk_delete(
+    request: Request,
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    try:
+        payload = _parse_json_payload(await request.json())
+    except Exception:
+        payload = {}
+    ids = _parse_ids(payload)
+    if not ids:
+        return {"deleted": 0}
+    orders = session.execute(select(Order).where(Order.id.in_(ids))).scalars().all()
+    deleted = len(orders)
+    for order in orders:
+        session.delete(order)
+    return {"deleted": deleted}
 
 
 @router.get("/api/reports")
