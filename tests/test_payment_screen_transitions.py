@@ -372,6 +372,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             selected_tariff=Tariff.T1.value,
             existing_tariff_report_found=True,
             existing_tariff_report_meta={"id": "1", "tariff": Tariff.T1.value, "created_at": "2025-01-01"},
+            payment_processing_notice=True,
         )
 
         callback = _DummyCallback("existing_report:continue")
@@ -398,6 +399,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state_snapshot.data.get("order_id"), str(latest_order.id))
         self.assertFalse(state_snapshot.data.get("existing_tariff_report_found"))
         self.assertTrue(state_snapshot.data.get("existing_report_warning_seen"))
+        self.assertFalse(state_snapshot.data.get("payment_processing_notice"))
 
     async def test_s3_opens_existing_report_warning_after_offer_screen(self) -> None:
         order_id = self._create_order(OrderStatus.CREATED)

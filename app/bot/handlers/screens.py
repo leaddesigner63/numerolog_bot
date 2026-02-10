@@ -1127,6 +1127,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
 
     if callback.data.startswith("screen:"):
         screen_id = callback.data.split("screen:")[-1]
+        if screen_id == "S3":
+            screen_manager.update_state(
+                callback.from_user.id,
+                payment_processing_notice=False,
+            )
         if screen_id == "S4":
             with get_session() as session:
                 _refresh_profile_state(session, callback.from_user.id)
@@ -1488,6 +1493,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 existing_tariff_report_meta=None,
                 existing_report_warning_seen=True,
                 offer_seen=True,
+                payment_processing_notice=False,
                 **_refresh_order_state(order),
             )
         await _show_screen_for_callback(callback, screen_id="S3")
