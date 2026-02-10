@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from typing import Any
 
 from app.db.models import Tariff
@@ -40,6 +41,10 @@ class ReportDocumentBuilder:
         "Сервис не гарантирует финансовых или иных результатов. Возвратов нет."
     )
 
+    _MARKDOWN_MARKERS_RE = re.compile(r"(\*\*|__|`|~~)")
+    _HEADING_PREFIX_RE = re.compile(r"^#+\s*")
+    _LEADING_SYMBOL_RE = re.compile(r"^[^\wА-Яа-яЁё0-9]+")
+
     def build(
         self,
         report_text: str,
@@ -54,7 +59,8 @@ class ReportDocumentBuilder:
             if not non_empty:
                 return None
 
-            title = non_empty[0][:140] if len(non_empty[0]) > 6 else self._DEFAULT_TITLE
+            normalized_title = self._sanitize_line(non_empty[0])
+            title = normalized_title[:140] if len(normalized_title) > 6 else self._DEFAULT_TITLE
             report_id = (meta or {}).get("id")
             subtitle = f"Тариф: {tariff_value}"
             if report_id:
@@ -68,7 +74,7 @@ class ReportDocumentBuilder:
                 if self._is_title(raw_line):
                     if current.paragraphs or current.bullets or current.accent_blocks:
                         sections.append(current)
-                    current = ReportSection(title=raw_line.rstrip(":"))
+                    current = ReportSection(title=self._sanitize_line(raw_line.rstrip(":")))
                     continue
                 bullet = self._extract_bullet(raw_line)
                 if bullet is not None:
@@ -79,7 +85,7 @@ class ReportDocumentBuilder:
                     continue
                 if raw_line.lower().startswith("дисклеймер"):
                     continue
-                current.paragraphs.append(raw_line)
+                current.paragraphs.append(self._sanitize_line(raw_line))
 
             if current.paragraphs or current.bullets or current.accent_blocks:
                 sections.append(current)
@@ -123,10 +129,17 @@ class ReportDocumentBuilder:
         markers = ("- ", "• ", "* ")
         for marker in markers:
             if stripped.startswith(marker):
-                return stripped[len(marker) :].strip()
+                return self._sanitize_line(stripped[len(marker) :].strip())
         if len(stripped) > 2 and stripped[0].isdigit() and stripped[1] in {")", "."}:
-            return stripped[2:].strip()
+            return self._sanitize_line(stripped[2:].strip())
         return None
+
+    def _sanitize_line(self, line: str) -> str:
+        cleaned = (line or "").replace("\u00a0", " ").strip()
+        cleaned = self._HEADING_PREFIX_RE.sub("", cleaned)
+        cleaned = self._MARKDOWN_MARKERS_RE.sub("", cleaned)
+        cleaned = self._LEADING_SYMBOL_RE.sub("", cleaned).strip()
+        return " ".join(cleaned.split())
 
     def _extract_disclaimer(self, text: str) -> str:
         lowered = text.lower()
