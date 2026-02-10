@@ -281,6 +281,7 @@ async def _send_question(
     message: Message,
     user_id: int,
     question: QuestionnaireQuestion | None,
+    existing_answer: Any | None = None,
 ) -> None:
     if not question:
         await screen_manager.send_ephemeral_message(
@@ -294,9 +295,16 @@ async def _send_question(
         user_id=user_id,
     )
     keyboard = _build_keyboard(question)
+    question_text = question.text
+    if existing_answer is not None:
+        question_text = (
+            f"Текущий ответ:\n{existing_answer}\n\n"
+            "Отправьте новый ответ или оставьте как есть.\n\n"
+            f"{question.text}"
+        )
     sent = await message.bot.send_message(
         chat_id=message.chat.id,
-        text=question.text,
+        text=question_text,
         reply_markup=keyboard,
     )
     screen_manager.update_last_question_message_id(user_id, sent.message_id)
@@ -390,6 +398,7 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
         questionnaire_version=config.version,
         current_question_id=current_question_id,
         answers=answers,
+        questionnaire_mode="start",
     )
     await _send_question(
         message=callback.message,
@@ -428,6 +437,7 @@ async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> N
         questionnaire_version=config.version,
         current_question_id=config.start_question_id,
         answers={},
+        questionnaire_mode="restart",
     )
     await _send_question(
         message=callback.message,
@@ -478,11 +488,13 @@ async def edit_questionnaire(callback: CallbackQuery, state: FSMContext) -> None
         questionnaire_version=config.version,
         current_question_id=current_question_id,
         answers=answers,
+        questionnaire_mode="edit",
     )
     await _send_question(
         message=callback.message,
         user_id=callback.from_user.id,
         question=config.get_question(current_question_id),
+        existing_answer=answers.get(current_question_id),
     )
     _update_screen_state(callback.from_user.id, payload)
     await callback.answer()
@@ -497,6 +509,7 @@ async def _handle_answer(
 ) -> None:
     config = load_questionnaire_config()
     data = await state.get_data()
+    questionnaire_mode = data.get("questionnaire_mode")
     current_question_id = data.get("current_question_id")
     if not current_question_id:
         restored = await _restore_state_from_db(
@@ -594,6 +607,7 @@ async def _handle_answer(
         message=message,
         user_id=message.from_user.id,
         question=config.get_question(next_question_id),
+        existing_answer=answers.get(next_question_id) if questionnaire_mode == "edit" else None,
     )
 
 
