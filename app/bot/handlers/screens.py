@@ -820,6 +820,17 @@ def _refresh_reports_list_state(
     )
 
 
+def _store_existing_tariff_report_state(
+    telegram_user_id: int,
+    report: Report | None,
+) -> None:
+    screen_manager.update_state(
+        telegram_user_id,
+        existing_tariff_report_found=bool(report),
+        existing_tariff_report_meta=_report_meta_payload(report) if report else None,
+    )
+
+
 def _get_report_for_user(
     session, telegram_user_id: int, report_id: int
 ) -> Report | None:
@@ -1193,6 +1204,85 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         await _safe_callback_answer(callback)
         return
 
+    if callback.data == "existing_report:lk":
+        with get_session() as session:
+            _refresh_reports_list_state(session, callback.from_user.id)
+            _refresh_profile_state(session, callback.from_user.id)
+        screen_manager.update_state(
+            callback.from_user.id,
+            existing_tariff_report_found=False,
+            existing_tariff_report_meta=None,
+        )
+        await _show_screen_for_callback(callback, screen_id="S12")
+        await _safe_callback_answer(callback)
+        return
+
+    if callback.data == "existing_report:continue":
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        tariff = state_snapshot.data.get("selected_tariff")
+        if tariff not in PAID_TARIFFS:
+            await _send_notice(callback, "Сначала выберите платный тариф.")
+            await _show_screen_for_callback(callback, screen_id="S1")
+            await _safe_callback_answer(callback)
+            return
+        with get_session() as session:
+            user = _get_or_create_user(
+                session, callback.from_user.id, callback.from_user.username
+            )
+            order = _create_order(session, user, Tariff(tariff))
+            payment_link = None
+            if settings.payment_enabled:
+                provider = get_payment_provider(order.provider.value)
+                payment_link = provider.create_payment_link(order, user=user)
+                if not payment_link and order.provider == PaymentProviderEnum.PRODAMUS:
+                    fallback_provider = get_payment_provider(
+                        PaymentProviderEnum.CLOUDPAYMENTS.value
+                    )
+                    payment_link = fallback_provider.create_payment_link(order, user=user)
+                    if payment_link:
+                        order.provider = PaymentProviderEnum.CLOUDPAYMENTS
+                        session.add(order)
+                if not payment_link:
+                    missing_primary = _missing_payment_link_config(order.provider)
+                    fallback_provider_enum = (
+                        PaymentProviderEnum.CLOUDPAYMENTS
+                        if order.provider == PaymentProviderEnum.PRODAMUS
+                        else PaymentProviderEnum.PRODAMUS
+                    )
+                    missing_fallback = _missing_payment_link_config(
+                        fallback_provider_enum
+                    )
+                    logger.warning(
+                        "payment_link_unavailable",
+                        extra={
+                            "order_id": order.id,
+                            "primary_provider": order.provider.value,
+                            "missing_primary": missing_primary,
+                            "missing_fallback": missing_fallback,
+                        },
+                    )
+                    missing_vars = (
+                        ", ".join(missing_primary + missing_fallback)
+                        or "секреты провайдера"
+                    )
+                    await _send_notice(
+                        callback,
+                        "Платёжная ссылка недоступна: не настроены ключи оплаты. "
+                        f"Проверьте переменные {missing_vars}.",
+                    )
+            screen_manager.update_state(
+                callback.from_user.id,
+                payment_url=payment_link.url if payment_link else None,
+                existing_tariff_report_found=False,
+                existing_tariff_report_meta=None,
+                **_refresh_order_state(order),
+            )
+        screen_manager.update_state(callback.from_user.id, offer_seen=False)
+        await _show_screen_for_callback(callback, screen_id="S2")
+        screen_manager.update_state(callback.from_user.id, offer_seen=True)
+        await _safe_callback_answer(callback)
+        return
+
     if callback.data.startswith("tariff:"):
         tariff = callback.data.split("tariff:")[-1]
         if tariff == Tariff.T0.value:
@@ -1215,7 +1305,31 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 _refresh_profile_state(session, callback.from_user.id)
         else:
             with get_session() as session:
-                user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
+                existing_report = _get_latest_report(
+                    session,
+                    callback.from_user.id,
+                    tariff_value=tariff,
+                )
+                _store_existing_tariff_report_state(
+                    callback.from_user.id,
+                    existing_report,
+                )
+                if existing_report:
+                    screen_manager.update_state(
+                        callback.from_user.id,
+                        selected_tariff=tariff,
+                        offer_seen=False,
+                    )
+                    await _show_screen_for_callback(
+                        callback,
+                        screen_id="S15",
+                    )
+                    await _safe_callback_answer(callback)
+                    return
+
+                user = _get_or_create_user(
+                    session, callback.from_user.id, callback.from_user.username
+                )
                 order = _create_order(session, user, Tariff(tariff))
                 payment_link = None
                 if settings.payment_enabled:
