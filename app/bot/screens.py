@@ -1090,6 +1090,42 @@ def screen_s13(state: dict[str, Any]) -> ScreenContent:
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
+
+
+def screen_s15(state: dict[str, Any]) -> ScreenContent:
+    report_meta = state.get("existing_tariff_report_meta") or {}
+    report_id = report_meta.get("id", "—")
+    report_tariff = report_meta.get("tariff", "—")
+    report_created_at = report_meta.get("created_at", "неизвестно")
+    text = _with_screen_prefix(
+        "S15",
+        (
+            "У вас уже есть сохранённый отчёт по выбранному тарифу.\n\n"
+            f"Отчёт #{report_id} · тариф {report_tariff}\n"
+            f"Создан: {report_created_at}\n\n"
+            "Можно перейти в личный кабинет и открыть его, "
+            "или продолжить покупку и создать новый заказ."
+        ),
+    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Перейти в ЛК", "🗂️"),
+                callback_data="existing_report:lk",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Продолжить покупку", "💳"),
+                callback_data="existing_report:continue",
+            )
+        ],
+    ]
+    rows.extend(_global_menu())
+    keyboard = _build_keyboard(rows)
+    return ScreenContent(messages=[text], keyboard=keyboard)
+
+
 def screen_s14(state: dict[str, Any]) -> ScreenContent:
     report_meta = state.get("report_meta") or {}
     report_id = report_meta.get("id", "—")
@@ -1132,4 +1168,5 @@ SCREEN_REGISTRY = {
     "S12": screen_s12,
     "S13": screen_s13,
     "S14": screen_s14,
+    "S15": screen_s15,
 }

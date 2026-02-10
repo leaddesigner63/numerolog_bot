@@ -201,5 +201,83 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         send_notice.assert_awaited()
 
 
+    async def test_tariff_with_existing_report_opens_warning_without_creating_order(self) -> None:
+        paid_order_id = self._create_order(OrderStatus.PAID)
+        with self.SessionLocal() as session:
+            session.add(
+                Report(
+                    user_id=1,
+                    order_id=paid_order_id,
+                    tariff=Tariff.T1,
+                    report_text="Существующий отчёт",
+                )
+            )
+            session.commit()
+            before_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
+
+        callback = _DummyCallback("tariff:T1")
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S15")
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertTrue(state_snapshot.data.get("existing_tariff_report_found"))
+        self.assertEqual(state_snapshot.data.get("selected_tariff"), Tariff.T1.value)
+
+        with self.SessionLocal() as session:
+            after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
+        self.assertEqual(after_orders_count, before_orders_count)
+
+    async def test_existing_report_continue_creates_new_order_and_returns_to_payment(self) -> None:
+        paid_order_id = self._create_order(OrderStatus.PAID)
+        with self.SessionLocal() as session:
+            session.add(
+                Report(
+                    user_id=1,
+                    order_id=paid_order_id,
+                    tariff=Tariff.T1,
+                    report_text="Существующий отчёт",
+                )
+            )
+            session.commit()
+            before_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
+
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T1.value,
+            existing_tariff_report_found=True,
+            existing_tariff_report_meta={"id": "1", "tariff": Tariff.T1.value, "created_at": "2025-01-01"},
+        )
+
+        callback = _DummyCallback("existing_report:continue")
+
+        with (
+            patch.object(screens.settings, "payment_enabled", False),
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S2")
+
+        with self.SessionLocal() as session:
+            after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
+            latest_order = session.execute(select(Order).order_by(Order.id.desc()).limit(1)).scalar_one()
+
+        self.assertEqual(after_orders_count, before_orders_count + 1)
+        self.assertEqual(latest_order.tariff, Tariff.T1)
+        self.assertEqual(latest_order.status, OrderStatus.CREATED)
+
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertEqual(state_snapshot.data.get("order_id"), str(latest_order.id))
+        self.assertFalse(state_snapshot.data.get("existing_tariff_report_found"))
+
+
 if __name__ == "__main__":
     unittest.main()
