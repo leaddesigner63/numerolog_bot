@@ -259,6 +259,31 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
         self.assertEqual(after_orders_count, before_orders_count)
 
+    async def test_s3_creates_order_for_paid_tariff_when_missing(self) -> None:
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T2.value,
+            offer_seen=True,
+        )
+        callback = _DummyCallback("screen:S3")
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_send_notice", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+            patch.object(screens, "_maybe_run_payment_waiter", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S3")
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertIsNotNone(state_snapshot.data.get("order_id"))
+
+        with self.SessionLocal() as session:
+            orders_count = session.execute(select(func.count(Order.id))).scalar_one()
+        self.assertEqual(orders_count, 1)
+
     async def test_questionnaire_done_resets_stale_failed_status_before_wait_screen(self) -> None:
         order_id = self._create_order(OrderStatus.PAID, tariff=Tariff.T2)
         with self.SessionLocal() as session:
