@@ -303,6 +303,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state_snapshot.data.get("order_id"), str(paid_order.id))
         self.assertEqual(state_snapshot.data.get("order_status"), OrderStatus.PAID.value)
         self.assertTrue(state_snapshot.data.get("offer_seen"))
+        self.assertEqual(state_snapshot.data.get("profile_flow"), "report")
 
     async def test_s3_reuses_paid_unfulfilled_order_without_creating_new_order(self) -> None:
         with self.SessionLocal() as session:

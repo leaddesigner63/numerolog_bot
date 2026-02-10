@@ -1599,7 +1599,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         screen_manager.update_state(
             callback.from_user.id,
             selected_tariff=tariff,
-            profile_flow="report" if tariff == Tariff.T0.value else None,
+            profile_flow=(
+                "report"
+                if tariff == Tariff.T0.value or reusable_paid_order
+                else None
+            ),
             offer_seen=False if tariff in PAID_TARIFFS and not reusable_paid_order else True,
             existing_report_warning_seen=False,
             existing_tariff_report_found=False if reusable_paid_order else existing_tariff_report_found,
