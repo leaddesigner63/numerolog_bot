@@ -376,25 +376,26 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
     text = _with_screen_prefix("S3", "".join(text_parts))
 
     rows: list[list[InlineKeyboardButton]] = []
-    if payment_url:
+    if not payment_processing_notice:
+        if payment_url:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=_with_button_icons("Далее", "💳"),
+                        url=payment_url,
+                    )
+                ]
+            )
         rows.append(
             [
                 InlineKeyboardButton(
-                    text=_with_button_icons("Далее", "💳"),
-                    url=payment_url,
-                )
+                    text=_with_button_icons("Назад", "⬅️"),
+                    callback_data="screen:S1",
+                ),
             ]
         )
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text=_with_button_icons("Назад", "⬅️"),
-                callback_data="screen:S1",
-            ),
-        ]
-    )
-    rows.extend(_global_menu())
-    keyboard = _build_keyboard(rows)
+        rows.extend(_global_menu())
+    keyboard = _build_keyboard(rows) if rows else None
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
