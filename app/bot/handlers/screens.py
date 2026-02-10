@@ -537,6 +537,7 @@ def _profile_payload(
     return {
         "profile": {
             "name": profile.name,
+            "gender": profile.gender,
             "birth_date": profile.birth_date,
             "birth_time": profile.birth_time,
             "birth_place": {

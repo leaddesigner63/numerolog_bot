@@ -128,6 +128,7 @@ class UserProfile(Base):
         ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
     )
     name: Mapped[str] = mapped_column(Text)
+    gender: Mapped[str | None] = mapped_column(Text, nullable=True)
     birth_date: Mapped[str] = mapped_column(Text)
     birth_time: Mapped[str | None] = mapped_column(Text, nullable=True)
     birth_place_city: Mapped[str] = mapped_column(Text)

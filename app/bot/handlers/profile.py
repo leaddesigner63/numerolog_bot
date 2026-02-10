@@ -31,10 +31,12 @@ router = Router()
 
 class ProfileStates(StatesGroup):
     name = State()
+    gender = State()
     birth_date = State()
     birth_time = State()
     birth_place = State()
     edit_name = State()
+    edit_gender = State()
     edit_birth_date = State()
     edit_birth_time = State()
     edit_birth_place = State()
@@ -99,6 +101,7 @@ def _profile_payload(profile: UserProfile | None) -> dict[str, Any]:
     return {
         "profile": {
             "name": profile.name,
+            "gender": profile.gender,
             "birth_date": profile.birth_date,
             "birth_time": profile.birth_time,
             "birth_place": {
@@ -342,6 +345,17 @@ async def start_profile_edit_birth_date(
     await callback.answer()
 
 
+@router.callback_query(F.data == "profile:edit:gender")
+async def start_profile_edit_gender(callback: CallbackQuery, state: FSMContext) -> None:
+    await _start_profile_edit(
+        callback,
+        state,
+        ProfileStates.edit_gender,
+        "Введите новый пол (в любом формате).",
+    )
+    await callback.answer()
+
+
 @router.callback_query(F.data == "profile:edit:birth_time")
 async def start_profile_edit_birth_time(
     callback: CallbackQuery, state: FSMContext
@@ -439,6 +453,32 @@ async def handle_profile_name(message: Message, state: FSMContext) -> None:
     )
     name = message.text or ""
     await state.update_data(name=name)
+    await state.set_state(ProfileStates.gender)
+    sent = await message.bot.send_message(
+        chat_id=message.chat.id,
+        text="Введите пол (в любом формате).",
+    )
+    screen_manager.update_last_question_message_id(message.from_user.id, sent.message_id)
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
+
+
+@router.message(ProfileStates.gender)
+async def handle_profile_gender(message: Message, state: FSMContext) -> None:
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
+    gender = message.text or ""
+    await state.update_data(gender=gender)
     await state.set_state(ProfileStates.birth_date)
     sent = await message.bot.send_message(
         chat_id=message.chat.id,
@@ -522,6 +562,7 @@ async def handle_profile_birth_place(message: Message, state: FSMContext) -> Non
         profile = user.profile
         if profile:
             profile.name = data["name"]
+            profile.gender = data["gender"]
             profile.birth_date = data["birth_date"]
             profile.birth_time = data["birth_time"]
             profile.birth_place_city = birth_place
@@ -531,6 +572,7 @@ async def handle_profile_birth_place(message: Message, state: FSMContext) -> Non
             profile = UserProfile(
                 user_id=user.id,
                 name=data["name"],
+                gender=data["gender"],
                 birth_date=data["birth_date"],
                 birth_time=data["birth_time"],
                 birth_place_city=birth_place,
@@ -614,6 +656,44 @@ async def handle_profile_edit_birth_date(message: Message, state: FSMContext) ->
             await _show_profile_screen(message, message.from_user.id)
             return
         profile.birth_date = birth_date
+        session.flush()
+        screen_manager.update_state(
+            message.from_user.id,
+            **_profile_payload(profile),
+        )
+    await state.clear()
+    await screen_manager.send_ephemeral_message(message, "Данные обновлены.")
+    await _show_profile_screen(message, message.from_user.id)
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
+
+
+@router.message(ProfileStates.edit_gender)
+async def handle_profile_edit_gender(message: Message, state: FSMContext) -> None:
+    if not message.from_user:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    await screen_manager.delete_last_question_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+    )
+    gender = message.text or ""
+    with get_session() as session:
+        user = _get_or_create_user(session, message.from_user.id, message.from_user.username)
+        profile = user.profile
+        if not profile:
+            await state.clear()
+            await screen_manager.send_ephemeral_message(
+                message, "Сначала заполните «Мои данные»."
+            )
+            await _show_profile_screen(message, message.from_user.id)
+            return
+        profile.gender = gender
         session.flush()
         screen_manager.update_state(
             message.from_user.id,
