@@ -108,6 +108,8 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
             await start_module.handle_start(self._message(f"/start paywait_{order_id}"))
 
         self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S4")
+        snapshot = screen_manager.update_state(1001)
+        self.assertTrue(snapshot.data.get("s4_no_inline_keyboard"))
 
     async def test_start_falls_back_to_s0_for_foreign_order(self) -> None:
         order_id = self._create_order(2, OrderStatus.CREATED)
@@ -116,12 +118,16 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
             await start_module.handle_start(self._message(f"/start paywait_{order_id}"))
 
         self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S0")
+        snapshot = screen_manager.update_state(1001)
+        self.assertFalse(snapshot.data.get("s4_no_inline_keyboard"))
 
     async def test_start_falls_back_to_s0_for_invalid_payload(self) -> None:
         with patch.object(screen_manager, "show_screen", new=AsyncMock()) as show_screen:
             await start_module.handle_start(self._message("/start paywait_not_a_number"))
 
         self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S0")
+        snapshot = screen_manager.update_state(1001)
+        self.assertFalse(snapshot.data.get("s4_no_inline_keyboard"))
 
 
 if __name__ == "__main__":

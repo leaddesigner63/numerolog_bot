@@ -975,6 +975,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     await _safe_callback_processing(callback)
+    screen_manager.update_state(callback.from_user.id, s4_no_inline_keyboard=False)
 
     if callback.data.startswith("screen:"):
         screen_id = callback.data.split("screen:")[-1]

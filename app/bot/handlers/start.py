@@ -54,6 +54,7 @@ async def handle_start(message: Message) -> None:
                             "order_id": str(order.id),
                             "order_status": order.status.value,
                             "selected_tariff": order.tariff.value,
+                            "s4_no_inline_keyboard": order.status == OrderStatus.PAID,
                         }
                         if state_snapshot.data.get("payment_url") is not None:
                             state_update["payment_url"] = state_snapshot.data.get("payment_url")
@@ -78,6 +79,7 @@ async def handle_start(message: Message) -> None:
                 # Мягкий fallback в S0 для любых сбоев чтения payload/БД.
                 pass
 
+    screen_manager.update_state(message.from_user.id, s4_no_inline_keyboard=False)
     await screen_manager.show_screen(
         bot=message.bot,
         chat_id=message.chat.id,
