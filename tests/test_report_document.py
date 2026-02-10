@@ -22,6 +22,19 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         builder = ReportDocumentBuilder()
         self.assertIsNone(builder.build("\n\n", tariff="T1"))
 
+    def test_build_strips_markdown_noise_from_title_and_bullets(self) -> None:
+        builder = ReportDocumentBuilder()
+        doc = builder.build(
+            """## 🔍 Проверка данных\n\nКлючевые выводы:\n* **Как включить:** сначала уточни цель\n* __Второй пункт__\n""",
+            tariff="T1",
+            meta={"id": "13"},
+        )
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        self.assertEqual(doc.title, "Проверка данных")
+        self.assertTrue(doc.key_findings)
+        self.assertIn("Как включить: сначала уточни цель", doc.key_findings[0])
+
 
 if __name__ == "__main__":
     unittest.main()

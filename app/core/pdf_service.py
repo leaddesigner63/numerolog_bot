@@ -529,6 +529,7 @@ class PdfThemeRenderer:
         line_height = int(body_size * theme.typography.line_height_ratio)
         max_width = page_width - margin * 2
         y = page_height - margin - 64
+        self._draw_content_surface(pdf, theme, page_width, page_height)
 
         if not report_document:
             pdf.setFillColor(theme.palette[2], alpha=0.96)
@@ -541,6 +542,7 @@ class PdfThemeRenderer:
                         page_randomizer = random.Random(paragraph)
                         self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
                         self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+                        self._draw_content_surface(pdf, theme, page_width, page_height)
                         pdf.setFillColor(theme.palette[2], alpha=0.96)
                         pdf.setFont(font_map["body"], body_size)
                         y = page_height - margin
@@ -694,6 +696,7 @@ class PdfThemeRenderer:
                 page_randomizer = random.Random(line)
                 self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
                 self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+                self._draw_content_surface(pdf, theme, page_width, page_height)
                 y = page_height - theme.margin
             line_font = font
             if font != _FONT_FALLBACK_NAME and any(ch.isdigit() for ch in line):
@@ -703,6 +706,33 @@ class PdfThemeRenderer:
             pdf.drawString(margin, y, line)
             y -= line_height
         return y - max(int(line_height * 0.25), 2)
+
+    def _draw_content_surface(
+        self,
+        pdf: canvas.Canvas,
+        theme: PdfTheme,
+        page_width: float,
+        page_height: float,
+    ) -> None:
+        panel_margin = theme.margin - 8
+        panel_top_gap = 52
+        panel_height = page_height - (panel_margin * 2) - panel_top_gap
+
+        pdf.saveState()
+        pdf.setFillColorRGB(1, 1, 1)
+        pdf.setFillAlpha(0.08)
+        pdf.setStrokeColor(theme.palette[2], alpha=0.35)
+        pdf.setLineWidth(0.8)
+        pdf.roundRect(
+            panel_margin,
+            panel_margin,
+            page_width - panel_margin * 2,
+            max(panel_height, 120),
+            14,
+            stroke=1,
+            fill=1,
+        )
+        pdf.restoreState()
 
     def _try_draw_image_layer(
         self,
