@@ -40,6 +40,8 @@ class PaymentScreenS3Tests(unittest.TestCase):
         )
 
         self.assertIn("Платеж обрабатывается, пожалуйста подождите.", content.messages[0])
+        self.assertNotIn("Оплата тарифа", content.messages[0])
+        self.assertNotIn("Перед оплатой", content.messages[0])
 
 
 if __name__ == "__main__":
