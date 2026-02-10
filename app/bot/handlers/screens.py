@@ -6,7 +6,7 @@ import logging
 from typing import Any
 
 from aiogram import Bot, Router
-from aiogram.exceptions import TelegramBadRequest
+from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery
 from sqlalchemy import select, func
@@ -364,6 +364,11 @@ async def _safe_callback_answer(callback: CallbackQuery) -> None:
             setattr(callback, "_answered", True)
             return
         raise
+    except (TelegramNetworkError, TimeoutError) as exc:
+        logger.warning(
+            "callback_answer_network_issue",
+            extra={"user_id": callback.from_user.id, "error": str(exc)},
+        )
 
 
 async def _safe_callback_processing(callback: CallbackQuery) -> None:
@@ -382,6 +387,11 @@ async def _safe_callback_processing(callback: CallbackQuery) -> None:
             setattr(callback, "_answered", True)
             return
         raise
+    except (TelegramNetworkError, TimeoutError) as exc:
+        logger.warning(
+            "callback_processing_network_issue",
+            extra={"user_id": callback.from_user.id, "error": str(exc)},
+        )
 
 
 async def _ensure_report_delivery(callback: CallbackQuery, screen_id: str) -> bool:
