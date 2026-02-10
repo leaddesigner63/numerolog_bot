@@ -71,7 +71,7 @@ TARIFF_META: dict[str, dict[str, Any]] = {
 }
 
 
-_REPORT_HTML_TAG_RE = re.compile(r"</?(?:i|em|b|strong|u|s|strike|code|pre|span|a)(?:\s[^>]*)?>", re.IGNORECASE)
+_REPORT_HTML_TAG_RE = re.compile(r"<\s*/?\s*[a-zA-Z][^>]*>")
 _REPORT_BR_TAG_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
 
 

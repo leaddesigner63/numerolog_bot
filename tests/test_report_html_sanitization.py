@@ -33,6 +33,13 @@ class ReportHtmlSanitizationTests(unittest.TestCase):
         self.assertIn("Раздел", content.messages[0])
         self.assertNotIn("<i>", content.messages[0])
 
+    def test_sanitize_report_text_removes_unknown_html_tags(self) -> None:
+        source = "<h3>Заголовок</h3><div>Абзац</div><br><custom-tag attr='x'>Текст</custom-tag>"
+
+        cleaned = _sanitize_report_text(source)
+
+        self.assertEqual(cleaned, "ЗаголовокАбзац\nТекст")
+
 
 if __name__ == "__main__":
     unittest.main()
