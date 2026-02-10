@@ -221,7 +221,7 @@ class ReportService:
             if not job:
                 return None
             report = None
-            if job.order_id:
+            if job.order_id is not None:
                 report = (
                     session.execute(
                         select(Report).where(Report.order_id == job.order_id).limit(1)
@@ -229,7 +229,12 @@ class ReportService:
                     .scalars()
                     .first()
                 )
-            if not report:
+                if not report:
+                    job.status = ReportJobStatus.FAILED
+                    job.last_error = "report_not_saved_for_order"
+                    session.add(job)
+                    return None
+            else:
                 report = (
                     session.execute(
                         select(Report)
@@ -243,11 +248,11 @@ class ReportService:
                     .scalars()
                     .first()
                 )
-            if not report:
-                job.status = ReportJobStatus.FAILED
-                job.last_error = "report_not_saved"
-                session.add(job)
-                return None
+                if not report:
+                    job.status = ReportJobStatus.FAILED
+                    job.last_error = "report_not_saved"
+                    session.add(job)
+                    return None
             job.status = ReportJobStatus.COMPLETED
             job.last_error = None
             session.add(job)
@@ -300,7 +305,7 @@ class ReportService:
             if tariff in paid_tariffs:
                 order_id = self._resolve_paid_order_id(session, state, user_id)
                 if not order_id and not force_store:
-                    return
+                    raise RuntimeError("paid_order_missing")
                 if order_id and self._order_has_report(session, order_id):
                     self._logger.info(
                         "report_already_exists_for_order",
