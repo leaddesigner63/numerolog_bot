@@ -224,10 +224,11 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         ):
             await screens.handle_callbacks(callback, state=SimpleNamespace())
 
-        show_screen.assert_awaited_with(callback, screen_id="S15")
+        show_screen.assert_awaited_with(callback, screen_id="S2")
         state_snapshot = screens.screen_manager.update_state(1001)
         self.assertTrue(state_snapshot.data.get("existing_tariff_report_found"))
         self.assertEqual(state_snapshot.data.get("selected_tariff"), Tariff.T1.value)
+        self.assertFalse(state_snapshot.data.get("existing_report_warning_seen"))
 
         with self.SessionLocal() as session:
             after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
@@ -252,11 +253,11 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state_snapshot.data.get("reports_total"), 0)
         self.assertEqual(state_snapshot.data.get("reports"), [])
         self.assertFalse(state_snapshot.data.get("existing_tariff_report_found"))
+        self.assertFalse(state_snapshot.data.get("existing_report_warning_seen"))
 
         with self.SessionLocal() as session:
             after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
         self.assertEqual(after_orders_count, before_orders_count)
-
 
     async def test_questionnaire_done_resets_stale_failed_status_before_wait_screen(self) -> None:
         order_id = self._create_order(OrderStatus.PAID)
@@ -358,7 +359,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         ):
             await screens.handle_callbacks(callback, state=SimpleNamespace())
 
-        show_screen.assert_awaited_with(callback, screen_id="S2")
+        show_screen.assert_awaited_with(callback, screen_id="S3")
 
         with self.SessionLocal() as session:
             after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
@@ -371,6 +372,28 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         state_snapshot = screens.screen_manager.update_state(1001)
         self.assertEqual(state_snapshot.data.get("order_id"), str(latest_order.id))
         self.assertFalse(state_snapshot.data.get("existing_tariff_report_found"))
+        self.assertTrue(state_snapshot.data.get("existing_report_warning_seen"))
+
+    async def test_s3_opens_existing_report_warning_after_offer_screen(self) -> None:
+        order_id = self._create_order(OrderStatus.CREATED)
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T1.value,
+            order_id=str(order_id),
+            offer_seen=True,
+            existing_tariff_report_found=True,
+            existing_report_warning_seen=False,
+        )
+        callback = _DummyCallback("screen:S3")
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S15")
 
 
 if __name__ == "__main__":
