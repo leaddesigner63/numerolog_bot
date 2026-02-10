@@ -33,6 +33,8 @@ REPORT_FRAMEWORK_TEMPLATE = """
 - T3: всё из T2 + план действий (1 месяц по неделям, 1 год по месяцам) + блок «Энергия/отношения» без медицины.
 """.strip()
 
+PAID_TARIFFS = {Tariff.T1, Tariff.T2, Tariff.T3}
+
 
 class ReportService:
     def __init__(self) -> None:
@@ -221,7 +223,8 @@ class ReportService:
             if not job:
                 return None
             report = None
-            if job.order_id is not None:
+            should_lookup_by_order = job.order_id is not None and job.tariff in PAID_TARIFFS
+            if should_lookup_by_order:
                 report = (
                     session.execute(
                         select(Report).where(Report.order_id == job.order_id).limit(1)
@@ -300,9 +303,8 @@ class ReportService:
             return
 
         order_id = None
-        paid_tariffs = {Tariff.T1, Tariff.T2, Tariff.T3}
         with get_session() as session:
-            if tariff in paid_tariffs:
+            if tariff in PAID_TARIFFS:
                 order_id = self._resolve_paid_order_id(session, state, user_id)
                 if not order_id and not force_store:
                     self._logger.warning(
