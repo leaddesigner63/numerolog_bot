@@ -10,7 +10,17 @@ from sqlalchemy.pool import StaticPool
 from app.bot.handlers import screen_manager as screen_manager_module
 from app.bot.handlers import screens
 from app.db.base import Base
-from app.db.models import Order, OrderStatus, PaymentProvider, Report, ReportJob, Tariff, User, UserProfile
+from app.db.models import (
+    Order,
+    OrderFulfillmentStatus,
+    OrderStatus,
+    PaymentProvider,
+    Report,
+    ReportJob,
+    Tariff,
+    User,
+    UserProfile,
+)
 
 
 class _DummyCallback:
@@ -254,6 +264,79 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state_snapshot.data.get("reports"), [])
         self.assertFalse(state_snapshot.data.get("existing_tariff_report_found"))
         self.assertFalse(state_snapshot.data.get("existing_report_warning_seen"))
+
+        with self.SessionLocal() as session:
+            after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
+        self.assertEqual(after_orders_count, before_orders_count)
+
+    async def test_tariff_reuses_paid_unfulfilled_order_and_skips_payment_screen(self) -> None:
+        with self.SessionLocal() as session:
+            session.add(
+                Order(
+                    user_id=1,
+                    tariff=Tariff.T2,
+                    amount=1490,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    fulfillment_status=OrderFulfillmentStatus.PENDING,
+                )
+            )
+            session.commit()
+            paid_order = session.execute(
+                select(Order)
+                .where(Order.user_id == 1, Order.tariff == Tariff.T2)
+                .limit(1)
+            ).scalar_one()
+
+        callback = _DummyCallback("tariff:T2")
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S4")
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertEqual(state_snapshot.data.get("order_id"), str(paid_order.id))
+        self.assertEqual(state_snapshot.data.get("order_status"), OrderStatus.PAID.value)
+        self.assertTrue(state_snapshot.data.get("offer_seen"))
+
+    async def test_s3_reuses_paid_unfulfilled_order_without_creating_new_order(self) -> None:
+        with self.SessionLocal() as session:
+            session.add(
+                Order(
+                    user_id=1,
+                    tariff=Tariff.T3,
+                    amount=2490,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    fulfillment_status=OrderFulfillmentStatus.PENDING,
+                )
+            )
+            session.commit()
+            before_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
+
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T3.value,
+            offer_seen=True,
+        )
+        callback = _DummyCallback("screen:S3")
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S4")
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertEqual(state_snapshot.data.get("order_status"), OrderStatus.PAID.value)
 
         with self.SessionLocal() as session:
             after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
