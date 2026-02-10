@@ -177,7 +177,12 @@ class ReportService:
             telegram_user_id = user.telegram_user_id
             state_record = session.get(ScreenStateRecord, telegram_user_id)
             state_data = dict(state_record.data or {}) if state_record else {}
-            if not state_data or not state_data.get("selected_tariff"):
+            state_data["selected_tariff"] = job.tariff.value
+            if job.order_id is not None:
+                state_data["order_id"] = str(job.order_id)
+            else:
+                state_data.pop("order_id", None)
+            if not state_data:
                 job.status = ReportJobStatus.FAILED
                 job.last_error = "state_missing"
                 session.add(job)
