@@ -627,6 +627,8 @@ def _refresh_report_job_state(
     telegram_user_id: int,
     *,
     job_id: int | None = None,
+    expected_tariff_value: str | None = None,
+    expected_order_id: int | None = None,
 ) -> ReportJob | None:
     user = _get_or_create_user(session, telegram_user_id)
     resolved_job_id = job_id
@@ -634,11 +636,42 @@ def _refresh_report_job_state(
         state_snapshot = screen_manager.update_state(telegram_user_id)
         resolved_job_id = _safe_int(state_snapshot.data.get("report_job_id"))
     if not resolved_job_id:
-        screen_manager.update_state(telegram_user_id, report_job_status=None)
+        screen_manager.update_state(
+            telegram_user_id,
+            report_job_id=None,
+            report_job_status=None,
+            report_job_attempts=None,
+        )
         return None
     job = session.get(ReportJob, resolved_job_id)
     if not job or job.user_id != user.id:
-        screen_manager.update_state(telegram_user_id, report_job_status=None)
+        screen_manager.update_state(
+            telegram_user_id,
+            report_job_id=None,
+            report_job_status=None,
+            report_job_attempts=None,
+        )
+        return None
+    if expected_tariff_value:
+        try:
+            expected_tariff = Tariff(expected_tariff_value)
+        except ValueError:
+            expected_tariff = None
+        if expected_tariff and job.tariff != expected_tariff:
+            screen_manager.update_state(
+                telegram_user_id,
+                report_job_id=None,
+                report_job_status=None,
+                report_job_attempts=None,
+            )
+            return None
+    if expected_order_id is not None and job.order_id != expected_order_id:
+        screen_manager.update_state(
+            telegram_user_id,
+            report_job_id=None,
+            report_job_status=None,
+            report_job_attempts=None,
+        )
         return None
     screen_manager.update_state(
         telegram_user_id,
@@ -1173,8 +1206,20 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 _refresh_questionnaire_state(session, callback.from_user.id)
         if screen_id in {"S6", "S7"}:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
+            selected_tariff = state_snapshot.data.get("selected_tariff")
+            order_id = _safe_int(state_snapshot.data.get("order_id"))
+            expected_order_id = (
+                order_id
+                if selected_tariff in {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}
+                else None
+            )
             with get_session() as session:
-                job = _refresh_report_job_state(session, callback.from_user.id)
+                job = _refresh_report_job_state(
+                    session,
+                    callback.from_user.id,
+                    expected_tariff_value=selected_tariff,
+                    expected_order_id=expected_order_id,
+                )
                 if (
                     job
                     and job.status == ReportJobStatus.COMPLETED
@@ -1191,7 +1236,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     _refresh_report_state(
                         session,
                         callback.from_user.id,
-                        tariff_value=state_snapshot.data.get("selected_tariff"),
+                        tariff_value=selected_tariff,
                     )
         await _show_screen_for_callback(
             callback,
@@ -1472,6 +1517,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         screen_manager.update_state(callback.from_user.id, profile_flow=None)
         next_screen = "S5" if tariff in {Tariff.T2.value, Tariff.T3.value} else "S6"
         if next_screen == "S6":
+            screen_manager.update_state(
+                callback.from_user.id,
+                report_text=None,
+                report_model=None,
+                report_meta=None,
+            )
             with get_session() as session:
                 user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
                 order_id = _safe_int(
@@ -1571,11 +1622,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 )
                 await _safe_callback_answer(callback)
                 return
-        await _show_screen_for_callback(
-            callback,
-            screen_id="S6",
+        screen_manager.update_state(
+            callback.from_user.id,
+            report_text=None,
+            report_model=None,
+            report_meta=None,
         )
-        await _maybe_run_report_delay(callback)
         with get_session() as session:
             user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
             order_id = _safe_int(state_snapshot.data.get("order_id"))
@@ -1590,6 +1642,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await _send_notice(callback, "Не удалось создать задание на генерацию.")
                 await _safe_callback_answer(callback)
                 return
+        await _show_screen_for_callback(
+            callback,
+            screen_id="S6",
+        )
+        await _maybe_run_report_delay(callback)
         await _safe_callback_answer(callback)
         return
 

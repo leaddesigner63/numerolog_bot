@@ -257,6 +257,64 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
         self.assertEqual(after_orders_count, before_orders_count)
 
+
+    async def test_questionnaire_done_resets_stale_failed_status_before_wait_screen(self) -> None:
+        order_id = self._create_order(OrderStatus.PAID)
+        with self.SessionLocal() as session:
+            failed_job = ReportJob(
+                user_id=1,
+                order_id=None,
+                tariff=Tariff.T0,
+                status=screens.ReportJobStatus.FAILED,
+                attempts=1,
+            )
+            session.add(failed_job)
+            session.flush()
+            failed_job_id = failed_job.id
+            session.commit()
+
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T2.value,
+            order_id=str(order_id),
+            report_job_id=str(failed_job_id),
+            report_job_status=screens.ReportJobStatus.FAILED.value,
+            questionnaire={"status": "completed"},
+        )
+        callback = _DummyCallback("questionnaire:done")
+
+        observed_status = {}
+
+        async def _show_screen_side_effect(_callback, *, screen_id):
+            if screen_id == "S6":
+                state_snapshot = screens.screen_manager.update_state(1001)
+                observed_status["status"] = state_snapshot.data.get("report_job_status")
+            return True
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock(side_effect=_show_screen_side_effect)) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+            patch.object(screens, "_maybe_run_report_delay", new=AsyncMock()),
+            patch.object(screens, "_send_notice", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S6")
+        self.assertEqual(observed_status.get("status"), screens.ReportJobStatus.PENDING.value)
+        with self.SessionLocal() as session:
+            pending_jobs = (
+                session.execute(
+                    select(func.count(ReportJob.id)).where(
+                        ReportJob.user_id == 1,
+                        ReportJob.tariff == Tariff.T2,
+                        ReportJob.order_id == order_id,
+                        ReportJob.status == screens.ReportJobStatus.PENDING,
+                    )
+                ).scalar_one()
+            )
+        self.assertEqual(pending_jobs, 1)
+
     async def test_existing_report_lk_opens_personal_account_screen(self) -> None:
         callback = _DummyCallback("existing_report:lk")
 

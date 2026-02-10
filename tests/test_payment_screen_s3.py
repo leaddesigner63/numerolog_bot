@@ -1,6 +1,6 @@
 import unittest
 
-from app.bot.screens import screen_s3
+from app.bot.screens import screen_s15, screen_s3
 
 
 class PaymentScreenS3Tests(unittest.TestCase):
@@ -42,6 +42,26 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertIn("Платеж обрабатывается, пожалуйста подождите.", content.messages[0])
         self.assertNotIn("Оплата тарифа", content.messages[0])
         self.assertNotIn("Перед оплатой", content.messages[0])
+
+
+class PaymentScreenS15Tests(unittest.TestCase):
+    def test_s15_shows_only_reports_for_current_tariff(self) -> None:
+        content = screen_s15(
+            {
+                "selected_tariff": "T2",
+                "reports": [
+                    {"id": "1", "tariff": "T1", "created_at": "2025-01-01"},
+                    {"id": "2", "tariff": "T2", "created_at": "2025-01-02"},
+                    {"id": "3", "tariff": "T3", "created_at": "2025-01-03"},
+                ],
+                "reports_total": 3,
+            }
+        )
+
+        message = content.messages[0]
+        self.assertIn("Отчёт #2", message)
+        self.assertNotIn("Отчёт #1", message)
+        self.assertNotIn("Отчёт #3", message)
 
 
 if __name__ == "__main__":
