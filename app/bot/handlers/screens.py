@@ -888,6 +888,29 @@ def _report_meta_payload(report: Report) -> dict[str, str]:
     }
 
 
+def _delete_report_with_assets(session, report: Report) -> bool:
+    try:
+        pdf_service.delete_pdf(report.pdf_storage_key)
+    except Exception as exc:
+        logger.warning(
+            "report_pdf_delete_failed",
+            extra={
+                "report_id": report.id,
+                "pdf_storage_key": report.pdf_storage_key,
+                "error": str(exc),
+            },
+        )
+    try:
+        session.delete(report)
+        return True
+    except Exception as exc:
+        logger.warning(
+            "report_db_delete_failed",
+            extra={"report_id": report.id, "error": str(exc)},
+        )
+        return False
+
+
 def _get_report_pdf_bytes(session, report: Report) -> bytes | None:
     pdf_bytes = None
     if report.pdf_storage_key:
@@ -1816,13 +1839,15 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             )
             await _safe_callback_answer(callback)
             return
+        report_deleted = False
         with get_session() as session:
             report = _get_report_for_user(session, callback.from_user.id, report_id)
             if not report:
                 await _send_notice(callback, "Отчёт уже удалён или недоступен.")
             else:
-                pdf_service.delete_pdf(report.pdf_storage_key)
-                session.delete(report)
+                report_deleted = _delete_report_with_assets(session, report)
+                if not report_deleted:
+                    await _send_notice(callback, "Не удалось удалить отчёт. Попробуйте ещё раз.")
             _refresh_reports_list_state(session, callback.from_user.id)
         screen_manager.update_state(
             callback.from_user.id,
@@ -1830,7 +1855,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             report_meta=None,
             report_delete_scope=None,
         )
-        await _send_notice(callback, "Отчёт удалён.")
+        if report_deleted:
+            await _send_notice(callback, "Отчёт удалён.")
         await _show_screen_for_callback(
             callback,
             screen_id="S12",
@@ -1843,9 +1869,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         with get_session() as session:
             reports = _get_reports_for_user(session, callback.from_user.id)
             for report in reports:
-                pdf_service.delete_pdf(report.pdf_storage_key)
-                session.delete(report)
-                deleted_reports_count += 1
+                if _delete_report_with_assets(session, report):
+                    deleted_reports_count += 1
             _refresh_reports_list_state(session, callback.from_user.id)
         screen_manager.update_state(
             callback.from_user.id,
@@ -1856,7 +1881,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         if deleted_reports_count:
             await _send_notice(callback, "Все отчёты удалены.")
         else:
-            await _send_notice(callback, "Список отчётов уже пуст.")
+            await _send_notice(callback, "Список отчётов уже пуст или временно недоступен для удаления.")
         await _show_screen_for_callback(
             callback,
             screen_id="S12",

@@ -271,6 +271,13 @@ class ScreenManager:
                     },
                 )
 
+        retry_failed_message_ids: list[int] = []
+        for message_id in failed_message_ids:
+            if await self._retry_delete_message(bot, chat_id, message_id):
+                continue
+            retry_failed_message_ids.append(message_id)
+        failed_message_ids = retry_failed_message_ids
+
         for message_id in previous_user_message_ids:
             try:
                 await bot.delete_message(chat_id=chat_id, message_id=message_id)
@@ -443,6 +450,24 @@ class ScreenManager:
             metadata_json=safe_metadata,
         )
         return delivered
+
+    async def _retry_delete_message(
+        self,
+        bot: Bot,
+        chat_id: int,
+        message_id: int,
+        *,
+        attempts: int = 3,
+        delay_seconds: float = 0.35,
+    ) -> bool:
+        for attempt in range(attempts):
+            try:
+                await asyncio.sleep(delay_seconds * (attempt + 1))
+                await bot.delete_message(chat_id=chat_id, message_id=message_id)
+                return True
+            except (TelegramBadRequest, TelegramForbiddenError, Exception):
+                continue
+        return False
 
     def _record_transition_event(
         self,
