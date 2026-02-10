@@ -100,12 +100,14 @@ async def handle_start(message: Message) -> None:
                     ).scalar_one_or_none()
                     if order:
                         state_snapshot = screen_manager.update_state(message.from_user.id)
+                        should_resume_report_flow = order.status == OrderStatus.PAID
                         state_update = {
                             "order_id": str(order.id),
                             "order_status": order.status.value,
                             "selected_tariff": order.tariff.value,
-                            "s4_no_inline_keyboard": order.status == OrderStatus.PAID,
+                            "s4_no_inline_keyboard": False,
                             "payment_processing_notice": order.status != OrderStatus.PAID,
+                            "profile_flow": "report" if should_resume_report_flow else None,
                         }
                         if state_snapshot.data.get("payment_url") is not None:
                             state_update["payment_url"] = state_snapshot.data.get("payment_url")
@@ -143,6 +145,7 @@ async def handle_start(message: Message) -> None:
         state_update = {
             "s4_no_inline_keyboard": False,
             "payment_processing_notice": False,
+            "profile_flow": "report" if not latest_report_state else None,
         }
         state_update.update(latest_paid_order_state)
         if latest_report_state:
