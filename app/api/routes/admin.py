@@ -2065,6 +2065,42 @@ def admin_ui(request: Request) -> HTMLResponse:
       longDurationSec: 1800,
     };
 
+    const analyticsScreenDescriptions = {
+      S0: "Старт и первый оффер",
+      S1: "Выбор тарифа",
+      S2: "Оферта перед оплатой",
+      S3: "Оплата тарифа",
+      S4: "Форма «Мои данные»",
+      S5: "Расширенная анкета",
+      S6: "Ожидание готовности отчёта",
+      S7: "Готовый отчёт",
+      S6_OR_S7: "Получение результата (ожидание/отчёт)",
+      S8: "Экран обратной связи",
+      S9: "Ввод сообщения в поддержку",
+      S10: "Подтверждение отправки",
+      S11: "Сообщение об ошибке",
+      S12: "Повторная оплата/проверка",
+      S13: "Поддержка: список диалогов",
+      S14: "Поддержка: диалог с пользователем",
+      UNKNOWN: "Неизвестный экран",
+    };
+
+    function screenLabel(screenId) {
+      const raw = (screenId || "").toString().trim().toUpperCase();
+      if (!raw) {
+        return "—";
+      }
+      const baseId = raw.split("_")[0];
+      const description = analyticsScreenDescriptions[raw] || analyticsScreenDescriptions[baseId];
+      if (!description) {
+        return raw;
+      }
+      if (raw === baseId) {
+        return `${raw} — ${description}`;
+      }
+      return `${raw} — ${description} (${baseId})`;
+    }
+
     function toIsoFromLocal(value) {
       if (!value) {
         return null;
@@ -2119,7 +2155,7 @@ def admin_ui(request: Request) -> HTMLResponse:
             const isProblem = stepCr > 0 && stepCr < analyticsThresholds.lowCr;
             return `
               <div class="funnel-step ${isProblem ? "problem-cell" : ""}">
-                <div>${row.step}</div>
+                <div>${screenLabel(row.step)}</div>
                 <div class="funnel-bar-wrap"><div class="funnel-bar" style="width: ${width}%;"></div></div>
                 <div>${formatPercent(stepCr)}</div>
               </div>
@@ -2140,7 +2176,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       const startUsers = Number(startStep?.users) || 0;
       const endUsers = Number(endStep?.users) || 0;
       const conversion = startUsers ? endUsers / startUsers : 0;
-      const topDropoff = dropoffRows.slice(0, 3).map((row) => `${row.screen}: ${formatPercent(row.share)}`).join(" • ") || "Нет данных";
+      const topDropoff = dropoffRows.slice(0, 3).map((row) => `${screenLabel(row.screen)}: ${formatPercent(row.share)}`).join(" • ") || "Нет данных";
 
       target.innerHTML = `
         <div class="kpi-card">
@@ -2218,8 +2254,8 @@ def admin_ui(request: Request) -> HTMLResponse:
           "analyticsMatrix",
           ["From", "To", "Переходов", "Доля"],
           matrixRows.map((row) => [
-            {value: row.from_screen || "-"},
-            {value: row.to_screen || "-"},
+            {value: screenLabel(row.from_screen)},
+            {value: screenLabel(row.to_screen)},
             {value: Number(row.count) || 0},
             {value: formatPercent(row.share)},
           ])
@@ -2236,7 +2272,7 @@ def admin_ui(request: Request) -> HTMLResponse:
           const medianSec = Number(timing?.median_seconds) || 0;
           const isProblem = cr < analyticsThresholds.lowCr || dropoffShare > analyticsThresholds.highDropoff || medianSec > analyticsThresholds.longDurationSec;
           return {
-            transition: key,
+            transition: `${screenLabel(row.from_screen)} → ${screenLabel(row.to_screen)}`,
             cr,
             dropoffShare,
             medianSec,
