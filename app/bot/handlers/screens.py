@@ -1101,6 +1101,21 @@ def _refresh_order_state(order: Order) -> dict[str, str]:
     }
 
 
+def _safe_create_payment_link(provider, order: Order, user: User | None):
+    try:
+        return provider.create_payment_link(order, user=user)
+    except Exception:
+        logger.exception(
+            "payment_link_create_failed",
+            extra={
+                "order_id": order.id,
+                "provider": order.provider.value,
+                "user_id": user.id if user else None,
+            },
+        )
+        return None
+
+
 @router.callback_query()
 async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data:
@@ -1204,14 +1219,6 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 )
                 await _safe_callback_answer(callback)
                 return
-            if not state_snapshot.data.get("order_id"):
-                await _send_notice(callback, "Сначала выберите тариф и создайте заказ.")
-                await _show_screen_for_callback(
-                    callback,
-                    screen_id="S1",
-                )
-                await _safe_callback_answer(callback)
-                return
             if state_snapshot.data.get("existing_tariff_report_found") and not state_snapshot.data.get("existing_report_warning_seen"):
                 await _show_screen_for_callback(
                     callback,
@@ -1221,6 +1228,72 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 return
             with get_session() as session:
                 order_id = _safe_int(state_snapshot.data.get("order_id"))
+                if not order_id:
+                    user = _get_or_create_user(
+                        session,
+                        callback.from_user.id,
+                        callback.from_user.username,
+                    )
+                    order = _create_order(session, user, Tariff(selected_tariff))
+                    payment_link = None
+                    if settings.payment_enabled:
+                        provider = get_payment_provider(order.provider.value)
+                        payment_link = _safe_create_payment_link(
+                            provider,
+                            order,
+                            user,
+                        )
+                        if (
+                            not payment_link
+                            and order.provider == PaymentProviderEnum.PRODAMUS
+                        ):
+                            fallback_provider = get_payment_provider(
+                                PaymentProviderEnum.CLOUDPAYMENTS.value
+                            )
+                            payment_link = _safe_create_payment_link(
+                                fallback_provider,
+                                order,
+                                user,
+                            )
+                            if payment_link:
+                                order.provider = PaymentProviderEnum.CLOUDPAYMENTS
+                                session.add(order)
+                        if not payment_link:
+                            missing_primary = _missing_payment_link_config(
+                                order.provider
+                            )
+                            fallback_provider_enum = (
+                                PaymentProviderEnum.CLOUDPAYMENTS
+                                if order.provider == PaymentProviderEnum.PRODAMUS
+                                else PaymentProviderEnum.PRODAMUS
+                            )
+                            missing_fallback = _missing_payment_link_config(
+                                fallback_provider_enum
+                            )
+                            logger.warning(
+                                "payment_link_unavailable",
+                                extra={
+                                    "order_id": order.id,
+                                    "primary_provider": order.provider.value,
+                                    "missing_primary": missing_primary,
+                                    "missing_fallback": missing_fallback,
+                                },
+                            )
+                            missing_vars = (
+                                ", ".join(missing_primary + missing_fallback)
+                                or "секреты провайдера"
+                            )
+                            await _send_notice(
+                                callback,
+                                "Платёжная ссылка недоступна: не настроены ключи оплаты. "
+                                f"Проверьте переменные {missing_vars}.",
+                            )
+                    screen_manager.update_state(
+                        callback.from_user.id,
+                        payment_url=payment_link.url if payment_link else None,
+                        **_refresh_order_state(order),
+                    )
+                    order_id = order.id
                 order = session.get(Order, order_id) if order_id else None
                 if order:
                     screen_manager.update_state(
@@ -1363,12 +1436,20 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             payment_link = None
             if settings.payment_enabled:
                 provider = get_payment_provider(order.provider.value)
-                payment_link = provider.create_payment_link(order, user=user)
+                payment_link = _safe_create_payment_link(
+                    provider,
+                    order,
+                    user,
+                )
                 if not payment_link and order.provider == PaymentProviderEnum.PRODAMUS:
                     fallback_provider = get_payment_provider(
                         PaymentProviderEnum.CLOUDPAYMENTS.value
                     )
-                    payment_link = fallback_provider.create_payment_link(order, user=user)
+                    payment_link = _safe_create_payment_link(
+                        fallback_provider,
+                        order,
+                        user,
+                    )
                     if payment_link:
                         order.provider = PaymentProviderEnum.CLOUDPAYMENTS
                         session.add(order)
