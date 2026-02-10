@@ -22,6 +22,7 @@ from app.core.report_document import report_document_builder
 from app.db.models import (
     FreeLimit,
     Order,
+    OrderFulfillmentStatus,
     OrderStatus,
     PaymentProvider as PaymentProviderEnum,
     QuestionnaireResponse,
@@ -901,6 +902,25 @@ def _delete_report_with_assets(session, report: Report) -> bool:
             },
         )
     try:
+        linked_orders: list[Order] = []
+        try:
+            linked_orders_raw = (
+                session.execute(select(Order).where(Order.fulfilled_report_id == report.id))
+                .scalars()
+                .all()
+            )
+            linked_orders = linked_orders_raw if isinstance(linked_orders_raw, list) else []
+        except Exception as exc:
+            logger.warning(
+                "report_linked_orders_fetch_failed",
+                extra={"report_id": report.id, "error": str(exc)},
+            )
+        for linked_order in linked_orders:
+            linked_order.fulfilled_report_id = None
+            if linked_order.fulfillment_status == OrderFulfillmentStatus.COMPLETED:
+                linked_order.fulfillment_status = OrderFulfillmentStatus.PENDING
+                linked_order.fulfilled_at = None
+            session.add(linked_order)
         session.delete(report)
         return True
     except Exception as exc:
@@ -1159,6 +1179,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 )
                 await _safe_callback_answer(callback)
                 return
+            if state_snapshot.data.get("existing_tariff_report_found") and not state_snapshot.data.get("existing_report_warning_seen"):
+                await _show_screen_for_callback(
+                    callback,
+                    screen_id="S15",
+                )
+                await _safe_callback_answer(callback)
+                return
             with get_session() as session:
                 order_id = _safe_int(state_snapshot.data.get("order_id"))
                 order = session.get(Order, order_id) if order_id else None
@@ -1345,11 +1372,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 payment_url=payment_link.url if payment_link else None,
                 existing_tariff_report_found=False,
                 existing_tariff_report_meta=None,
+                existing_report_warning_seen=True,
+                offer_seen=True,
                 **_refresh_order_state(order),
             )
-        screen_manager.update_state(callback.from_user.id, offer_seen=False)
-        await _show_screen_for_callback(callback, screen_id="S2")
-        screen_manager.update_state(callback.from_user.id, offer_seen=True)
+        await _show_screen_for_callback(callback, screen_id="S3")
         await _safe_callback_answer(callback)
         return
 
@@ -1393,11 +1420,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             selected_tariff=tariff,
             profile_flow="report" if tariff == Tariff.T0.value else None,
             offer_seen=False if tariff in PAID_TARIFFS else True,
+            existing_report_warning_seen=False,
         )
         if tariff == Tariff.T0.value:
             next_screen = "S4"
         else:
-            next_screen = "S15" if existing_tariff_report_found else "S2"
+            next_screen = "S2"
         await _show_screen_for_callback(
             callback,
             screen_id=next_screen,
