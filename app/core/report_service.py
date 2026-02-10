@@ -305,7 +305,11 @@ class ReportService:
             if tariff in paid_tariffs:
                 order_id = self._resolve_paid_order_id(session, state, user_id)
                 if not order_id and not force_store:
-                    raise RuntimeError("paid_order_missing")
+                    self._logger.warning(
+                        "paid_order_missing",
+                        extra={"user_id": user_id, "tariff": tariff.value},
+                    )
+                    return
                 if order_id and self._order_has_report(session, order_id):
                     self._logger.info(
                         "report_already_exists_for_order",
