@@ -25,6 +25,25 @@ class ScreenS5KeyboardTests(unittest.TestCase):
 
         self.assertTrue(any("Продолжить" in text for text in texts))
         self.assertFalse(any("Заполнить анкету" in text for text in texts))
+        self.assertTrue(any("Редактировать анкету" in text for text in texts))
+        self.assertTrue(any("Редактировать данные" in text for text in texts))
+
+    def test_paid_order_empty_questionnaire_shows_full_keyboard(self) -> None:
+        texts = self._button_texts(
+            state={
+                "order_id": "42",
+                "order_status": "paid",
+                "questionnaire": {
+                    "status": "empty",
+                    "answered_count": 0,
+                    "total_questions": 5,
+                },
+            }
+        )
+
+        self.assertTrue(any("Продолжить" in text for text in texts))
+        self.assertTrue(any("Редактировать анкету" in text for text in texts))
+        self.assertTrue(any("Редактировать данные" in text for text in texts))
 
     def test_unpaid_order_shows_fill_questionnaire_button(self) -> None:
         texts = self._button_texts(

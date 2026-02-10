@@ -809,6 +809,23 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
                 )
             ]
         )
+        if has_paid_order:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=_with_button_icons("Редактировать анкету", "📝"),
+                        callback_data="questionnaire:edit",
+                    )
+                ]
+            )
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=_with_button_icons("Редактировать данные", "🧾"),
+                        callback_data="screen:S4",
+                    )
+                ]
+            )
     rows.append(
         [
             InlineKeyboardButton(
