@@ -3151,6 +3151,7 @@ def admin_users(limit: int = 50, session: Session = Depends(_get_db_session)) ->
                 "telegram_user_id": user.telegram_user_id,
                 "created_at": user.created_at.isoformat(),
                 "name": profile.name if profile else None,
+                "gender": profile.gender if profile else None,
                 "birth_date": profile.birth_date if profile else None,
             }
         )

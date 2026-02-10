@@ -482,6 +482,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             (
                 f"Мои данные для тарифа {selected_tariff}:\n\n"
                 f"Имя: {profile_data.get('name')}\n"
+                f"Пол: {profile_data.get('gender') or 'не указано'}\n"
                 f"Дата рождения: {profile_data.get('birth_date')}\n"
                 f"Время рождения: {birth_time}\n"
                 f"Место рождения: {birth_place}\n\n"
@@ -507,9 +508,10 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 f"Мои данные для тарифа {selected_tariff}.\n\n"
                 "Данные ещё не заполнены. Нажмите «Заполнить данные» и следуйте шагам:\n"
                 "1) Имя\n"
-                "2) Дата рождения (в любом формате)\n"
-                "3) Время рождения (в любом формате)\n"
-                "4) Место рождения (в любом формате)."
+                "2) Пол (в любом формате)\n"
+                "3) Дата рождения (в любом формате)\n"
+                "4) Время рождения (в любом формате)\n"
+                "5) Место рождения (в любом формате)."
             ),
         )
 
@@ -632,6 +634,7 @@ def screen_s4_edit(state: dict[str, Any]) -> ScreenContent:
         (
             "Выберите поле для частичного редактирования:\n\n"
             f"Имя: {profile.get('name')}\n"
+            f"Пол: {profile.get('gender') or 'не указано'}\n"
             f"Дата рождения: {profile.get('birth_date')}\n"
             f"Время рождения: {birth_time}\n"
             f"Место рождения: {birth_place}"
@@ -642,6 +645,12 @@ def screen_s4_edit(state: dict[str, Any]) -> ScreenContent:
             InlineKeyboardButton(
                 text=_with_button_icons("Имя", "📝"),
                 callback_data="profile:edit:name",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Пол", "⚧️"),
+                callback_data="profile:edit:gender",
             )
         ],
         [
@@ -938,6 +947,7 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
             (
                 "Личный кабинет.\n\n"
                 f"Имя: {profile.get('name')}\n"
+                f"Пол: {profile.get('gender') or 'не указано'}\n"
                 f"Дата рождения: {profile.get('birth_date')}\n"
                 f"Время рождения: {birth_time}\n"
                 f"Место рождения: {birth_place}"

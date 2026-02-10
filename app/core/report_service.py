@@ -351,6 +351,7 @@ class ReportService:
             "tariff": state.get("selected_tariff"),
             "profile": {
                 "name": profile.get("name"),
+                "gender": profile.get("gender"),
                 "birth_date": profile.get("birth_date"),
                 "birth_time": profile.get("birth_time"),
                 "birth_place": {
