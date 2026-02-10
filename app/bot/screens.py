@@ -507,6 +507,9 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             ),
         )
 
+    if state.get("s4_no_inline_keyboard"):
+        return ScreenContent(messages=[text], keyboard=None)
+
     rows: list[list[InlineKeyboardButton]] = []
     if has_profile:
         rows.append(
