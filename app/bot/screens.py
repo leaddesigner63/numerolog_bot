@@ -466,6 +466,9 @@ def _format_questionnaire_profile(questionnaire: dict[str, Any] | None) -> str:
 def screen_s4(state: dict[str, Any]) -> ScreenContent:
     selected_tariff_raw = state.get("selected_tariff", "T0")
     selected_tariff = _format_tariff_label(selected_tariff_raw)
+    selected_tariff_title = (
+        "В чём твоя сила?💪" if selected_tariff_raw == "T1" else selected_tariff
+    )
     profile = state.get("profile")
     profile_data = profile or {}
     has_profile = profile is not None
@@ -480,7 +483,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         text = _with_screen_prefix(
             "S4",
             (
-                f"Мои данные для тарифа {selected_tariff}:\n\n"
+                f"Мои данные для тарифа {selected_tariff_title}:\n\n"
                 f"Имя: {profile_data.get('name')}\n"
                 f"Пол: {profile_data.get('gender') or 'не указано'}\n"
                 f"Дата рождения: {profile_data.get('birth_date')}\n"
@@ -505,7 +508,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         text = _with_screen_prefix(
             "S4",
             (
-                f"Мои данные для тарифа {selected_tariff}.\n\n"
+                f"Мои данные для тарифа {selected_tariff_title}.\n\n"
                 "Данные ещё не заполнены. Нажмите «Заполнить данные» и следуйте шагам:\n"
                 "1) Имя\n"
                 "2) Пол (кнопки «Женский» / «Мужской»)\n"
