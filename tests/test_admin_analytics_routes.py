@@ -244,6 +244,44 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
                 self.assertEqual(order.fulfillment_status, OrderFulfillmentStatus.COMPLETED)
                 self.assertIsNotNone(order.fulfilled_at)
 
+    def test_admin_orders_bulk_delete_removes_selected_orders(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=103, telegram_user_id=700703)
+            first = Order(
+                id=204,
+                user_id=103,
+                tariff=Tariff.T1,
+                amount=990,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.CREATED,
+                fulfillment_status=OrderFulfillmentStatus.PENDING,
+            )
+            second = Order(
+                id=205,
+                user_id=103,
+                tariff=Tariff.T2,
+                amount=1990,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                fulfillment_status=OrderFulfillmentStatus.PENDING,
+            )
+            session.add_all([user, first, second])
+            session.commit()
+
+        response = self.client.post(
+            "/admin/api/orders/bulk-delete",
+            json={"ids": [204]},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["deleted"], 1)
+
+        with self.SessionLocal() as session:
+            self.assertIsNone(session.get(Order, 204))
+            self.assertIsNotNone(session.get(Order, 205))
+
 
 if __name__ == "__main__":
     unittest.main()
