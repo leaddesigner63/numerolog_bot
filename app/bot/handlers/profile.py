@@ -7,7 +7,8 @@ from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import ReplyKeyboardRemove
 from sqlalchemy import delete, select, func
 
 from app.bot.questionnaire.config import load_questionnaire_config
@@ -28,6 +29,11 @@ from app.db.session import get_session
 
 router = Router()
 
+GENDER_CALLBACK_TO_VALUE = {
+    "profile:gender:female": "Женский",
+    "profile:gender:male": "Мужской",
+}
+
 
 class ProfileStates(StatesGroup):
     name = State()
@@ -40,6 +46,19 @@ class ProfileStates(StatesGroup):
     edit_birth_date = State()
     edit_birth_time = State()
     edit_birth_place = State()
+
+
+def _gender_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="Женский", callback_data="profile:gender:female"
+                ),
+                InlineKeyboardButton(text="Мужской", callback_data="profile:gender:male"),
+            ]
+        ]
+    )
 
 
 def _safe_int(value: str | int | None) -> int | None:
@@ -217,7 +236,11 @@ async def start_profile_wizard(
 
 
 async def _start_profile_edit(
-    callback: CallbackQuery, state: FSMContext, next_state: State, prompt: str
+    callback: CallbackQuery,
+    state: FSMContext,
+    next_state: State,
+    prompt: str,
+    reply_markup: InlineKeyboardMarkup | ReplyKeyboardRemove | None = None,
 ) -> None:
     await state.clear()
     await state.set_state(next_state)
@@ -229,6 +252,7 @@ async def _start_profile_edit(
     sent = await callback.bot.send_message(
         chat_id=callback.message.chat.id,
         text=prompt,
+        reply_markup=reply_markup,
     )
     screen_manager.update_last_question_message_id(
         callback.from_user.id, sent.message_id
@@ -351,7 +375,8 @@ async def start_profile_edit_gender(callback: CallbackQuery, state: FSMContext) 
         callback,
         state,
         ProfileStates.edit_gender,
-        "Введите новый пол (в любом формате).",
+        "Выберите пол.",
+        reply_markup=_gender_keyboard(),
     )
     await callback.answer()
 
@@ -456,7 +481,8 @@ async def handle_profile_name(message: Message, state: FSMContext) -> None:
     await state.set_state(ProfileStates.gender)
     sent = await message.bot.send_message(
         chat_id=message.chat.id,
-        text="Введите пол (в любом формате).",
+        text="Выберите пол.",
+        reply_markup=_gender_keyboard(),
     )
     screen_manager.update_last_question_message_id(message.from_user.id, sent.message_id)
     await screen_manager.delete_user_message(
@@ -491,6 +517,63 @@ async def handle_profile_gender(message: Message, state: FSMContext) -> None:
         user_id=message.from_user.id,
         message_id=message.message_id,
     )
+
+
+@router.callback_query(F.data.in_(set(GENDER_CALLBACK_TO_VALUE)))
+async def handle_profile_gender_callback(
+    callback: CallbackQuery, state: FSMContext
+) -> None:
+    if not callback.message:
+        await callback.answer()
+        return
+    current_state = await state.get_state()
+    if current_state not in {ProfileStates.gender.state, ProfileStates.edit_gender.state}:
+        await callback.answer()
+        return
+    await screen_manager.delete_last_question_message(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+    )
+    gender = GENDER_CALLBACK_TO_VALUE.get(callback.data or "", "")
+    if current_state == ProfileStates.gender.state:
+        await state.update_data(gender=gender)
+        await state.set_state(ProfileStates.birth_date)
+        sent = await callback.bot.send_message(
+            chat_id=callback.message.chat.id,
+            text="Введите дату рождения (в любом формате).",
+        )
+        screen_manager.update_last_question_message_id(
+            callback.from_user.id, sent.message_id
+        )
+        await callback.answer("Пол сохранён")
+        return
+
+    with get_session() as session:
+        user = _get_or_create_user(
+            session,
+            callback.from_user.id,
+            callback.from_user.username,
+        )
+        profile = user.profile
+        if not profile:
+            await state.clear()
+            await screen_manager.send_ephemeral_message(
+                callback.message, "Сначала заполните «Мои данные»."
+            )
+            await _show_profile_screen(callback.message, callback.from_user.id)
+            await callback.answer()
+            return
+        profile.gender = gender
+        session.flush()
+        screen_manager.update_state(
+            callback.from_user.id,
+            **_profile_payload(profile),
+        )
+    await state.clear()
+    await screen_manager.send_ephemeral_message(callback.message, "Данные обновлены.")
+    await _show_profile_screen(callback.message, callback.from_user.id)
+    await callback.answer("Пол обновлён")
 
 
 @router.message(ProfileStates.birth_date)
