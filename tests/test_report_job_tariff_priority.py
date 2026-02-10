@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core import report_service as report_service_module
 from app.db.base import Base
-from app.db.models import ReportJob, ReportJobStatus, ScreenStateRecord, Tariff, User
+from app.db.models import Report, ReportJob, ReportJobStatus, ScreenStateRecord, Tariff, User
 
 
 class ReportJobTariffPriorityTests(unittest.IsolatedAsyncioTestCase):
@@ -74,6 +74,45 @@ class ReportJobTariffPriorityTests(unittest.IsolatedAsyncioTestCase):
         called_state = generate_report.await_args.kwargs["state"]
         self.assertEqual(called_state.get("selected_tariff"), Tariff.T0.value)
         self.assertNotIn("order_id", called_state)
+
+
+    async def test_generate_report_by_job_t0_with_stale_order_id_uses_tariff_lookup(self) -> None:
+        with self.SessionLocal() as session:
+            session.add(
+                ReportJob(
+                    id=2,
+                    user_id=1,
+                    order_id=999,
+                    tariff=Tariff.T0,
+                    status=ReportJobStatus.PENDING,
+                    attempts=0,
+                    chat_id=4242,
+                )
+            )
+            session.add(
+                Report(
+                    user_id=1,
+                    order_id=None,
+                    tariff=Tariff.T0,
+                    report_text="t0 отчет",
+                    safety_flags={},
+                )
+            )
+            session.commit()
+
+        with patch.object(
+            report_service_module.report_service,
+            "generate_report",
+            new=AsyncMock(return_value=report_service_module.LLMResponse(text="ok", provider="gemini", model="flash")),
+        ):
+            result = await report_service_module.report_service.generate_report_by_job(job_id=2)
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.report_text, "t0 отчет")
+        with self.SessionLocal() as session:
+            job = session.get(ReportJob, 2)
+            self.assertIsNotNone(job)
+            self.assertEqual(job.status, ReportJobStatus.COMPLETED)
 
 
 if __name__ == "__main__":

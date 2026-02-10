@@ -696,6 +696,8 @@ def _create_report_job(
         tariff = Tariff(tariff_value)
     except ValueError:
         return None
+    if tariff not in PAID_TARIFFS:
+        order_id = None
     query = select(ReportJob).where(
         ReportJob.user_id == user.id,
         ReportJob.tariff == tariff,
