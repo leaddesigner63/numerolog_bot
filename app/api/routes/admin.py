@@ -1323,6 +1323,8 @@ def admin_ui(request: Request) -> HTMLResponse:
           {label: "Пользователь", key: "telegram_user_id", sortable: true},
           {label: "Тариф", key: "tariff", sortable: true},
           {label: "Статус", key: "status", sortable: true},
+          {label: "Выполнение", key: "fulfillment_status", sortable: true},
+          {label: "Отчёт #", key: "report_id", sortable: true},
           {
             label: "Сумма",
             key: "amount",
@@ -3066,8 +3068,20 @@ def admin_orders(limit: int = 50, session: Session = Depends(_get_db_session)) -
         .order_by(Order.created_at.desc())
         .limit(limit)
     ).all()
+    order_ids = [order.id for order, _ in rows]
+    report_ids_by_order: dict[int, int] = {}
+    if order_ids:
+        report_rows = session.execute(
+            select(Report.order_id, func.min(Report.id)).where(Report.order_id.in_(order_ids)).group_by(Report.order_id)
+        ).all()
+        report_ids_by_order = {
+            report_order_id: report_id
+            for report_order_id, report_id in report_rows
+            if report_order_id is not None and report_id is not None
+        }
     orders = []
     for order, user in rows:
+        report_id = order.fulfilled_report_id or report_ids_by_order.get(order.id)
         orders.append(
             {
                 "id": order.id,
@@ -3078,6 +3092,9 @@ def admin_orders(limit: int = 50, session: Session = Depends(_get_db_session)) -
                 "currency": order.currency,
                 "provider": order.provider.value,
                 "status": order.status.value,
+                "fulfillment_status": order.fulfillment_status.value,
+                "fulfilled_at": order.fulfilled_at.isoformat() if order.fulfilled_at else None,
+                "report_id": report_id,
                 "created_at": order.created_at.isoformat(),
                 "paid_at": order.paid_at.isoformat() if order.paid_at else None,
             }

@@ -10,7 +10,17 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.routes import admin as admin_routes
 from app.db.base import Base
-from app.db.models import ScreenTransitionEvent, ScreenTransitionTriggerType
+from app.db.models import (
+    Order,
+    OrderFulfillmentStatus,
+    OrderStatus,
+    PaymentProvider,
+    Report,
+    ScreenTransitionEvent,
+    ScreenTransitionTriggerType,
+    Tariff,
+    User,
+)
 from app.main import create_app
 
 
@@ -80,6 +90,40 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
             for idx, event in enumerate(events):
                 event.created_at = base_time + timedelta(minutes=idx)
             session.commit()
+
+
+    def test_orders_payload_includes_fulfillment_fields_and_report_id(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=100, telegram_user_id=700700, telegram_username="manager")
+            order = Order(
+                id=200,
+                user_id=100,
+                tariff=Tariff.T2,
+                amount=1990,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                fulfillment_status=OrderFulfillmentStatus.PENDING,
+            )
+            report = Report(
+                id=300,
+                user_id=100,
+                order_id=200,
+                tariff=Tariff.T2,
+                report_text="report",
+            )
+            session.add_all([user, order, report])
+            session.commit()
+
+        response = self.client.get("/admin/api/orders")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertIn("orders", payload)
+        order_payload = next(item for item in payload["orders"] if item["id"] == 200)
+        self.assertEqual(order_payload["fulfillment_status"], OrderFulfillmentStatus.PENDING.value)
+        self.assertIsNone(order_payload["fulfilled_at"])
+        self.assertEqual(order_payload["report_id"], 300)
 
     def test_transitions_summary_contract(self) -> None:
         self._seed_events()
