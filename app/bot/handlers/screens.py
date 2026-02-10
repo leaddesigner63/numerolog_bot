@@ -297,7 +297,14 @@ async def _run_payment_waiter(bot: Bot, chat_id: int, user_id: int) -> None:
 async def _maybe_run_payment_waiter(callback: CallbackQuery) -> None:
     if not callback.message:
         return
-    user_id = callback.from_user.id
+    await ensure_payment_waiter(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+    )
+
+
+async def ensure_payment_waiter(*, bot: Bot, chat_id: int, user_id: int) -> None:
     running_task = _payment_wait_tasks.get(user_id)
     if running_task and not running_task.done():
         return
@@ -305,8 +312,8 @@ async def _maybe_run_payment_waiter(callback: CallbackQuery) -> None:
     async def _runner() -> None:
         try:
             await _run_payment_waiter(
-                bot=callback.bot,
-                chat_id=callback.message.chat.id,
+                bot=bot,
+                chat_id=chat_id,
                 user_id=user_id,
             )
         finally:
