@@ -15,7 +15,8 @@ class QuestionnaireEditPromptTests(unittest.TestCase):
         )
 
         self.assertIn("Текущий ответ:\nДлинный текст", text)
-        self.assertIn("Подсказка: нажмите на текст кнопки «📋 Скопировать текущий ответ»", text)
+        self.assertIn("Подсказка: нажмите кнопку «📋 Скопировать текущий ответ»", text)
+        self.assertIn("без имени бота", text)
         self.assertIn("Действие: выберите, оставить текущий ответ или изменить.", text)
         self.assertTrue(text.index("Текущий ответ") < text.index("Действие:"))
 
@@ -28,7 +29,8 @@ class QuestionnaireEditPromptTests(unittest.TestCase):
             "Ваша цель", "Текущая цель", show_copy_hint=True
         )
         self.assertIn("Текущий ответ:\nТекущая цель", text)
-        self.assertIn("Подсказка: нажмите на текст кнопки «📋 Скопировать текущий ответ»", text)
+        self.assertIn("Подсказка: нажмите кнопку «📋 Скопировать текущий ответ»", text)
+        self.assertIn("без имени бота", text)
         self.assertIn("Действие: отправьте новый ответ.", text)
         self.assertTrue(text.index("Текущий ответ") < text.index("Действие:"))
 
@@ -48,31 +50,31 @@ class QuestionnaireEditPromptTests(unittest.TestCase):
             for row in keyboard.inline_keyboard
             for button in row
         ]
-        switch_inline_values = [
-            button.switch_inline_query_current_chat
+        copy_callbacks = [
+            button.callback_data
             for row in keyboard.inline_keyboard
             for button in row
-            if button.switch_inline_query_current_chat is not None
+            if button.callback_data == "questionnaire:copy_current_answer"
         ]
         texts = [button.text for row in keyboard.inline_keyboard for button in row]
 
         self.assertIn("questionnaire:edit_action:keep", callback_data)
         self.assertNotIn("questionnaire:edit_action:change", callback_data)
-        self.assertIn("Мой длинный ответ", switch_inline_values)
+        self.assertEqual(copy_callbacks, ["questionnaire:copy_current_answer"])
         self.assertTrue(any("Скопировать текущий ответ" in text for text in texts))
         self.assertTrue(any("Оставить текущий ответ" in text for text in texts))
         self.assertFalse(any("Изменить" in text for text in texts))
 
     def test_edit_keyboard_without_answer_has_no_copy_button(self) -> None:
         keyboard = _build_edit_decision_keyboard("")
-        switch_inline_values = [
-            button.switch_inline_query_current_chat
+        copy_callbacks = [
+            button.callback_data
             for row in keyboard.inline_keyboard
             for button in row
-            if button.switch_inline_query_current_chat is not None
+            if button.callback_data == "questionnaire:copy_current_answer"
         ]
 
-        self.assertEqual(switch_inline_values, [])
+        self.assertEqual(copy_callbacks, [])
 
 
 if __name__ == "__main__":
