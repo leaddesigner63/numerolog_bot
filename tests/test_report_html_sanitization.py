@@ -59,6 +59,20 @@ class ReportHtmlSanitizationTests(unittest.TestCase):
 
         self.assertTrue(any("report_text_postprocess_quality_incident" in entry for entry in logs.output))
 
+    def test_sanitize_report_text_handles_double_escaped_html_tags(self) -> None:
+        source = "&amp;lt;i&amp;gt;Решение&amp;lt;/i&amp;gt;"
+
+        cleaned = _sanitize_report_text(source, tariff="T3")
+
+        self.assertEqual(cleaned, "Решение")
+
+    def test_sanitize_report_text_removes_dangling_html_fragments(self) -> None:
+        source = "План:\n<i Ускорять выбор\n</i Проверять гипотезу"
+
+        cleaned = _sanitize_report_text(source, tariff="T2")
+
+        self.assertEqual(cleaned, "План:\n Ускорять выбор\n Проверять гипотезу")
+
 
 if __name__ == "__main__":
     unittest.main()
