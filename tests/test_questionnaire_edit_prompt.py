@@ -15,7 +15,7 @@ class QuestionnaireEditPromptTests(unittest.TestCase):
         )
 
         self.assertIn("Текущий ответ:\nДлинный текст", text)
-        self.assertIn("Подсказка: нажмите кнопку «📋 Скопировать текущий ответ»", text)
+        self.assertIn("Подсказка: нажмите кнопку «📋 Редактировать текущий ответ»", text)
         self.assertIn("подставил текущий ответ в текстовое поле", text)
         self.assertIn("Действие: выберите, оставить текущий ответ или изменить.", text)
         self.assertTrue(text.index("Текущий ответ") < text.index("Действие:"))
@@ -29,7 +29,7 @@ class QuestionnaireEditPromptTests(unittest.TestCase):
             "Ваша цель", "Текущая цель", show_copy_hint=True
         )
         self.assertIn("Текущий ответ:\nТекущая цель", text)
-        self.assertIn("Подсказка: нажмите кнопку «📋 Скопировать текущий ответ»", text)
+        self.assertIn("Подсказка: нажмите кнопку «📋 Редактировать текущий ответ»", text)
         self.assertIn("подставил текущий ответ в текстовое поле", text)
         self.assertIn("Действие: отправьте новый ответ.", text)
         self.assertTrue(text.index("Текущий ответ") < text.index("Действие:"))
@@ -40,7 +40,7 @@ class QuestionnaireEditPromptTests(unittest.TestCase):
         )
 
         self.assertIn("Текущий ответ:\nТекущая цель", text)
-        self.assertNotIn("Скопировать текущий ответ", text)
+        self.assertNotIn("Редактировать текущий ответ", text)
         self.assertIn("Действие: отправьте новый ответ.", text)
 
     def test_edit_keyboard_has_keep_action_only(self) -> None:
@@ -61,7 +61,7 @@ class QuestionnaireEditPromptTests(unittest.TestCase):
         self.assertIn("questionnaire:edit_action:keep", callback_data)
         self.assertNotIn("questionnaire:edit_action:change", callback_data)
         self.assertEqual(copy_switch_queries, ["Мой длинный ответ"])
-        self.assertTrue(any("Скопировать текущий ответ" in text for text in texts))
+        self.assertTrue(any("Редактировать текущий ответ" in text for text in texts))
         self.assertTrue(any("Оставить текущий ответ" in text for text in texts))
         self.assertFalse(any("Изменить" in text for text in texts))
 
