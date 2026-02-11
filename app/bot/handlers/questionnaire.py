@@ -801,12 +801,15 @@ async def _handle_answer(
 
     if status == QuestionnaireStatus.COMPLETED:
         await state.clear()
+        done_callback_data = "questionnaire:done"
+        if questionnaire_mode == "edit":
+            done_callback_data = "screen:S5"
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
                         text=_with_button_icons("Готово", "✅"),
-                        callback_data="questionnaire:done",
+                        callback_data=done_callback_data,
                     )
                 ]
             ]
