@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -72,15 +74,32 @@ TARIFF_META: dict[str, dict[str, Any]] = {
 }
 
 
-_REPORT_HTML_TAG_RE = re.compile(r"<\s*/?\s*[a-zA-Z][^>]*>")
 _REPORT_BR_TAG_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+_REPORT_ANY_TAG_RE = re.compile(r"</?[A-Za-z][A-Za-z0-9:_-]*(?:\s[^<>]*)?>")
 
 
-def _sanitize_report_text(report_text: str) -> str:
+logger = logging.getLogger(__name__)
+
+
+def _sanitize_report_text(report_text: str, *, tariff: str = "unknown") -> str:
     if not report_text:
         return ""
-    normalized_breaks = _REPORT_BR_TAG_RE.sub("\n", report_text)
-    return _REPORT_HTML_TAG_RE.sub("", normalized_breaks)
+    decoded_text = html.unescape(report_text)
+    normalized_breaks = _REPORT_BR_TAG_RE.sub("\n", decoded_text)
+    without_tags = _REPORT_ANY_TAG_RE.sub("", normalized_breaks)
+    cleaned = without_tags.replace("<", "").replace(">", "")
+
+    if cleaned != report_text:
+        logger.warning(
+            "report_text_postprocess_quality_incident",
+            extra={
+                "tariff": tariff,
+                "original_length": len(report_text),
+                "cleaned_length": len(cleaned),
+            },
+        )
+
+    return cleaned
 
 
 def _global_menu() -> list[list[InlineKeyboardButton]]:
@@ -842,7 +861,10 @@ def screen_s6(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s7(state: dict[str, Any]) -> ScreenContent:
-    report_text = _sanitize_report_text((state.get("report_text") or "").strip())
+    report_text = _sanitize_report_text(
+        (state.get("report_text") or "").strip(),
+        tariff=str(state.get("selected_tariff") or "unknown"),
+    )
     job_status = state.get("report_job_status")
     disclaimer = (
         "Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
@@ -1074,8 +1096,11 @@ def screen_s12(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s13(state: dict[str, Any]) -> ScreenContent:
-    report_text = _sanitize_report_text((state.get("report_text") or "").strip())
     report_meta = state.get("report_meta") or {}
+    report_text = _sanitize_report_text(
+        (state.get("report_text") or "").strip(),
+        tariff=str(report_meta.get("tariff") or state.get("selected_tariff") or "unknown"),
+    )
     report_id_value = str(report_meta.get("id") or "")
     report_id = report_id_value or "—"
     report_tariff = report_meta.get("tariff", "—")
