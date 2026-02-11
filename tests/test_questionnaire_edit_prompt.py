@@ -24,11 +24,22 @@ class QuestionnaireEditPromptTests(unittest.TestCase):
         self.assertIn("Текущий ответ:\n(пусто)", text)
 
     def test_change_message_has_required_order(self) -> None:
-        text = _build_edit_change_message("Ваша цель", "Текущая цель")
+        text = _build_edit_change_message(
+            "Ваша цель", "Текущая цель", show_copy_hint=True
+        )
         self.assertIn("Текущий ответ:\nТекущая цель", text)
         self.assertIn("Подсказка: нажмите на текст кнопки «📋 Скопировать текущий ответ»", text)
         self.assertIn("Действие: отправьте новый ответ.", text)
         self.assertTrue(text.index("Текущий ответ") < text.index("Действие:"))
+
+    def test_change_message_without_copy_hint(self) -> None:
+        text = _build_edit_change_message(
+            "Ваша цель", "Текущая цель", show_copy_hint=False
+        )
+
+        self.assertIn("Текущий ответ:\nТекущая цель", text)
+        self.assertNotIn("Скопировать текущий ответ", text)
+        self.assertIn("Действие: отправьте новый ответ.", text)
 
     def test_edit_keyboard_has_keep_and_change_actions(self) -> None:
         keyboard = _build_edit_decision_keyboard("Мой длинный ответ")
