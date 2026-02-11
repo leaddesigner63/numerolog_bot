@@ -34,7 +34,7 @@ class QuestionnaireForceInputKeyboardTests(unittest.IsolatedAsyncioTestCase):
 
         kwargs = message.bot.send_message.await_args.kwargs
         self.assertIsNone(kwargs["reply_markup"])
-        self.assertNotIn("Скопировать текущий ответ", kwargs["text"])
+        self.assertNotIn("Редактировать текущий ответ", kwargs["text"])
 
 
 if __name__ == "__main__":
