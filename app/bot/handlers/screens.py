@@ -11,7 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery
 from sqlalchemy import select, func
 
-from app.bot.questionnaire.config import load_questionnaire_config
+from app.bot.questionnaire.config import load_questionnaire_config, resolve_next_question_id
 from app.bot.screens import build_report_wait_message
 from app.bot.handlers.profile import start_profile_wizard
 from app.bot.handlers.screen_manager import screen_manager
@@ -610,7 +610,7 @@ def _refresh_questionnaire_state(session, telegram_user_id: int) -> None:
             break
         answer = answers[current_question_id]
         actual_answers[current_question_id] = answer
-        next_question_id = question.transitions.get(str(answer))
+        next_question_id = resolve_next_question_id(question, answer)
         if next_question_id is None:
             current_question_id = None
             break
