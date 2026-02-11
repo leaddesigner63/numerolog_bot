@@ -597,18 +597,61 @@ def _refresh_questionnaire_state(session, telegram_user_id: int) -> None:
         )
     ).scalar_one_or_none()
     answers = response.answers if response and response.answers else {}
+    actual_answers: dict[str, Any] = {}
+    current_question_id = config.start_question_id
+    visited: set[str] = set()
+    while current_question_id and current_question_id not in visited:
+        question = config.get_question(current_question_id)
+        if not question:
+            current_question_id = None
+            break
+        visited.add(current_question_id)
+        if current_question_id not in answers:
+            break
+        answer = answers[current_question_id]
+        actual_answers[current_question_id] = answer
+        next_question_id = question.transitions.get(str(answer))
+        if next_question_id is None:
+            current_question_id = None
+            break
+        if next_question_id not in config.questions:
+            current_question_id = None
+            break
+        current_question_id = next_question_id
+
+    resolved_status = response.status.value if response else "empty"
+    completed_at = response.completed_at if response else None
+    if response:
+        answers = actual_answers
+        if current_question_id is None and actual_answers:
+            resolved_status = QuestionnaireStatus.COMPLETED.value
+            if response.status != QuestionnaireStatus.COMPLETED:
+                response.status = QuestionnaireStatus.COMPLETED
+                if response.completed_at is None:
+                    response.completed_at = now_app_timezone()
+            if response.current_question_id is not None:
+                response.current_question_id = None
+            if response.answers != actual_answers:
+                response.answers = actual_answers
+            completed_at = response.completed_at
+        elif response.answers != actual_answers:
+            response.answers = actual_answers
+            answers = actual_answers
+    else:
+        answers = actual_answers
+
     screen_manager.update_state(
         telegram_user_id,
         questionnaire={
             "version": config.version,
-            "status": response.status.value if response else "empty",
+            "status": resolved_status,
             "answers": answers,
-            "current_question_id": response.current_question_id if response else None,
+            "current_question_id": current_question_id if response else None,
             "answered_count": len(answers),
             "total_questions": len(config.questions),
             "completed_at": (
-                response.completed_at.isoformat()
-                if response and response.completed_at
+                completed_at.isoformat()
+                if completed_at
                 else None
             ),
         },

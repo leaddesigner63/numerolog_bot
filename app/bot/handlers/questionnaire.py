@@ -521,6 +521,27 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
             config=config,
             raw_answers=answers,
         )
+        if response and default_current_question_id is None and answers:
+            completed_at = response.completed_at or datetime.now(timezone.utc)
+            response = _upsert_progress(
+                session,
+                user_id=user.id,
+                config_version=config.version,
+                answers=answers,
+                current_question_id=None,
+                status=QuestionnaireStatus.COMPLETED,
+                completed_at=completed_at,
+            )
+            await screen_manager.send_ephemeral_message(
+                callback.message,
+                "Анкета уже заполнена. Нажмите «Продолжить», чтобы перейти к генерации.",
+                user_id=callback.from_user.id,
+            )
+            await callback.answer()
+            payload = _question_payload(response, config.version)
+            payload["questionnaire"]["total_questions"] = len(config.questions)
+            _update_screen_state(callback.from_user.id, payload)
+            return
         current_question_id = default_current_question_id or config.start_question_id
         response = _upsert_progress(
             session,
