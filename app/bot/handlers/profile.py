@@ -34,8 +34,8 @@ GENDER_CALLBACK_TO_VALUE = {
     "profile:gender:male": "Мужской",
 }
 
-DATE_INPUT_HINT = "в любом формате, ориентир: ДД.ММ.ГГГГ"
-TIME_INPUT_HINT = "в любом формате, ориентир: ЧЧ.ММ"
+DATE_INPUT_HINT = "ДД.ММ.ГГГГ"
+TIME_INPUT_HINT = "ЧЧ.ММ"
 
 
 class ProfileStates(StatesGroup):
