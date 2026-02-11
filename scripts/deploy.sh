@@ -29,19 +29,29 @@ fi
 
 git fetch --all --prune
 git reset --hard "$GIT_REF"
-# Не удаляем важные локальные файлы (например, .env и каталоги с данными)
-git clean -fd \
-  -e .env \
-  -e .env.* \
-  -e venv \
-  -e .venv \
-  -e .python-version \
-  -e data \
-  -e storage \
-  -e uploads \
-  -e logs \
-  -e app/assets/screen_images/S15 \
-  -e app/assets/screen_images/S15_*
+
+# Не удаляем важные локальные файлы (например, .env и каталоги с данными).
+# Паттерны собираем в массив, чтобы shell не раскрывал маски до передачи в git clean.
+clean_excludes=(
+  ".env"
+  ".env.*"
+  "venv"
+  ".venv"
+  ".python-version"
+  "data"
+  "storage"
+  "uploads"
+  "logs"
+  "app/assets/screen_images/S15*"
+  "app/assets/screen_images/s15*"
+)
+
+clean_args=(-fd)
+for exclude_pattern in "${clean_excludes[@]}"; do
+  clean_args+=("-e" "$exclude_pattern")
+done
+
+git clean "${clean_args[@]}"
 
 if [ -f requirements.txt ]; then
   if [ -x .venv/bin/pip ]; then
