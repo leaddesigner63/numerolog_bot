@@ -37,6 +37,7 @@ from app.db.models import (
     FeedbackStatus,
     SupportDialogMessage,
     SupportMessageDirection,
+    ScreenStateRecord,
 )
 from app.db.session import get_session
 from app.payments import get_payment_provider
@@ -339,6 +340,44 @@ async def ensure_payment_waiter(*, bot: Bot, chat_id: int, user_id: int) -> None
             _payment_wait_tasks.pop(user_id, None)
 
     _payment_wait_tasks[user_id] = asyncio.create_task(_runner())
+
+
+def _iter_payment_waiter_candidates() -> list[tuple[int, int]]:
+    candidates: list[tuple[int, int]] = []
+    with get_session() as session:
+        rows = session.execute(
+            select(ScreenStateRecord).where(ScreenStateRecord.screen_id == "S3")
+        ).scalars().all()
+        for row in rows:
+            state_data = row.data or {}
+            order_id = _safe_int(state_data.get("order_id"))
+            if not order_id:
+                continue
+            candidates.append((row.telegram_user_id, order_id))
+    return candidates
+
+
+async def restore_payment_waiters(bot: Bot) -> int:
+    restored = 0
+    for user_id, order_id in _iter_payment_waiter_candidates():
+        with get_session() as session:
+            order = session.get(Order, order_id)
+            if not order:
+                continue
+            user = _get_or_create_user(session, user_id)
+            if order.user_id != user.id:
+                continue
+            if order.status == OrderStatus.PAID:
+                continue
+        await ensure_payment_waiter(
+            bot=bot,
+            chat_id=user_id,
+            user_id=user_id,
+        )
+        restored += 1
+    if restored:
+        logger.info("payment_waiters_restored", extra={"count": restored})
+    return restored
 
 
 async def _maybe_run_report_delay(callback: CallbackQuery) -> None:

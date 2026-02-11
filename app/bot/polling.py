@@ -7,6 +7,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 
 from app.bot.router import setup_bot_router
 from app.bot.report_jobs_worker import report_job_worker
+from app.bot.handlers.screens import restore_payment_waiters
 from app.core.config import settings
 from app.core.logging import setup_logging
 
@@ -20,6 +21,8 @@ async def main() -> None:
     bot = Bot(token=settings.bot_token)
     dispatcher = Dispatcher(storage=MemoryStorage())
     setup_bot_router(dispatcher)
+
+    await restore_payment_waiters(bot)
 
     logger.info("Starting bot polling")
     worker_task = asyncio.create_task(report_job_worker.run(bot))
