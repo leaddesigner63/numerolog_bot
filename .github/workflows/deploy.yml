@@ -57,6 +57,7 @@ jobs:
           SERVICE_NAME: ${{ secrets.SERVICE_NAME }}
           SERVICE_NAMES: ${{ secrets.SERVICE_NAMES }}
           ENV_FILE: ${{ secrets.ENV_FILE }}
+          PRESERVE_PATHS: ${{ secrets.PRESERVE_PATHS }}
           GIT_REF: origin/main
           LANDING_URL: ${{ secrets.LANDING_URL }}
           LANDING_EXPECTED_CTA: ${{ secrets.LANDING_EXPECTED_CTA }}
@@ -67,6 +68,7 @@ jobs:
             SERVICE_NAME='$SERVICE_NAME' \
             SERVICE_NAMES='$SERVICE_NAMES' \
             ENV_FILE='$ENV_FILE' \
+            PRESERVE_PATHS='$PRESERVE_PATHS' \
             GIT_REF='$GIT_REF' \
             LANDING_URL='$LANDING_URL' \
             LANDING_EXPECTED_CTA='$LANDING_EXPECTED_CTA' \

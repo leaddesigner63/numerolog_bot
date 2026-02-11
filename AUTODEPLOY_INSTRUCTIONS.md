@@ -51,6 +51,7 @@
 - `SERVICE_NAME` — имя systemd-сервиса или `target` (например, `numerolog.target`), если перезапуск один.
 - `SERVICE_NAMES` — опционально: список сервисов/target’ов через пробел (например, `numerolog-api.service numerolog-bot.service`). Если задан, он имеет приоритет над `SERVICE_NAME`.
 - `ENV_FILE` — полный путь к вашему файлу окружения на сервере (например, `/etc/numerolog_bot/.env`), нужен для запуска миграций Alembic с `DATABASE_URL`.
+- `PRESERVE_PATHS` — опционально: каталоги, которые нужно полностью сохранить при деплое (через пробел). По умолчанию: `app/assets/screen_images app/assets/pdf web`.
 
 ## 4. Проверьте workflow
 1. Убедитесь, что **секреты с точными именами** из шага 3 добавлены в репозиторий.
@@ -64,8 +65,9 @@
 - `venv`, `.venv`, `.python-version`
 - каталоги `data`, `storage`, `uploads`, `logs`
 - локальные ассеты экрана оплаты и его вариаций по маскам `app/assets/screen_images/S15*` и `app/assets/screen_images/s15*`
+- каталоги из `PRESERVE_PATHS` (по умолчанию `app/assets/screen_images app/assets/pdf web`) — скрипт делает резервную копию перед `git reset --hard` и возвращает после очистки
 
-Если у вас есть другие важные каталоги, добавьте их в массив `clean_excludes` в `scripts/deploy.sh` — так маски не раскрываются shell до запуска `git clean` и исключения применяются стабильно.
+Если нужно изменить набор полностью сохраняемых каталогов, задайте секрет `PRESERVE_PATHS` в GitHub Actions (например: `app/assets/screen_images app/assets/pdf web storage/screen_images`).
 
 ## 5. Миграции базы данных
 При каждом деплое workflow автоматически выполняет `alembic upgrade head`, если в проекте есть `alembic.ini` и установлен Alembic.
