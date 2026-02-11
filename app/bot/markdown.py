@@ -54,12 +54,15 @@ def render_markdown_to_html(text: str) -> str:
     text = re.sub(r"__(.+?)__", r"<u>\1</u>", text, flags=re.DOTALL)
     text = re.sub(r"~~(.+?)~~", r"<s>\1</s>", text, flags=re.DOTALL)
     text = re.sub(
-        r"(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)",
+        r"(?<!\w)\*(?=\S)([^*\n]*?\S)\*(?!\w)",
         r"<i>\1</i>",
         text,
-        flags=re.DOTALL,
     )
-    text = re.sub(r"_(.+?)_", r"<i>\1</i>", text, flags=re.DOTALL)
+    text = re.sub(
+        r"(?<!\w)_(?=\S)([^_\n]*?\S)_(?!\w)",
+        r"<i>\1</i>",
+        text,
+    )
 
     for token, kind, value in placeholders:
         escaped_value = html_escape(value, quote=False)
