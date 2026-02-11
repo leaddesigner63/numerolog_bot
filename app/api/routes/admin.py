@@ -274,10 +274,10 @@ def admin_ui(request: Request) -> HTMLResponse:
       padding: 16px;
       min-height: 200px;
     }
-    section[data-panel] {
+    .js-ready section[data-panel] {
       display: none;
     }
-    section[data-panel].active {
+    .js-ready section[data-panel].active {
       display: block;
     }
     section h2 {
@@ -670,7 +670,7 @@ def admin_ui(request: Request) -> HTMLResponse:
     <aside class="sidebar">
       <div class="muted">Разделы админки</div>
       <nav>
-        <button class="nav-button" data-section="overview">Сводка</button>
+        <button class="nav-button active" data-section="overview">Сводка</button>
         <button class="nav-button" data-section="health">Состояние сервиса</button>
         <button class="nav-button" data-section="llm-keys">LLM ключи</button>
         <button class="nav-button" data-section="orders">Заказы</button>
@@ -683,7 +683,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       </nav>
     </aside>
     <div class="content">
-      <section data-panel="overview">
+      <section data-panel="overview" class="active">
         <h2>Сводка</h2>
         <div id="overview" class="muted">Загрузка...</div>
         <div class="row" style="margin-top: 12px;">
@@ -977,6 +977,7 @@ def admin_ui(request: Request) -> HTMLResponse:
   </main>
   <div id="copyToast" class="copy-toast">Скопировано в буфер обмена</div>
   <script>
+    document.body.classList.add("js-ready");
     const autoRefreshSeconds = Number("__ADMIN_AUTO_REFRESH_SECONDS__") || 0;
     async function logout() {
       await fetch("/admin/logout", { method: "POST" });
