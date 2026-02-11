@@ -6,6 +6,7 @@ GIT_REF="${GIT_REF:-}"
 ENV_FILE="${ENV_FILE:-}"
 SERVICE_NAME="${SERVICE_NAME:-}"
 SERVICE_NAMES="${SERVICE_NAMES:-}"
+PRESERVE_PATHS="${PRESERVE_PATHS:-app/assets/screen_images app/assets/pdf web}"
 
 if [ -z "$DEPLOY_PATH" ]; then
   echo "DEPLOY_PATH не задан. Укажите путь к директории проекта на сервере."
@@ -18,6 +19,19 @@ if [ ! -d "$DEPLOY_PATH" ]; then
 fi
 
 cd "$DEPLOY_PATH"
+
+backup_root=""
+if [ -n "$PRESERVE_PATHS" ]; then
+  backup_root="$(mktemp -d)"
+  IFS=' ' read -r -a preserve_paths <<< "$PRESERVE_PATHS"
+  for preserve_path in "${preserve_paths[@]}"; do
+    [ -z "$preserve_path" ] && continue
+    if [ -e "$preserve_path" ]; then
+      mkdir -p "$backup_root/$(dirname "$preserve_path")"
+      cp -a "$preserve_path" "$backup_root/$preserve_path"
+    fi
+  done
+fi
 
 if [ -z "$GIT_REF" ]; then
   if CURRENT_BRANCH=$(git symbolic-ref --quiet --short HEAD 2>/dev/null); then
@@ -52,6 +66,18 @@ for exclude_pattern in "${clean_excludes[@]}"; do
 done
 
 git clean "${clean_args[@]}"
+
+if [ -n "$backup_root" ]; then
+  for preserve_path in "${preserve_paths[@]}"; do
+    [ -z "$preserve_path" ] && continue
+    if [ -e "$backup_root/$preserve_path" ]; then
+      mkdir -p "$(dirname "$preserve_path")"
+      rm -rf -- "$preserve_path"
+      cp -a "$backup_root/$preserve_path" "$preserve_path"
+    fi
+  done
+  rm -rf -- "$backup_root"
+fi
 
 if [ -f requirements.txt ]; then
   if [ -x .venv/bin/pip ]; then

@@ -86,6 +86,7 @@ sudo systemctl status certbot.timer
 - `SSH_PRIVATE_KEY` — приватный ключ для входа;
 - `DEPLOY_PATH` — путь до репозитория на сервере (`/opt/numerolog_bot`);
 - `ENV_FILE` — путь к env на сервере (`/opt/numerolog_bot/.env`);
+- `PRESERVE_PATHS` — опционально: каталоги, которые нужно сохранить при деплое (по умолчанию `app/assets/screen_images app/assets/pdf web`);
 - `SERVICE_NAME` — основной systemd unit (или используйте `SERVICE_NAMES`);
 - `SERVICE_NAMES` — несколько unit’ов через пробел (опционально, приоритетнее);
 - `LANDING_URL` — URL лендинга для smoke-check (например, `https://example.com`);
@@ -107,7 +108,7 @@ sudo systemctl status certbot.timer
 Шаги pipeline:
 1. **Build**: `python -m compileall app scripts tests`.
 2. **Lint/check**: `bash scripts/test.sh`.
-3. **Deploy**: `scripts/deploy.sh` на сервере.
+3. **Deploy**: `scripts/deploy.sh` на сервере (делает backup и восстановление путей из `PRESERVE_PATHS`, чтобы деплой не сносил локальные ассеты).
 4. **Smoke-check** после деплоя:
    - доступность страницы;
    - наличие CTA-ссылки;

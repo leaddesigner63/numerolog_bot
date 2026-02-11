@@ -605,11 +605,12 @@ sudo systemctl restart numerolog.target
 - `SERVICE_NAME` — имя systemd-сервиса или target для перезапуска.
 - `SERVICE_NAMES` — опционально, список сервисов/target’ов через пробел (имеет приоритет).
 - `ENV_FILE`, `DEPLOY_PATH`, `SSH_HOST`, `SSH_USER`, `SSH_PORT`, `SSH_PRIVATE_KEY` — инфраструктурные параметры.
+- `PRESERVE_PATHS` — список каталогов для полного сохранения при деплое (по умолчанию `app/assets/screen_images app/assets/pdf web`).
 - `LANDING_URL`, `LANDING_EXPECTED_CTA`, `LANDING_ASSET_URLS` — параметры smoke-check после деплоя.
 
 Workflow запускает `scripts/deploy.sh` на сервере и передаёт ссылку на ветку,
 в которую был сделан push (например, `origin/work` или `origin/main`).
-Во время `git clean` деплой специально сохраняет локальные ассеты всех вариаций `S15` по маскам `app/assets/screen_images/S15*` и `app/assets/screen_images/s15*`, чтобы генерация/ручные изображения экрана оплаты не удалялись независимо от регистра и суффикса папки.
+Во время деплоя скрипт сохраняет локальные каталоги из `PRESERVE_PATHS` (по умолчанию `app/assets/screen_images app/assets/pdf web`): перед `git reset --hard` делает backup и затем возвращает файлы обратно. Дополнительно `git clean` исключает маски `app/assets/screen_images/S15*` и `app/assets/screen_images/s15*`, чтобы генерация/ручные изображения экрана оплаты не удалялись независимо от регистра и суффикса папки.
 Workflow по умолчанию запускается на push в `main` и содержит последовательность: `build -> lint/check -> deploy` в production-окружение.
 Проверьте, что unit-файлы созданы и имена сервисов совпадают с тем, что вы передали
 в `SERVICE_NAME`/`SERVICE_NAMES`. Если получаете ошибку вида
