@@ -995,6 +995,8 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
     if reports_total is not None:
         reports_line = f"\n\nСохранённых отчётов: {reports_total}."
     questionnaire_text = _format_questionnaire_profile(state.get("questionnaire"))
+    questionnaire = state.get("questionnaire") or {}
+    questionnaire_status = questionnaire.get("status", "empty")
 
     if profile:
         text = _with_screen_prefix(
@@ -1031,11 +1033,27 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
         ],
         [
             InlineKeyboardButton(
+                text=_with_button_icons("Редактировать анкету", "📝"),
+                callback_data="questionnaire:edit:lk",
+            )
+        ],
+        [
+            InlineKeyboardButton(
                 text=_with_button_icons("Обратная связь", "💬"),
                 callback_data="screen:S8",
             )
         ],
     ]
+    if questionnaire_status != "empty":
+        rows.insert(
+            3,
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Удалить анкету", "🗑️"),
+                    callback_data="questionnaire:delete:lk",
+                )
+            ],
+        )
     if settings.community_channel_url:
         rows.append(
             [
