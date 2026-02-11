@@ -63,8 +63,9 @@
 - `.env` и `.env.*`
 - `venv`, `.venv`, `.python-version`
 - каталоги `data`, `storage`, `uploads`, `logs`
+- локальные ассеты экрана оплаты `app/assets/screen_images/S15` и `app/assets/screen_images/S15_*`
 
-Если у вас есть другие важные каталоги, добавьте их в список исключений в `.github/workflows/deploy.yml`.
+Если у вас есть другие важные каталоги, добавьте их в список исключений в `scripts/deploy.sh` (блок `git clean -e ...`) и при необходимости продублируйте это правило в workflow.
 
 ## 5. Миграции базы данных
 При каждом деплое workflow автоматически выполняет `alembic upgrade head`, если в проекте есть `alembic.ini` и установлен Alembic.

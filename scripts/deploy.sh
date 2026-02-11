@@ -39,7 +39,9 @@ git clean -fd \
   -e data \
   -e storage \
   -e uploads \
-  -e logs
+  -e logs \
+  -e app/assets/screen_images/S15 \
+  -e app/assets/screen_images/S15_*
 
 if [ -f requirements.txt ]; then
   if [ -x .venv/bin/pip ]; then
