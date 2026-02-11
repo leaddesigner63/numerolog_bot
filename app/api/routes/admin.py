@@ -2036,7 +2036,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       {
         key: "tag-like-close",
         title: "Тегоподобные закрывающие конструкции",
-        pattern: /<\\/[a-z][a-z0-9-]*>|&lt;\\/[a-z][a-z0-9-]*&gt;/gi,
+        pattern: /<\/[a-z][a-z0-9-]*>|&lt;\/[a-z][a-z0-9-]*&gt;/gi,
         recommendation: "Уберите конструкции, похожие на закрывающие теги.",
       },
     ];
