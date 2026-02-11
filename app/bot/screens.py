@@ -84,10 +84,21 @@ logger = logging.getLogger(__name__)
 def _sanitize_report_text(report_text: str, *, tariff: str = "unknown") -> str:
     if not report_text:
         return ""
-    decoded_text = html.unescape(report_text)
+    decoded_text = report_text
+    for _ in range(3):
+        unescaped = html.unescape(decoded_text)
+        if unescaped == decoded_text:
+            break
+        decoded_text = unescaped
     normalized_breaks = _REPORT_BR_TAG_RE.sub("\n", decoded_text)
-    without_tags = _REPORT_ANY_TAG_RE.sub("", normalized_breaks)
-    cleaned = without_tags.replace("<", "").replace(">", "")
+    without_tags = re.sub(r"</?[A-Za-z][^>\n]*>", "", normalized_breaks)
+    without_known_tags = _REPORT_ANY_TAG_RE.sub("", without_tags)
+    without_dangling_tags = re.sub(
+        r"</?[A-Za-z][A-Za-z0-9:_-]*(?:\s*>)?",
+        "",
+        without_known_tags,
+    )
+    cleaned = without_dangling_tags.replace("<", "").replace(">", "")
 
     if cleaned != report_text:
         logger.warning(
