@@ -14,6 +14,7 @@ TARIFF_SENSITIVE_SCREENS: set[str] = {
     "S7",
     "S13",
     "S14",
+    "S15",
 }
 
 
