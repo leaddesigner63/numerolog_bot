@@ -607,6 +607,7 @@ sudo systemctl restart numerolog.target
 
 Workflow запускает `scripts/deploy.sh` на сервере и передаёт ссылку на ветку,
 в которую был сделан push (например, `origin/work` или `origin/main`).
+Во время `git clean` деплой специально сохраняет локальные ассеты `S15` (`app/assets/screen_images/S15` и `app/assets/screen_images/S15_*`), чтобы генерация/ручные изображения экрана оплаты не удалялись.
 Workflow по умолчанию запускается на push в `main` и содержит последовательность: `build -> lint/check -> deploy` в production-окружение.
 Проверьте, что unit-файлы созданы и имена сервисов совпадают с тем, что вы передали
 в `SERVICE_NAME`/`SERVICE_NAMES`. Если получаете ошибку вида
