@@ -73,22 +73,25 @@ class ReportDocumentBuilder:
             key_findings: list[str] = []
             sections: list[ReportSection] = []
             current = ReportSection(title="Основные разделы")
+            allow_key_findings = True
 
             for raw_line in non_empty[1:]:
                 if self._is_title(raw_line):
                     if current.paragraphs or current.bullets or current.accent_blocks:
                         sections.append(current)
                     current = ReportSection(title=self._sanitize_line(raw_line.rstrip(":")))
+                    allow_key_findings = False
                     continue
                 bullet = self._extract_bullet(raw_line)
                 if bullet is not None:
-                    if len(key_findings) < 6 and not sections:
+                    if allow_key_findings and len(key_findings) < 6 and not sections and not current.paragraphs:
                         key_findings.append(bullet)
                     else:
                         current.bullets.append(bullet)
                     continue
                 if raw_line.lower().startswith("дисклеймер"):
                     continue
+                allow_key_findings = False
                 current.paragraphs.append(self._sanitize_line(raw_line))
 
             if current.paragraphs or current.bullets or current.accent_blocks:
