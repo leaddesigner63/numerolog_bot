@@ -29,7 +29,6 @@ from app.db.session import get_session
 
 router = Router()
 _TELEGRAM_MESSAGE_LIMIT = 4096
-_SWITCH_INLINE_QUERY_LIMIT = 256
 
 
 class QuestionnaireStates(StatesGroup):
@@ -189,8 +188,8 @@ def _render_existing_answer(answer: Any) -> str:
 def _build_edit_decision_message(question_text: str, existing_answer: Any) -> str:
     return (
         f"Текущий ответ:\n{_render_existing_answer(existing_answer)}\n\n"
-        "Подсказка: нажмите на текст кнопки «📋 Скопировать текущий ответ», "
-        "чтобы вставить его в поле ввода.\n\n"
+        "Подсказка: нажмите кнопку «📋 Скопировать текущий ответ», "
+        "и бот пришлёт ответ отдельным сообщением без имени бота.\n\n"
         "Действие: выберите, оставить текущий ответ или изменить."
         f"\n\n{question_text}"
     )
@@ -203,8 +202,8 @@ def _build_edit_change_message(
     show_copy_hint: bool,
 ) -> str:
     hint_block = (
-        "Подсказка: нажмите на текст кнопки «📋 Скопировать текущий ответ», "
-        "чтобы вставить его в поле ввода.\n\n"
+        "Подсказка: нажмите кнопку «📋 Скопировать текущий ответ», "
+        "и бот пришлёт ответ отдельным сообщением без имени бота.\n\n"
         if show_copy_hint
         else ""
     )
@@ -222,10 +221,9 @@ def _copy_button_for_answer(existing_answer: Any) -> InlineKeyboardButton | None
     answer_text = str(existing_answer)
     if answer_text == "":
         return None
-    query_text = answer_text[:_SWITCH_INLINE_QUERY_LIMIT]
     return InlineKeyboardButton(
         text=_with_button_icons("Скопировать текущий ответ", "📋"),
-        switch_inline_query_current_chat=query_text,
+        callback_data="questionnaire:copy_current_answer",
     )
 
 
@@ -696,6 +694,25 @@ async def change_current_edit_answer(callback: CallbackQuery, state: FSMContext)
         force_input=True,
     )
     await callback.answer()
+
+
+@router.callback_query(F.data == "questionnaire:copy_current_answer")
+async def copy_current_answer(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        await callback.answer()
+        return
+    data = await state.get_data()
+    current_question_id = data.get("current_question_id")
+    answers = dict(data.get("answers") or {})
+    answer_text = str(answers.get(current_question_id, ""))
+    if answer_text == "":
+        await callback.answer("Текущий ответ пустой.", show_alert=False)
+        return
+
+    await callback.message.answer(
+        f"Текущий ответ:\n{answer_text}",
+    )
+    await callback.answer("Ответ отправлен отдельным сообщением.", show_alert=False)
 
 
 async def _handle_answer(
