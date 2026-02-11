@@ -32,6 +32,7 @@ class AdminPromptDangerZoneUITests(unittest.TestCase):
         self.assertIn("promptDangerRules", html)
         self.assertIn("raw-angle-brackets", html)
         self.assertIn("html-entities", html)
+        self.assertNotIn("replaceAll(", html)
 
 
 if __name__ == "__main__":
