@@ -9,7 +9,6 @@ from typing import Any, Protocol
 
 from importlib.util import find_spec
 from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import simpleSplit
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
@@ -532,25 +531,20 @@ class PdfThemeRenderer:
         self._draw_content_surface(pdf, theme, page_width, page_height)
 
         if not report_document:
-            pdf.setFillColor(theme.palette[2], alpha=0.96)
-            pdf.setFont(font_map["body"], body_size)
-            for paragraph in (report_text or "").splitlines() or [""]:
-                lines = simpleSplit(paragraph or " ", font_map["body"], body_size, max_width)
-                for line in lines:
-                    if y <= margin:
-                        pdf.showPage()
-                        page_randomizer = random.Random(paragraph)
-                        self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
-                        self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
-                        self._draw_content_surface(pdf, theme, page_width, page_height)
-                        pdf.setFillColor(theme.palette[2], alpha=0.96)
-                        pdf.setFont(font_map["body"], body_size)
-                        y = page_height - margin
-                    line_font = font_map["numeric"] if any(ch.isdigit() for ch in line) else font_map["body"]
-                    pdf.setFont(line_font, body_size)
-                    pdf.drawString(margin, y, line)
-                    y -= line_height
-                y -= max(int(line_height * 0.3), 2)
+            y = self._draw_raw_text_block(
+                pdf,
+                text=report_text,
+                y=y,
+                margin=margin,
+                width=max_width,
+                font=font_map["body"],
+                numeric_font=font_map["numeric"],
+                size=body_size,
+                page_width=page_width,
+                page_height=page_height,
+                theme=theme,
+                asset_bundle=asset_bundle,
+            )
             return
 
         section_gap = max(line_height, 14)
@@ -673,6 +667,80 @@ class PdfThemeRenderer:
             asset_bundle=asset_bundle,
         )
 
+    def _draw_raw_text_block(
+        self,
+        pdf: canvas.Canvas,
+        *,
+        text: str,
+        y: float,
+        margin: float,
+        width: float,
+        font: str,
+        numeric_font: str,
+        size: int,
+        page_width: float,
+        page_height: float,
+        theme: PdfTheme,
+        asset_bundle: PdfThemeAssetBundle,
+    ) -> float:
+        line_height = int(size * theme.typography.line_height_ratio)
+        for paragraph in self._split_text_into_visual_lines(text or "", font, size, width):
+            if y <= theme.margin:
+                pdf.showPage()
+                page_randomizer = random.Random(paragraph)
+                self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+                self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+                self._draw_content_surface(pdf, theme, page_width, page_height)
+                y = page_height - theme.margin
+            line_font = numeric_font if any(ch.isdigit() for ch in paragraph) else font
+            pdf.setFillColor(theme.palette[2], alpha=0.96)
+            pdf.setFont(line_font, size)
+            pdf.drawString(margin, y, paragraph)
+            y -= line_height
+        return y - max(int(line_height * 0.25), 2)
+
+    def _split_text_into_visual_lines(
+        self,
+        text: str,
+        font: str,
+        size: int,
+        width: float,
+    ) -> list[str]:
+        if not text:
+            return [""]
+
+        lines: list[str] = []
+        source_lines = text.split("\n")
+        for source_line in source_lines:
+            if source_line == "":
+                lines.append("")
+                continue
+            lines.extend(self._split_line_by_width(source_line, font, size, width))
+        return lines
+
+    def _split_line_by_width(
+        self,
+        line: str,
+        font: str,
+        size: int,
+        width: float,
+    ) -> list[str]:
+        if line == "":
+            return [""]
+
+        chunks: list[str] = []
+        current = ""
+        for char in line:
+            candidate = f"{current}{char}"
+            if current and pdfmetrics.stringWidth(candidate, font, size) > width:
+                chunks.append(current)
+                current = char
+                continue
+            current = candidate
+        if current:
+            chunks.append(current)
+        return chunks
+
     def _draw_text_block(
         self,
         pdf: canvas.Canvas,
@@ -689,7 +757,7 @@ class PdfThemeRenderer:
         asset_bundle: PdfThemeAssetBundle,
     ) -> float:
         line_height = int(size * theme.typography.line_height_ratio)
-        lines = simpleSplit(text or " ", font, size, width)
+        lines = self._split_text_into_visual_lines(text or "", font, size, width)
         for line in lines:
             if y <= theme.margin:
                 pdf.showPage()

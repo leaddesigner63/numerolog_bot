@@ -3,7 +3,7 @@ import unittest
 from unittest import mock
 
 from app.core.config import settings
-from app.core.pdf_service import PdfService
+from app.core.pdf_service import PdfService, PdfThemeRenderer
 
 
 class PdfServiceRendererTests(unittest.TestCase):
@@ -55,6 +55,33 @@ class PdfServiceRendererTests(unittest.TestCase):
 
         self.assertTrue(pdf.startswith(b"%PDF"))
         self.assertIn(b"/ToUnicode", pdf)
+
+    def test_split_line_by_width_preserves_all_characters(self) -> None:
+        renderer = PdfThemeRenderer()
+        source = "СВЕРХДЛИННОЕСЛОВО" * 30
+
+        lines = renderer._split_line_by_width(
+            source,
+            font="Helvetica",
+            size=11,
+            width=120,
+        )
+
+        self.assertGreater(len(lines), 1)
+        self.assertEqual("".join(lines), source)
+
+    def test_split_text_into_visual_lines_preserves_empty_lines(self) -> None:
+        renderer = PdfThemeRenderer()
+        source = "Первая строка\n\nТретья строка"
+
+        lines = renderer._split_text_into_visual_lines(
+            source,
+            font="Helvetica",
+            size=11,
+            width=500,
+        )
+
+        self.assertEqual(lines, ["Первая строка", "", "Третья строка"])
 
 
 if __name__ == "__main__":
