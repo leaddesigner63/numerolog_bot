@@ -381,12 +381,13 @@ class PdfThemeRenderer:
 
         self._draw_background(pdf, theme, page_width, page_height, randomizer, asset_bundle)
         self._draw_decorative_layers(pdf, theme, page_width, page_height, randomizer, asset_bundle)
-        self._draw_header(
+        body_start_y = self._draw_header(
             pdf,
             theme,
             font_map,
             payload_meta,
             tariff,
+            page_width,
             page_height,
             report_document=report_document,
         )
@@ -398,6 +399,7 @@ class PdfThemeRenderer:
             page_width,
             page_height,
             asset_bundle,
+            body_start_y=body_start_y,
             report_document=report_document,
         )
 
@@ -504,23 +506,46 @@ class PdfThemeRenderer:
         font_map: dict[str, str],
         meta: dict[str, Any],
         tariff: Any,
+        page_width: float,
         page_height: float,
         report_document: ReportDocument | None = None,
-    ) -> None:
+    ) -> float:
         margin = theme.margin
+        max_width = page_width - margin * 2
+        title_size = theme.typography.title_size
+        subtitle_size = theme.typography.subtitle_size
+        title_line_height = int(title_size * theme.typography.line_height_ratio)
+        subtitle_line_height = int(subtitle_size * theme.typography.line_height_ratio)
+
         pdf.saveState()
         pdf.setFillColor(theme.palette[2])
-        pdf.setFont(font_map["title"], theme.typography.title_size)
         title = (report_document.title if report_document else "") or "Персональный аналитический отчёт"
-        pdf.drawString(margin, page_height - margin, title)
+        title_lines = self._split_text_into_visual_lines(title, font_map["title"], title_size, max_width)
+        y = page_height - margin
+        pdf.setFont(font_map["title"], title_size)
+        for line in title_lines:
+            pdf.drawString(margin, y, line)
+            y -= title_line_height
+
+        y -= max(int(title_line_height * 0.2), 4)
 
         subtitle = (report_document.subtitle if report_document else "") or f"Тариф: {tariff or 'N/A'}"
         report_id = str(meta.get("id") or "")
         if report_id:
             subtitle = f"{subtitle} · Report #{report_id}"
-        pdf.setFont(font_map["subtitle"], theme.typography.subtitle_size)
-        pdf.drawString(margin, page_height - margin - 24, subtitle)
+        subtitle_lines = self._split_text_into_visual_lines(
+            subtitle,
+            font_map["subtitle"],
+            subtitle_size,
+            max_width,
+        )
+        pdf.setFont(font_map["subtitle"], subtitle_size)
+        for line in subtitle_lines:
+            pdf.drawString(margin, y, line)
+            y -= subtitle_line_height
         pdf.restoreState()
+
+        return y - max(int(subtitle_line_height * 0.4), 8)
 
     def _draw_body(
         self,
@@ -531,13 +556,14 @@ class PdfThemeRenderer:
         page_width: float,
         page_height: float,
         asset_bundle: PdfThemeAssetBundle,
+        body_start_y: float,
         report_document: ReportDocument | None = None,
     ) -> None:
         margin = theme.margin
         body_size = theme.typography.body_size
         line_height = int(body_size * theme.typography.line_height_ratio)
         max_width = page_width - margin * 2
-        y = page_height - margin - 64
+        y = body_start_y
         self._draw_content_surface(pdf, theme, page_width, page_height)
 
         if not report_document:
