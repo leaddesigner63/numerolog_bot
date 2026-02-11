@@ -455,6 +455,33 @@ def admin_ui(request: Request) -> HTMLResponse:
       font-size: 12px;
       color: var(--muted);
     }
+    .prompt-danger-zone {
+      margin-top: 10px;
+      border: 1px solid rgba(239, 68, 68, 0.45);
+      border-radius: 10px;
+      background: rgba(239, 68, 68, 0.12);
+      padding: 10px 12px;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .prompt-danger-zone.safe {
+      border-color: rgba(34, 197, 94, 0.45);
+      background: rgba(34, 197, 94, 0.12);
+    }
+    .prompt-danger-zone-title {
+      font-weight: 600;
+      margin-bottom: 6px;
+    }
+    .prompt-danger-zone ul {
+      margin: 0;
+      padding-left: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .prompt-danger-fragment {
+      color: #fecaca;
+    }
     .api-key-status {
       margin-top: 6px;
       font-size: 12px;
@@ -910,6 +937,10 @@ def admin_ui(request: Request) -> HTMLResponse:
           <div class="field" style="flex: 1 1 320px;">
             <label for="promptContent">Текст промпта</label>
             <textarea id="promptContent" placeholder="Введите системный промпт"></textarea>
+            <div id="promptDangerZone" class="prompt-danger-zone safe">
+              <div class="prompt-danger-zone-title">Опасные зоны не найдены</div>
+              <div class="muted">Подсветка выполняется автоматически при вводе, редактировании и после сохранения.</div>
+            </div>
           </div>
           <div class="field">
             <button onclick="saveSystemPrompt()">Сохранить</button>
@@ -1983,8 +2014,121 @@ def admin_ui(request: Request) -> HTMLResponse:
 
     const promptKeySelect = document.getElementById("promptKeySelect");
     const promptKeyCustom = document.getElementById("promptKeyCustom");
+    const promptContentInput = document.getElementById("promptContent");
+    const promptDangerZone = document.getElementById("promptDangerZone");
     const promptKeyOptions = new Set(["PROMPT_T0", "PROMPT_T1", "PROMPT_T2", "PROMPT_T3"]);
     let promptEditingId = null;
+
+    const promptDangerRules = [
+      {
+        key: "raw-angle-brackets",
+        title: "Сырые угловые скобки",
+        pattern: /<[^\n>]*>|<|>/g,
+        recommendation: "Уберите символы < и > из текста промпта.",
+      },
+      {
+        key: "html-entities",
+        title: "HTML-сущности",
+        pattern: /&lt;|&gt;|&amp;|&#\\d+;|&#x[0-9a-f]+;/gi,
+        recommendation: "Замените HTML-сущности на обычный текст без служебных кодов.",
+      },
+      {
+        key: "tag-like-close",
+        title: "Тегоподобные закрывающие конструкции",
+        pattern: /<\\/[a-z][a-z0-9-]*>|&lt;\\/[a-z][a-z0-9-]*&gt;/gi,
+        recommendation: "Уберите конструкции, похожие на закрывающие теги.",
+      },
+    ];
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function buildLineStarts(content) {
+      const starts = [0];
+      for (let idx = 0; idx < content.length; idx += 1) {
+        if (content[idx] === "\n") {
+          starts.push(idx + 1);
+        }
+      }
+      return starts;
+    }
+
+    function resolveLineByIndex(starts, index) {
+      let line = 1;
+      for (let idx = 0; idx < starts.length; idx += 1) {
+        if (starts[idx] <= index) {
+          line = idx + 1;
+          continue;
+        }
+        break;
+      }
+      return line;
+    }
+
+    function detectPromptDangerZones(content) {
+      const text = normalizeValue(content);
+      const lineStarts = buildLineStarts(text);
+      const findings = [];
+      promptDangerRules.forEach((rule) => {
+        const matches = [...text.matchAll(rule.pattern)].slice(0, 5);
+        if (!matches.length) {
+          return;
+        }
+        findings.push({
+          key: rule.key,
+          title: rule.title,
+          recommendation: rule.recommendation,
+          matches: matches.map((match) => {
+            const offset = match.index || 0;
+            return {
+              value: match[0],
+              line: resolveLineByIndex(lineStarts, offset),
+            };
+          }),
+        });
+      });
+      return findings;
+    }
+
+    function renderPromptDangerZones(content) {
+      const findings = detectPromptDangerZones(content);
+      if (!promptDangerZone) {
+        return findings;
+      }
+      if (!findings.length) {
+        promptDangerZone.classList.add("safe");
+        promptDangerZone.innerHTML = `
+          <div class="prompt-danger-zone-title">Опасные зоны не найдены</div>
+          <div class="muted">Подсветка выполняется автоматически при вводе, редактировании и после сохранения.</div>
+        `;
+        return findings;
+      }
+      promptDangerZone.classList.remove("safe");
+      const itemsHtml = findings.map((finding) => {
+        const fragments = finding.matches.map((entry) => {
+          const fragment = escapeHtml(entry.value);
+          return `<li>Строка ${entry.line}: <code class="prompt-danger-fragment">${fragment}</code></li>`;
+        }).join("");
+        return `
+          <li>
+            <div><strong>${escapeHtml(finding.title)}</strong></div>
+            <div class="muted">${escapeHtml(finding.recommendation)}</div>
+            <ul>${fragments}</ul>
+          </li>
+        `;
+      }).join("");
+      promptDangerZone.innerHTML = `
+        <div class="prompt-danger-zone-title">Найдены опасные зоны (${findings.length})</div>
+        <ul>${itemsHtml}</ul>
+      `;
+      return findings;
+    }
 
     function updatePromptKeyVisibility() {
       const showCustom = promptKeySelect.value === "CUSTOM";
@@ -1999,7 +2143,8 @@ def admin_ui(request: Request) -> HTMLResponse:
       promptKeySelect.value = "PROMPT_T0";
       promptKeyCustom.value = "";
       updatePromptKeyVisibility();
-      document.getElementById("promptContent").value = "";
+      promptContentInput.value = "";
+      renderPromptDangerZones("");
     }
 
     function editSystemPrompt(promptId) {
@@ -2017,13 +2162,15 @@ def admin_ui(request: Request) -> HTMLResponse:
         promptKeyCustom.value = promptKey;
       }
       updatePromptKeyVisibility();
-      document.getElementById("promptContent").value = normalizeValue(prompt.content);
+      promptContentInput.value = normalizeValue(prompt.content);
+      renderPromptDangerZones(promptContentInput.value);
       showPanel("system-prompts");
     }
 
     async function saveSystemPrompt() {
       const key = promptKeySelect.value === "CUSTOM" ? promptKeyCustom.value : promptKeySelect.value;
-      const content = document.getElementById("promptContent").value;
+      const content = promptContentInput.value;
+      renderPromptDangerZones(content);
       try {
         if (promptEditingId) {
           await fetchJson(`/system-prompts/${promptEditingId}`, {
@@ -2042,6 +2189,11 @@ def admin_ui(request: Request) -> HTMLResponse:
         alert(error.message);
       }
     }
+
+    promptContentInput.addEventListener("input", () => {
+      renderPromptDangerZones(promptContentInput.value);
+    });
+    renderPromptDangerZones(promptContentInput.value);
 
     async function deleteSystemPrompt(promptId) {
       if (!confirm("Удалить промпт?")) {
