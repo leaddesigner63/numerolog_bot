@@ -70,6 +70,20 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertGreater(len(lines), 1)
         self.assertEqual("".join(lines), source)
 
+
+    def test_split_text_into_visual_lines_strips_control_and_zero_width_chars(self) -> None:
+        renderer = PdfThemeRenderer()
+        source = "когда город за\rтихал, а\u200b в его руках"
+
+        lines = renderer._split_text_into_visual_lines(
+            source,
+            font="Helvetica",
+            size=11,
+            width=500,
+        )
+
+        self.assertEqual(lines, ["когда город за", "тихал, а в его руках"])
+
     def test_split_text_into_visual_lines_preserves_empty_lines(self) -> None:
         renderer = PdfThemeRenderer()
         source = "Первая строка\n\nТретья строка"

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import random
+import re
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Protocol
@@ -28,6 +29,15 @@ _FONT_FAMILY: dict[str, str] | None = None
 _BOTO3_AVAILABLE = find_spec("boto3") is not None
 if _BOTO3_AVAILABLE:
     import boto3
+
+
+_ZERO_WIDTH_CHARS = {
+    "\u200b",  # ZERO WIDTH SPACE
+    "\u200c",  # ZERO WIDTH NON-JOINER
+    "\u200d",  # ZERO WIDTH JOINER
+    "\u2060",  # WORD JOINER
+    "\ufeff",  # ZERO WIDTH NO-BREAK SPACE
+}
 
 
 def _register_font() -> dict[str, str]:
@@ -709,8 +719,10 @@ class PdfThemeRenderer:
         if not text:
             return [""]
 
+        prepared_text = self._prepare_text_for_pdf(text)
+
         lines: list[str] = []
-        source_lines = text.split("\n")
+        source_lines = prepared_text.split("\n")
         for source_line in source_lines:
             if source_line == "":
                 lines.append("")
@@ -730,16 +742,66 @@ class PdfThemeRenderer:
 
         chunks: list[str] = []
         current = ""
-        for char in line:
-            candidate = f"{current}{char}"
-            if current and pdfmetrics.stringWidth(candidate, font, size) > width:
+        tokens = re.findall(r"\S+\s*|\s+", line)
+        for token in tokens:
+            candidate = f"{current}{token}"
+            token_width = pdfmetrics.stringWidth(token, font, size)
+            candidate_width = pdfmetrics.stringWidth(candidate, font, size)
+
+            if not current and token_width > width:
+                token_chunks = self._split_long_token_by_width(token, font, size, width)
+                chunks.extend(token_chunks[:-1])
+                current = token_chunks[-1] if token_chunks else ""
+                continue
+
+            if current and candidate_width > width:
                 chunks.append(current)
-                current = char
+                if token_width > width:
+                    token_chunks = self._split_long_token_by_width(token, font, size, width)
+                    chunks.extend(token_chunks[:-1])
+                    current = token_chunks[-1] if token_chunks else ""
+                else:
+                    current = token
                 continue
             current = candidate
         if current:
             chunks.append(current)
         return chunks
+
+    def _split_long_token_by_width(
+        self,
+        token: str,
+        font: str,
+        size: int,
+        width: float,
+    ) -> list[str]:
+        parts: list[str] = []
+        current = ""
+        for char in token:
+            candidate = f"{current}{char}"
+            if current and pdfmetrics.stringWidth(candidate, font, size) > width:
+                parts.append(current)
+                current = char
+                continue
+            current = candidate
+        if current:
+            parts.append(current)
+        return parts or [""]
+
+    def _prepare_text_for_pdf(self, text: str) -> str:
+        if not text:
+            return ""
+
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n")
+        prepared_chars: list[str] = []
+        for char in normalized:
+            if char in _ZERO_WIDTH_CHARS:
+                continue
+            code = ord(char)
+            if code < 32 and char not in {"\n", "\t"}:
+                continue
+            prepared_chars.append(char)
+        return "".join(prepared_chars)
 
     def _draw_text_block(
         self,
