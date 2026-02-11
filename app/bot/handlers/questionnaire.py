@@ -196,11 +196,21 @@ def _build_edit_decision_message(question_text: str, existing_answer: Any) -> st
     )
 
 
-def _build_edit_change_message(question_text: str, existing_answer: Any) -> str:
-    return (
-        f"Текущий ответ:\n{_render_existing_answer(existing_answer)}\n\n"
+def _build_edit_change_message(
+    question_text: str,
+    existing_answer: Any,
+    *,
+    show_copy_hint: bool,
+) -> str:
+    hint_block = (
         "Подсказка: нажмите на текст кнопки «📋 Скопировать текущий ответ», "
         "чтобы вставить его в поле ввода.\n\n"
+        if show_copy_hint
+        else ""
+    )
+    return (
+        f"Текущий ответ:\n{_render_existing_answer(existing_answer)}\n\n"
+        f"{hint_block}"
         "Действие: отправьте новый ответ."
         f"\n\n{question_text}"
     )
@@ -424,8 +434,13 @@ async def _send_question(
         question_text = _build_edit_decision_message(question.text, existing_answer)
     else:
         keyboard = _build_keyboard(question)
+        show_copy_hint = keyboard is None and existing_answer is not None
         if existing_answer is not None:
-            question_text = _build_edit_change_message(question.text, existing_answer)
+            question_text = _build_edit_change_message(
+                question.text,
+                existing_answer,
+                show_copy_hint=show_copy_hint,
+            )
             if keyboard is None:
                 keyboard = _build_copy_answer_keyboard(existing_answer)
         else:
@@ -433,9 +448,11 @@ async def _send_question(
 
     if force_input:
         keyboard = _build_keyboard(question)
-        question_text = _build_edit_change_message(question.text, existing_answer)
-        if keyboard is None:
-            keyboard = _build_copy_answer_keyboard(existing_answer)
+        question_text = _build_edit_change_message(
+            question.text,
+            existing_answer,
+            show_copy_hint=False,
+        )
     sent = await message.bot.send_message(
         chat_id=message.chat.id,
         text=question_text,
@@ -624,12 +641,6 @@ async def edit_questionnaire(callback: CallbackQuery, state: FSMContext) -> None
         answers=answers,
         questionnaire_mode="edit",
     )
-    summary_messages = _build_answers_summary_messages(config=config, answers=answers)
-    for summary_message in summary_messages:
-        await callback.message.bot.send_message(
-            chat_id=callback.message.chat.id,
-            text=summary_message,
-        )
     await _send_question(
         message=callback.message,
         user_id=callback.from_user.id,
@@ -656,6 +667,11 @@ async def keep_current_edit_answer(callback: CallbackQuery, state: FSMContext) -
         await callback.answer()
         return
     answer = answers.get(current_question_id, "")
+    await screen_manager.delete_last_question_message(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+    )
     await _handle_answer(
         message=callback.message,
         state=state,

@@ -1823,6 +1823,20 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
 
     if callback.data == "questionnaire:done":
         state_snapshot = screen_manager.update_state(callback.from_user.id)
+        existing_questionnaire = state_snapshot.data.get("questionnaire") or {}
+        with get_session() as session:
+            _refresh_questionnaire_state(session, callback.from_user.id)
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        refreshed_questionnaire = state_snapshot.data.get("questionnaire") or {}
+        if (
+            refreshed_questionnaire.get("status") in {None, "empty"}
+            and existing_questionnaire.get("status")
+            == QuestionnaireStatus.COMPLETED.value
+        ):
+            state_snapshot = screen_manager.update_state(
+                callback.from_user.id,
+                questionnaire=existing_questionnaire,
+            )
         tariff = state_snapshot.data.get("selected_tariff")
         if tariff in {Tariff.T2.value, Tariff.T3.value}:
             order_id = _safe_int(state_snapshot.data.get("order_id"))
