@@ -44,6 +44,40 @@ class QuestionnaireStateRecoveryTests(unittest.TestCase):
         self.assertEqual(payload["answered_count"], 2)
         self.assertIsNone(payload["current_question_id"])
 
+    def test_refresh_keeps_text_flow_answers_with_next_question_links(self) -> None:
+        response = SimpleNamespace(
+            answers={"q1": "Опыт", "q2": "Навыки", "q3": "Цели"},
+            status=QuestionnaireStatus.COMPLETED,
+            current_question_id=None,
+            completed_at=SimpleNamespace(isoformat=lambda: "done"),
+        )
+        fake_result = MagicMock()
+        fake_result.scalar_one_or_none.return_value = response
+        fake_session = MagicMock()
+        fake_session.execute.return_value = fake_result
+
+        q1 = SimpleNamespace(question_id="q1", transitions={}, next_question_id="q2")
+        q2 = SimpleNamespace(question_id="q2", transitions={}, next_question_id="q3")
+        q3 = SimpleNamespace(question_id="q3", transitions={}, next_question_id=None)
+        config = SimpleNamespace(
+            version="v1",
+            questions={"q1": q1, "q2": q2, "q3": q3},
+            start_question_id="q1",
+            get_question=lambda qid: {"q1": q1, "q2": q2, "q3": q3}.get(qid),
+        )
+
+        with (
+            patch.object(screens, "load_questionnaire_config", return_value=config),
+            patch.object(screens, "_get_or_create_user", return_value=SimpleNamespace(id=77)),
+            patch.object(screens.screen_manager, "update_state") as update_state,
+        ):
+            screens._refresh_questionnaire_state(fake_session, 123)
+
+        payload = update_state.call_args.kwargs["questionnaire"]
+        self.assertEqual(payload["status"], QuestionnaireStatus.COMPLETED.value)
+        self.assertEqual(payload["answers"], response.answers)
+        self.assertEqual(payload["answered_count"], 3)
+
 
 if __name__ == "__main__":
     unittest.main()
