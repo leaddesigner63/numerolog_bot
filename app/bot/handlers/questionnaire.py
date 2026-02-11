@@ -29,6 +29,7 @@ from app.db.session import get_session
 
 router = Router()
 _TELEGRAM_MESSAGE_LIMIT = 4096
+_SWITCH_INLINE_QUERY_LIMIT = 256
 
 
 class QuestionnaireStates(StatesGroup):
@@ -174,6 +175,79 @@ def _build_answers_summary_messages(
     if current_chunk:
         chunks.append(current_chunk)
     return chunks
+
+
+def _render_existing_answer(answer: Any) -> str:
+    if answer is None:
+        return "(пусто)"
+    answer_text = str(answer)
+    if answer_text == "":
+        return "(пусто)"
+    return answer_text
+
+
+def _build_edit_decision_message(question_text: str, existing_answer: Any) -> str:
+    return (
+        f"Текущий ответ:\n{_render_existing_answer(existing_answer)}\n\n"
+        "Подсказка: нажмите на текст кнопки «📋 Скопировать текущий ответ», "
+        "чтобы вставить его в поле ввода.\n\n"
+        "Действие: выберите, оставить текущий ответ или изменить."
+        f"\n\n{question_text}"
+    )
+
+
+def _build_edit_change_message(question_text: str, existing_answer: Any) -> str:
+    return (
+        f"Текущий ответ:\n{_render_existing_answer(existing_answer)}\n\n"
+        "Подсказка: нажмите на текст кнопки «📋 Скопировать текущий ответ», "
+        "чтобы вставить его в поле ввода.\n\n"
+        "Действие: отправьте новый ответ."
+        f"\n\n{question_text}"
+    )
+
+
+def _copy_button_for_answer(existing_answer: Any) -> InlineKeyboardButton | None:
+    if existing_answer is None:
+        return None
+    answer_text = str(existing_answer)
+    if answer_text == "":
+        return None
+    query_text = answer_text[:_SWITCH_INLINE_QUERY_LIMIT]
+    return InlineKeyboardButton(
+        text=_with_button_icons("Скопировать текущий ответ", "📋"),
+        switch_inline_query_current_chat=query_text,
+    )
+
+
+def _build_edit_decision_keyboard(existing_answer: Any) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = []
+    copy_button = _copy_button_for_answer(existing_answer)
+    if copy_button:
+        rows.append([copy_button])
+    rows.extend(
+        [
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Оставить текущий ответ", "✅"),
+                    callback_data="questionnaire:edit_action:keep",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Изменить", "✏️"),
+                    callback_data="questionnaire:edit_action:change",
+                )
+            ],
+        ]
+    )
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def _build_copy_answer_keyboard(existing_answer: Any) -> InlineKeyboardMarkup | None:
+    copy_button = _copy_button_for_answer(existing_answer)
+    if not copy_button:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[[copy_button]])
 
 
 def _build_actual_answers(
@@ -331,6 +405,8 @@ async def _send_question(
     user_id: int,
     question: QuestionnaireQuestion | None,
     existing_answer: Any | None = None,
+    show_edit_actions: bool = False,
+    force_input: bool = False,
 ) -> None:
     if not question:
         await screen_manager.send_ephemeral_message(
@@ -343,14 +419,23 @@ async def _send_question(
         chat_id=message.chat.id,
         user_id=user_id,
     )
-    keyboard = _build_keyboard(question)
-    question_text = question.text
-    if existing_answer is not None:
-        question_text = (
-            f"Текущий ответ:\n{existing_answer}\n\n"
-            "Отправьте новый ответ или оставьте как есть.\n\n"
-            f"{question.text}"
-        )
+    if show_edit_actions:
+        keyboard = _build_edit_decision_keyboard(existing_answer)
+        question_text = _build_edit_decision_message(question.text, existing_answer)
+    else:
+        keyboard = _build_keyboard(question)
+        if existing_answer is not None:
+            question_text = _build_edit_change_message(question.text, existing_answer)
+            if keyboard is None:
+                keyboard = _build_copy_answer_keyboard(existing_answer)
+        else:
+            question_text = question.text
+
+    if force_input:
+        keyboard = _build_keyboard(question)
+        question_text = _build_edit_change_message(question.text, existing_answer)
+        if keyboard is None:
+            keyboard = _build_copy_answer_keyboard(existing_answer)
     sent = await message.bot.send_message(
         chat_id=message.chat.id,
         text=question_text,
@@ -550,8 +635,58 @@ async def edit_questionnaire(callback: CallbackQuery, state: FSMContext) -> None
         user_id=callback.from_user.id,
         question=config.get_question(current_question_id),
         existing_answer=answers.get(current_question_id),
+        show_edit_actions=True,
     )
     _update_screen_state(callback.from_user.id, payload)
+    await callback.answer()
+
+
+@router.callback_query(F.data == "questionnaire:edit_action:keep")
+async def keep_current_edit_answer(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        await callback.answer()
+        return
+    data = await state.get_data()
+    current_question_id = data.get("current_question_id")
+    answers = dict(data.get("answers") or {})
+    if not current_question_id:
+        await screen_manager.send_ephemeral_message(
+            callback.message, "Анкета не активна. Нажмите «Заполнить анкету»."
+        )
+        await callback.answer()
+        return
+    answer = answers.get(current_question_id, "")
+    await _handle_answer(
+        message=callback.message,
+        state=state,
+        answer=str(answer),
+        question_id=current_question_id,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "questionnaire:edit_action:change")
+async def change_current_edit_answer(callback: CallbackQuery, state: FSMContext) -> None:
+    if not callback.message:
+        await callback.answer()
+        return
+    data = await state.get_data()
+    current_question_id = data.get("current_question_id")
+    answers = dict(data.get("answers") or {})
+    if not current_question_id:
+        await screen_manager.send_ephemeral_message(
+            callback.message, "Анкета не активна. Нажмите «Заполнить анкету»."
+        )
+        await callback.answer()
+        return
+    config = load_questionnaire_config()
+    await _send_question(
+        message=callback.message,
+        user_id=callback.from_user.id,
+        question=config.get_question(current_question_id),
+        existing_answer=answers.get(current_question_id),
+        force_input=True,
+    )
     await callback.answer()
 
 
@@ -663,6 +798,7 @@ async def _handle_answer(
         user_id=message.from_user.id,
         question=config.get_question(next_question_id),
         existing_answer=answers.get(next_question_id) if questionnaire_mode == "edit" else None,
+        show_edit_actions=questionnaire_mode == "edit",
     )
 
 
