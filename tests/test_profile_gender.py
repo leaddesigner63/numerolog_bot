@@ -77,5 +77,57 @@ class ProfileGenderTests(unittest.TestCase):
         self.assertIn("Пол: мужской", content.messages[0])
 
 
+
+    def test_screen_s11_has_questionnaire_edit_button(self) -> None:
+        content = screen_s11(
+            {
+                "questionnaire": {
+                    "status": "completed",
+                }
+            }
+        )
+
+        callback_data = [
+            button.callback_data
+            for row in content.keyboard.inline_keyboard
+            for button in row
+            if button.callback_data
+        ]
+        self.assertIn("questionnaire:edit:lk", callback_data)
+
+    def test_screen_s11_shows_questionnaire_delete_button_when_not_empty(self) -> None:
+        content = screen_s11(
+            {
+                "questionnaire": {
+                    "status": "in_progress",
+                }
+            }
+        )
+
+        callback_data = [
+            button.callback_data
+            for row in content.keyboard.inline_keyboard
+            for button in row
+            if button.callback_data
+        ]
+        self.assertIn("questionnaire:delete:lk", callback_data)
+
+    def test_screen_s11_hides_questionnaire_delete_button_when_empty(self) -> None:
+        content = screen_s11(
+            {
+                "questionnaire": {
+                    "status": "empty",
+                }
+            }
+        )
+
+        callback_data = [
+            button.callback_data
+            for row in content.keyboard.inline_keyboard
+            for button in row
+            if button.callback_data
+        ]
+        self.assertNotIn("questionnaire:delete:lk", callback_data)
+
 if __name__ == "__main__":
     unittest.main()

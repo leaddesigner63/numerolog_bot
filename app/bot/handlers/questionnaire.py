@@ -243,6 +243,26 @@ def _build_edit_decision_keyboard(existing_answer: Any) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+
+
+def _build_delete_questionnaire_confirm_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Да, удалить анкету", "✅"),
+                    callback_data="questionnaire:delete:lk:confirm",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Отмена", "❌"),
+                    callback_data="questionnaire:delete:lk:cancel",
+                )
+            ],
+        ]
+    )
+
 def _build_copy_answer_keyboard(existing_answer: Any) -> InlineKeyboardMarkup | None:
     copy_button = _copy_button_for_answer(existing_answer)
     if not copy_button:
@@ -486,6 +506,72 @@ async def _restore_state_from_db(
     return {}
 
 
+def _refresh_questionnaire_state(user_id: int, telegram_username: str | None = None) -> None:
+    config = load_questionnaire_config()
+    with get_session() as session:
+        user = _get_or_create_user(session, user_id, telegram_username)
+        response = session.execute(
+            select(QuestionnaireResponse).where(
+                QuestionnaireResponse.user_id == user.id,
+                QuestionnaireResponse.questionnaire_version == config.version,
+            )
+        ).scalar_one_or_none()
+        payload = _question_payload(response, config.version)
+        payload["questionnaire"]["total_questions"] = len(config.questions)
+    _update_screen_state(user_id, payload)
+
+
+async def _start_edit_questionnaire(
+    callback: CallbackQuery,
+    state: FSMContext,
+    *,
+    return_screen_id: str,
+) -> None:
+    config = load_questionnaire_config()
+    with get_session() as session:
+        user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
+        response = session.execute(
+            select(QuestionnaireResponse).where(
+                QuestionnaireResponse.user_id == user.id,
+                QuestionnaireResponse.questionnaire_version == config.version,
+            )
+        ).scalar_one_or_none()
+        answers, current_question_id = _build_actual_answers(
+            config=config,
+            raw_answers=response.answers if response and response.answers else {},
+        )
+        if not current_question_id:
+            current_question_id = config.start_question_id
+        response = _upsert_progress(
+            session,
+            user_id=user.id,
+            config_version=config.version,
+            answers=answers,
+            current_question_id=current_question_id,
+            status=QuestionnaireStatus.IN_PROGRESS,
+            completed_at=None,
+        )
+        payload = _question_payload(response, config.version)
+        payload["questionnaire"]["total_questions"] = len(config.questions)
+
+    await state.set_state(QuestionnaireStates.answering)
+    await state.update_data(
+        questionnaire_version=config.version,
+        current_question_id=current_question_id,
+        answers=answers,
+        questionnaire_mode="edit",
+        questionnaire_return_screen=return_screen_id,
+    )
+    await _send_question(
+        message=callback.message,
+        user_id=callback.from_user.id,
+        question=config.get_question(current_question_id),
+        existing_answer=answers.get(current_question_id),
+        show_edit_actions=True,
+    )
+    _update_screen_state(callback.from_user.id, payload)
+
+
 @router.callback_query(F.data == "questionnaire:start")
 async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> None:
     if not await _ensure_paid_access(callback):
@@ -561,6 +647,7 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
         current_question_id=current_question_id,
         answers=answers,
         questionnaire_mode="start",
+        questionnaire_return_screen="S5",
     )
     await _send_question(
         message=callback.message,
@@ -600,6 +687,7 @@ async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> N
         current_question_id=config.start_question_id,
         answers={},
         questionnaire_mode="restart",
+        questionnaire_return_screen="S5",
     )
     await _send_question(
         message=callback.message,
@@ -618,6 +706,66 @@ async def edit_questionnaire(callback: CallbackQuery, state: FSMContext) -> None
     if not await _ensure_profile_ready(callback, state):
         await callback.answer()
         return
+    await _start_edit_questionnaire(
+        callback,
+        state,
+        return_screen_id="S5",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "questionnaire:edit:lk")
+async def edit_questionnaire_from_lk(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await _ensure_paid_access(callback):
+        await callback.answer()
+        return
+    if not await _ensure_profile_ready(callback, state):
+        await callback.answer()
+        return
+    await _start_edit_questionnaire(
+        callback,
+        state,
+        return_screen_id="S11",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "questionnaire:delete:lk")
+async def delete_questionnaire_from_lk(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await _ensure_paid_access(callback):
+        await callback.answer()
+        return
+    if not await _ensure_profile_ready(callback, state):
+        await callback.answer()
+        return
+    await screen_manager.send_ephemeral_message(
+        callback.message,
+        "Вы уверены, что хотите удалить расширенную анкету?",
+        reply_markup=_build_delete_questionnaire_confirm_keyboard(),
+        user_id=callback.from_user.id,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "questionnaire:delete:lk:cancel")
+async def cancel_delete_questionnaire_from_lk(callback: CallbackQuery) -> None:
+    await screen_manager.show_screen(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+        screen_id="S11",
+    )
+    await callback.answer("Удаление отменено.")
+
+
+@router.callback_query(F.data == "questionnaire:delete:lk:confirm")
+async def confirm_delete_questionnaire_from_lk(callback: CallbackQuery, state: FSMContext) -> None:
+    if not await _ensure_paid_access(callback):
+        await callback.answer()
+        return
+    if not await _ensure_profile_ready(callback, state):
+        await callback.answer()
+        return
     config = load_questionnaire_config()
     with get_session() as session:
         user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
@@ -627,40 +775,18 @@ async def edit_questionnaire(callback: CallbackQuery, state: FSMContext) -> None
                 QuestionnaireResponse.questionnaire_version == config.version,
             )
         ).scalar_one_or_none()
-        answers, current_question_id = _build_actual_answers(
-            config=config,
-            raw_answers=response.answers if response and response.answers else {},
-        )
-        if not current_question_id:
-            current_question_id = config.start_question_id
-        response = _upsert_progress(
-            session,
-            user_id=user.id,
-            config_version=config.version,
-            answers=answers,
-            current_question_id=current_question_id,
-            status=QuestionnaireStatus.IN_PROGRESS,
-            completed_at=None,
-        )
-        payload = _question_payload(response, config.version)
-        payload["questionnaire"]["total_questions"] = len(config.questions)
-
-    await state.set_state(QuestionnaireStates.answering)
-    await state.update_data(
-        questionnaire_version=config.version,
-        current_question_id=current_question_id,
-        answers=answers,
-        questionnaire_mode="edit",
-    )
-    await _send_question(
-        message=callback.message,
+        if response:
+            session.delete(response)
+            session.flush()
+    await state.clear()
+    _refresh_questionnaire_state(callback.from_user.id, callback.from_user.username)
+    await screen_manager.show_screen(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
         user_id=callback.from_user.id,
-        question=config.get_question(current_question_id),
-        existing_answer=answers.get(current_question_id),
-        show_edit_actions=True,
+        screen_id="S11",
     )
-    _update_screen_state(callback.from_user.id, payload)
-    await callback.answer()
+    await callback.answer("Анкета удалена.")
 
 
 @router.callback_query(F.data == "questionnaire:edit_action:keep")
@@ -746,6 +872,7 @@ async def _handle_answer(
     config = load_questionnaire_config()
     data = await state.get_data()
     questionnaire_mode = data.get("questionnaire_mode")
+    questionnaire_return_screen = data.get("questionnaire_return_screen") or "S5"
     current_question_id = data.get("current_question_id")
     if not current_question_id:
         restored = await _restore_state_from_db(
@@ -823,8 +950,8 @@ async def _handle_answer(
     if status == QuestionnaireStatus.COMPLETED:
         await state.clear()
         done_callback_data = "questionnaire:done"
-        if questionnaire_mode == "edit":
-            done_callback_data = "screen:S5"
+        if questionnaire_mode in {"edit", "restart"}:
+            done_callback_data = f"screen:{questionnaire_return_screen}"
         keyboard = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
