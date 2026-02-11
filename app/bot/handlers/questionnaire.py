@@ -234,20 +234,12 @@ def _build_edit_decision_keyboard(existing_answer: Any) -> InlineKeyboardMarkup:
     copy_button = _copy_button_for_answer(existing_answer)
     if copy_button:
         rows.append([copy_button])
-    rows.extend(
+    rows.append(
         [
-            [
-                InlineKeyboardButton(
-                    text=_with_button_icons("Оставить текущий ответ", "✅"),
-                    callback_data="questionnaire:edit_action:keep",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text=_with_button_icons("Изменить", "✏️"),
-                    callback_data="questionnaire:edit_action:change",
-                )
-            ],
+            InlineKeyboardButton(
+                text=_with_button_icons("Оставить текущий ответ", "✅"),
+                callback_data="questionnaire:edit_action:keep",
+            )
         ]
     )
     return InlineKeyboardMarkup(inline_keyboard=rows)

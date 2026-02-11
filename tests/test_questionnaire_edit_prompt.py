@@ -41,7 +41,7 @@ class QuestionnaireEditPromptTests(unittest.TestCase):
         self.assertNotIn("Скопировать текущий ответ", text)
         self.assertIn("Действие: отправьте новый ответ.", text)
 
-    def test_edit_keyboard_has_keep_and_change_actions(self) -> None:
+    def test_edit_keyboard_has_keep_action_only(self) -> None:
         keyboard = _build_edit_decision_keyboard("Мой длинный ответ")
         callback_data = [
             button.callback_data
@@ -57,11 +57,11 @@ class QuestionnaireEditPromptTests(unittest.TestCase):
         texts = [button.text for row in keyboard.inline_keyboard for button in row]
 
         self.assertIn("questionnaire:edit_action:keep", callback_data)
-        self.assertIn("questionnaire:edit_action:change", callback_data)
+        self.assertNotIn("questionnaire:edit_action:change", callback_data)
         self.assertIn("Мой длинный ответ", switch_inline_values)
         self.assertTrue(any("Скопировать текущий ответ" in text for text in texts))
         self.assertTrue(any("Оставить текущий ответ" in text for text in texts))
-        self.assertTrue(any("Изменить" in text for text in texts))
+        self.assertFalse(any("Изменить" in text for text in texts))
 
     def test_edit_keyboard_without_answer_has_no_copy_button(self) -> None:
         keyboard = _build_edit_decision_keyboard("")
