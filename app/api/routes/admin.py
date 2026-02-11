@@ -2077,7 +2077,16 @@ def admin_ui(request: Request) -> HTMLResponse:
       const lineStarts = buildLineStarts(text);
       const findings = [];
       promptDangerRules.forEach((rule) => {
-        const matches = [...text.matchAll(rule.pattern)].slice(0, 5);
+        const matches = [];
+        const pattern = new RegExp(rule.pattern.source, rule.pattern.flags);
+        let match = pattern.exec(text);
+        while (match && matches.length < 5) {
+          matches.push(match);
+          if (!pattern.global) {
+            break;
+          }
+          match = pattern.exec(text);
+        }
         if (!matches.length) {
           return;
         }
