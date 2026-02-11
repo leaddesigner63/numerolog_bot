@@ -59,6 +59,37 @@ class ReportDocumentBuilderTests(unittest.TestCase):
             ],
         )
 
+    def test_keeps_bullets_inside_named_section_after_paragraphs(self) -> None:
+        builder = ReportDocumentBuilder()
+        doc = builder.build(
+            """Персональный аналитический отчёт
+
+Ритм и восстановление:
+Твой внутренний ритм может требовать паузы.
+
+Минимум на тяжёлый день:
+- 15 минут полного молчания, чтобы услышать себя.
+- Короткая прогулка на свежем воздухе, чтобы обновить мысли.
+- Отказ от одной необязательной задачи, чтобы освободить ресурс.
+""",
+            tariff="T1",
+            meta={"id": "21"},
+        )
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        minimum_section = next((section for section in doc.sections if section.title == "Минимум на тяжёлый день"), None)
+        self.assertIsNotNone(minimum_section)
+        assert minimum_section is not None
+        self.assertEqual(
+            minimum_section.bullets,
+            [
+                "15 минут полного молчания, чтобы услышать себя.",
+                "Короткая прогулка на свежем воздухе, чтобы обновить мысли.",
+                "Отказ от одной необязательной задачи, чтобы освободить ресурс.",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
