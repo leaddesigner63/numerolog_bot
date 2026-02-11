@@ -34,6 +34,9 @@ GENDER_CALLBACK_TO_VALUE = {
     "profile:gender:male": "Мужской",
 }
 
+DATE_INPUT_HINT = "в любом формате, ориентир: ДД.ММ.ГГГГ"
+TIME_INPUT_HINT = "в любом формате, ориентир: ЧЧ.ММ"
+
 
 class ProfileStates(StatesGroup):
     name = State()
@@ -364,7 +367,7 @@ async def start_profile_edit_birth_date(
         callback,
         state,
         ProfileStates.edit_birth_date,
-        "Введите новую дату рождения (в любом формате).",
+        f"Введите новую дату рождения ({DATE_INPUT_HINT}).",
     )
     await callback.answer()
 
@@ -389,7 +392,7 @@ async def start_profile_edit_birth_time(
         callback,
         state,
         ProfileStates.edit_birth_time,
-        "Введите новое время рождения (в любом формате).",
+        f"Введите новое время рождения ({TIME_INPUT_HINT}).",
     )
     await callback.answer()
 
@@ -508,7 +511,7 @@ async def handle_profile_gender(message: Message, state: FSMContext) -> None:
     await state.set_state(ProfileStates.birth_date)
     sent = await message.bot.send_message(
         chat_id=message.chat.id,
-        text="Введите дату рождения (в любом формате).",
+        text=f"Введите дату рождения ({DATE_INPUT_HINT}).",
     )
     screen_manager.update_last_question_message_id(message.from_user.id, sent.message_id)
     await screen_manager.delete_user_message(
@@ -541,7 +544,7 @@ async def handle_profile_gender_callback(
         await state.set_state(ProfileStates.birth_date)
         sent = await callback.bot.send_message(
             chat_id=callback.message.chat.id,
-            text="Введите дату рождения (в любом формате).",
+            text=f"Введите дату рождения ({DATE_INPUT_HINT}).",
         )
         screen_manager.update_last_question_message_id(
             callback.from_user.id, sent.message_id
@@ -591,7 +594,7 @@ async def handle_profile_birth_date(message: Message, state: FSMContext) -> None
     await state.set_state(ProfileStates.birth_time)
     sent = await message.bot.send_message(
         chat_id=message.chat.id,
-        text="Введите время рождения (в любом формате).",
+        text=f"Введите время рождения ({TIME_INPUT_HINT}).",
     )
     screen_manager.update_last_question_message_id(message.from_user.id, sent.message_id)
     await screen_manager.delete_user_message(
