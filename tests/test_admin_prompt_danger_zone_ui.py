@@ -32,6 +32,8 @@ class AdminPromptDangerZoneUITests(unittest.TestCase):
         self.assertIn("promptDangerRules", html)
         self.assertIn("raw-angle-brackets", html)
         self.assertIn("html-entities", html)
+        self.assertIn(r"pattern: /<[^\n>]*>|<|>/g", html)
+        self.assertIn('content[idx] === "\\n"', html)
         self.assertNotIn("replaceAll(", html)
         self.assertNotIn("matchAll(", html)
 

@@ -2024,7 +2024,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       {
         key: "raw-angle-brackets",
         title: "Сырые угловые скобки",
-        pattern: /<[^\n>]*>|<|>/g,
+        pattern: /<[^\\n>]*>|<|>/g,
         recommendation: "Уберите символы < и > из текста промпта.",
       },
       {
@@ -2053,7 +2053,7 @@ def admin_ui(request: Request) -> HTMLResponse:
     function buildLineStarts(content) {
       const starts = [0];
       for (let idx = 0; idx < content.length; idx += 1) {
-        if (content[idx] === "\n") {
+        if (content[idx] === "\\n") {
           starts.push(idx + 1);
         }
       }
