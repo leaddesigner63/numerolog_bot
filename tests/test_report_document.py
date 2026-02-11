@@ -35,6 +35,30 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         self.assertTrue(doc.key_findings)
         self.assertIn("Как включить: сначала уточни цель", doc.key_findings[0])
 
+    def test_build_strips_malformed_html_fragments_from_paragraphs(self) -> None:
+        builder = ReportDocumentBuilder()
+        doc = builder.build(
+            """Минимум на тяжёлый день:
+</i> Сделай одну маленькую вещь, которая принесёт тебе радость.
+<i> Запиши три вещи, за которые ты благодарен.
+</i> Удали из головы одну ненужную заботу.
+""",
+            tariff="T1",
+            meta={"id": "42"},
+        )
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        paragraphs = doc.sections[0].paragraphs
+        self.assertEqual(
+            paragraphs,
+            [
+                "Сделай одну маленькую вещь, которая принесёт тебе радость.",
+                "Запиши три вещи, за которые ты благодарен.",
+                "Удали из головы одну ненужную заботу.",
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

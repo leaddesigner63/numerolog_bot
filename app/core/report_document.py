@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import html
 import re
 from typing import Any
 
@@ -44,6 +45,9 @@ class ReportDocumentBuilder:
     _MARKDOWN_MARKERS_RE = re.compile(r"(\*\*|__|`|~~)")
     _HEADING_PREFIX_RE = re.compile(r"^#+\s*")
     _LEADING_SYMBOL_RE = re.compile(r"^[^\wА-Яа-яЁё0-9]+")
+    _BR_TAG_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+    _HTML_TAG_RE = re.compile(r"</?[A-Za-z][^>\n]*>")
+    _DANGLING_HTML_TAG_RE = re.compile(r"</?[A-Za-z][A-Za-z0-9:_-]*")
 
     def build(
         self,
@@ -135,7 +139,17 @@ class ReportDocumentBuilder:
         return None
 
     def _sanitize_line(self, line: str) -> str:
-        cleaned = (line or "").replace("\u00a0", " ").strip()
+        decoded = (line or "").replace("\u00a0", " ").strip()
+        for _ in range(3):
+            unescaped = html.unescape(decoded)
+            if unescaped == decoded:
+                break
+            decoded = unescaped
+
+        cleaned = self._BR_TAG_RE.sub(" ", decoded)
+        cleaned = self._HTML_TAG_RE.sub("", cleaned)
+        cleaned = self._DANGLING_HTML_TAG_RE.sub("", cleaned)
+        cleaned = cleaned.replace("<", "").replace(">", "")
         cleaned = self._HEADING_PREFIX_RE.sub("", cleaned)
         cleaned = self._MARKDOWN_MARKERS_RE.sub("", cleaned)
         cleaned = self._LEADING_SYMBOL_RE.sub("", cleaned).strip()
