@@ -70,13 +70,18 @@ class QuestionnaireEditExistingAnswerTests(unittest.IsolatedAsyncioTestCase):
         sent_text = await self._run_edit({"q1": "Свободный ответ 123"})
 
         self.assertIn("Текущий ответ:\nСвободный ответ 123", sent_text)
-        self.assertIn("Отправьте новый ответ или оставьте как есть.", sent_text)
+        self.assertIn(
+            "Подсказка: нажмите на текст кнопки «📋 Скопировать текущий ответ»",
+            sent_text,
+        )
+        self.assertIn("Действие: выберите, оставить текущий ответ или изменить.", sent_text)
 
     async def test_edit_mode_without_existing_answer_hides_block(self) -> None:
         sent_text = await self._run_edit({})
 
-        self.assertNotIn("Текущий ответ:", sent_text)
-        self.assertEqual(sent_text, "Как вас зовут?")
+        self.assertIn("Текущий ответ:\n(пусто)", sent_text)
+        self.assertIn("Действие: выберите, оставить текущий ответ или изменить.", sent_text)
+        self.assertTrue(sent_text.endswith("Как вас зовут?"))
 
 
 if __name__ == "__main__":
