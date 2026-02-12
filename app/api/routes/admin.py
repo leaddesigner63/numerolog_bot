@@ -4,6 +4,8 @@ import base64
 import hashlib
 import json
 import logging
+import threading
+import time
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -40,6 +42,11 @@ from app.db.session import get_session_factory
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
+
+_TRANSITION_ANALYTICS_CACHE_TTL_SECONDS = 5
+_TRANSITION_ANALYTICS_CACHE_MAX_SIZE = 64
+_transition_analytics_cache_lock = threading.Lock()
+_transition_analytics_cache: dict[tuple, tuple[float, dict]] = {}
 
 
 def _admin_credentials_ready() -> bool:
@@ -2856,6 +2863,45 @@ def _safe_build_transition_analytics(session: Session, filters: AnalyticsFilters
         ) from exc
 
 
+def _transition_analytics_cache_key(filters: AnalyticsFilters) -> tuple:
+    return (
+        filters.from_dt.isoformat() if filters.from_dt else None,
+        filters.to_dt.isoformat() if filters.to_dt else None,
+        filters.tariff,
+        filters.trigger_type,
+        filters.unique_users_only,
+        filters.dropoff_window_minutes,
+        filters.limit,
+        tuple(sorted(filters.screen_ids)) if filters.screen_ids else (),
+    )
+
+
+def _get_transition_analytics(session: Session, filters: AnalyticsFilters) -> dict:
+    cache_key = _transition_analytics_cache_key(filters)
+    now = time.monotonic()
+    with _transition_analytics_cache_lock:
+        cached_item = _transition_analytics_cache.get(cache_key)
+        if cached_item and now - cached_item[0] <= _TRANSITION_ANALYTICS_CACHE_TTL_SECONDS:
+            return cached_item[1]
+
+    result = _safe_build_transition_analytics(session, filters)
+
+    with _transition_analytics_cache_lock:
+        _transition_analytics_cache[cache_key] = (now, result)
+        if len(_transition_analytics_cache) > _TRANSITION_ANALYTICS_CACHE_MAX_SIZE:
+            expired_keys = [
+                key
+                for key, value in _transition_analytics_cache.items()
+                if now - value[0] > _TRANSITION_ANALYTICS_CACHE_TTL_SECONDS
+            ]
+            for key in expired_keys:
+                _transition_analytics_cache.pop(key, None)
+        if len(_transition_analytics_cache) > _TRANSITION_ANALYTICS_CACHE_MAX_SIZE:
+            oldest_key = min(_transition_analytics_cache, key=lambda key: _transition_analytics_cache[key][0])
+            _transition_analytics_cache.pop(oldest_key, None)
+    return result
+
+
 def _slice_top_n(items: list[dict], top_n: int) -> list[dict]:
     if top_n <= 0:
         return items
@@ -2885,7 +2931,7 @@ def admin_screen_transition_analytics(
         limit=limit,
         screen_ids=screen_ids,
     )
-    result = _safe_build_transition_analytics(session, filters)
+    result = _get_transition_analytics(session, filters)
     payload = {
         "summary": result["summary"],
         "transition_matrix": _slice_top_n(result["transition_matrix"], top_n),
@@ -2918,7 +2964,7 @@ def admin_transitions_summary(
         limit=limit,
         screen_ids=screen_ids,
     )
-    result = _safe_build_transition_analytics(session, filters)
+    result = _get_transition_analytics(session, filters)
     summary = TransitionSummaryItem.model_validate(result["summary"]).model_dump(mode="json")
     return _build_transition_envelope(data={"summary": summary}, filters_applied=filters_applied, top_n=0)
 
@@ -2946,7 +2992,7 @@ def admin_transitions_matrix(
         limit=limit,
         screen_ids=screen_ids,
     )
-    result = _safe_build_transition_analytics(session, filters)
+    result = _get_transition_analytics(session, filters)
     matrix_items = [
         TransitionMatrixItem.model_validate(item).model_dump(mode="json")
         for item in _slice_top_n(result["transition_matrix"], top_n)
@@ -2977,7 +3023,7 @@ def admin_transitions_funnel(
         limit=limit,
         screen_ids=screen_ids,
     )
-    result = _safe_build_transition_analytics(session, filters)
+    result = _get_transition_analytics(session, filters)
     funnel_items = [
         TransitionFunnelItem.model_validate(item).model_dump(mode="json")
         for item in _slice_top_n(result["funnel"], top_n)
@@ -3008,7 +3054,7 @@ def admin_transitions_timing(
         limit=limit,
         screen_ids=screen_ids,
     )
-    result = _safe_build_transition_analytics(session, filters)
+    result = _get_transition_analytics(session, filters)
     timing_raw = [row for row in result["transition_durations"] if int(row.get("samples", 0)) >= _TRANSITION_TIMING_MIN_SAMPLES]
     timing_items = [
         TransitionTimingItem.model_validate(item).model_dump(mode="json")
