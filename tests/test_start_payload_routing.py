@@ -15,8 +15,6 @@ from app.db.models import (
     Order,
     OrderStatus,
     PaymentProvider,
-    Report,
-    ReportModel,
     Tariff,
     User,
 )
@@ -82,22 +80,6 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
             session.commit()
         return order_id
 
-    def _create_report(self, user_id: int, order_id: int) -> int:
-        with self.SessionLocal() as session:
-            report = Report(
-                user_id=user_id,
-                order_id=order_id,
-                tariff=Tariff.T2,
-                report_text="Готовый отчёт",
-                model_used=ReportModel.GEMINI,
-                safety_flags={},
-            )
-            session.add(report)
-            session.flush()
-            report_id = report.id
-            session.commit()
-        return report_id
-
     def _message(self, text: str, user_id: int = 1001):
         return SimpleNamespace(
             text=text,
@@ -156,28 +138,25 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
         snapshot = screen_manager.update_state(1001)
         self.assertFalse(snapshot.data.get("s4_no_inline_keyboard"))
 
-    async def test_start_resumes_last_paid_order_without_payload(self) -> None:
-        order_id = self._create_order(1, OrderStatus.PAID)
+    async def test_start_shows_s0_without_payload_even_with_paid_order(self) -> None:
+        self._create_order(1, OrderStatus.PAID)
 
         with patch.object(screen_manager, "show_screen", new=AsyncMock()) as show_screen:
             await start_module.handle_start(self._message("/start"))
 
-        self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S4")
+        self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S0")
         snapshot = screen_manager.update_state(1001)
-        self.assertEqual(snapshot.data.get("order_id"), str(order_id))
-        self.assertEqual(snapshot.data.get("selected_tariff"), Tariff.T2.value)
-        self.assertEqual(snapshot.data.get("profile_flow"), "report")
+        self.assertIsNone(snapshot.data.get("order_id"))
+        self.assertIsNone(snapshot.data.get("selected_tariff"))
+        self.assertFalse(snapshot.data.get("payment_processing_notice"))
 
-    async def test_start_resumes_report_if_it_was_already_generated(self) -> None:
-        order_id = self._create_order(1, OrderStatus.PAID)
-        self._create_report(1, order_id)
+    async def test_start_ignores_paid_history_without_payload(self) -> None:
+        self._create_order(1, OrderStatus.PAID)
 
         with patch.object(screen_manager, "show_screen", new=AsyncMock()) as show_screen:
             await start_module.handle_start(self._message("/start"))
 
-        self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S7")
-        snapshot = screen_manager.update_state(1001)
-        self.assertEqual(snapshot.data.get("report_text"), "Готовый отчёт")
+        self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S0")
 
 
 if __name__ == "__main__":
