@@ -13,6 +13,7 @@ from urllib.parse import parse_qsl, urlencode
 import httpx
 
 from app.core.config import Settings
+from app.core.tariff_labels import tariff_button_title
 from app.payments.base import PaymentProvider, WebhookResult, PaymentLinkResult
 from app.db.models import PaymentProvider as PaymentProviderEnum, Order, User
 
@@ -70,7 +71,10 @@ class ProdamusProvider(PaymentProvider):
             order_phone = order_phone or user_phone
             order_customer_name = order_customer_name or user_name
 
-        order_title = getattr(order, "title", "") or f"Тариф {getattr(order.tariff, 'value', order.tariff)}"
+        order_title = getattr(order, "title", "") or tariff_button_title(
+            getattr(order.tariff, "value", order.tariff),
+            fallback=f"Тариф {getattr(order.tariff, 'value', order.tariff)}",
+        )
 
         success_url = _build_bot_start_url(
             bot_username=_as_non_empty_str(getattr(self._settings, "telegram_bot_username", None)),

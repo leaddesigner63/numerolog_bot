@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 import httpx
 
 from app.core.config import Settings
+from app.core.tariff_labels import tariff_button_title
 from app.db.models import Order, PaymentProvider as PaymentProviderEnum, User
 from app.payments.base import PaymentLink, PaymentProvider, WebhookResult
 
@@ -40,7 +41,7 @@ class CloudPaymentsProvider(PaymentProvider):
         params = {
             "publicId": self._settings.cloudpayments_public_id,
             "invoiceId": str(order.id),
-            "description": f"Тариф {order.tariff.value}",
+            "description": tariff_button_title(order.tariff.value, fallback=f"Тариф {order.tariff.value}"),
             "amount": f"{order.amount:.2f}",
             "currency": order.currency,
         }
