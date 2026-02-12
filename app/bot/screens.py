@@ -11,6 +11,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from app.bot.questionnaire.config import load_questionnaire_config
 from app.core.config import settings
+from app.core.tariff_labels import tariff_button_title
 
 
 @dataclass(frozen=True)
@@ -153,9 +154,7 @@ def _with_button_icons(text: str, icon: str) -> str:
 
 
 def _format_tariff_label(tariff: str) -> str:
-    if tariff == "T0":
-        return "Т0"
-    return tariff
+    return tariff_button_title(tariff, fallback=tariff)
 
 
 def _with_screen_prefix(screen_id: str, text: str) -> str:
@@ -443,7 +442,7 @@ def _format_report_list(reports: list[dict[str, Any]] | None, total: int | None)
     lines = []
     for index, report in enumerate(reports, start=1):
         report_id = report.get("id", "—")
-        tariff = report.get("tariff", "—")
+        tariff = tariff_button_title(report.get("tariff"), fallback="—")
         created_at = report.get("created_at", "неизвестно")
         lines.append(f"{index}. Отчёт #{report_id} • {tariff} • {created_at}")
     if total and total > len(reports):
@@ -505,14 +504,14 @@ def _format_reports_for_payment_step(
 
     if not filtered_reports:
         return (
-            f"По тарифу {selected_tariff} ещё нет сохранённых отчётов. "
+            f"По тарифу {tariff_button_title(selected_tariff, fallback=selected_tariff or '—')} ещё нет сохранённых отчётов. "
             "Вы можете продолжить и создать новый заказ."
         )
 
     lines = []
     for index, report in enumerate(filtered_reports, start=1):
         report_id = report.get("id", "—")
-        tariff = report.get("tariff", "—")
+        tariff = tariff_button_title(report.get("tariff"), fallback="—")
         created_at = report.get("created_at", "неизвестно")
         lines.append(f"{index}. Отчёт #{report_id} • {tariff} • {created_at}")
 
@@ -524,10 +523,7 @@ def _format_reports_for_payment_step(
 
 def screen_s4(state: dict[str, Any]) -> ScreenContent:
     selected_tariff_raw = state.get("selected_tariff", "T0")
-    selected_tariff = _format_tariff_label(selected_tariff_raw)
-    selected_tariff_title = (
-        "В чём твоя сила?💪" if selected_tariff_raw == "T1" else selected_tariff
-    )
+    selected_tariff_title = _format_tariff_label(selected_tariff_raw)
     profile = state.get("profile")
     profile_data = profile or {}
     has_profile = profile is not None
@@ -536,7 +532,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     profile_flow = state.get("profile_flow")
     order_status = (state.get("order_status") or "").lower()
     requires_payment = selected_tariff_raw in {"T1", "T2", "T3"} and order_status != "paid"
-    is_t0 = selected_tariff == "Т0"
+    is_t0 = selected_tariff_raw == "T0"
 
     if has_profile:
         text = _with_screen_prefix(
@@ -1207,7 +1203,7 @@ def screen_s15(state: dict[str, Any]) -> ScreenContent:
     text = _with_screen_prefix(
         "S15",
         (
-            f"Перед оплатой тарифа {selected_tariff or 'T1/T2/T3'} посмотрите последние отчёты:\n\n"
+            f"Перед оплатой тарифа {tariff_button_title(selected_tariff, fallback='T1/T2/T3')} посмотрите последние отчёты:\n\n"
             f"{reports_list}\n\n"
             "Можно перейти в личный кабинет или продолжить к оплате и создать новый заказ."
         ),

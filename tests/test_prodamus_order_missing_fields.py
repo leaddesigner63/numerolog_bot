@@ -20,4 +20,4 @@ def test_create_payment_link_handles_order_without_optional_contact_fields() -> 
 
     assert payment_link is not None
     assert "order_id=999" in payment_link.url
-    assert "products%5B0%5D%5Bname%5D=%D0%A2%D0%B0%D1%80%D0%B8%D1%84+T1" in payment_link.url
+    assert "products%5B0%5D%5Bname%5D=%D0%92+%D1%87%D1%91%D0%BC+%D1%82%D0%B2%D0%BE%D1%8F+%D1%81%D0%B8%D0%BB%D0%B0%3F" in payment_link.url

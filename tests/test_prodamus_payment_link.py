@@ -30,7 +30,7 @@ def test_prodamus_payment_link_contains_invoice_data() -> None:
     assert "amount=2990.00" in payment_link.url
     assert "sum=2990.00" in payment_link.url
     assert "currency=" not in payment_link.url
-    assert "products%5B0%5D%5Bname%5D=%D0%A2%D0%B0%D1%80%D0%B8%D1%84+T2" in payment_link.url
+    assert "products%5B0%5D%5Bname%5D=%D0%93%D0%B4%D0%B5+%D1%82%D0%B2%D0%BE%D0%B8+%D0%B4%D0%B5%D0%BD%D1%8C%D0%B3%D0%B8%3F" in payment_link.url
     assert "products%5B0%5D%5Bprice%5D=2990.00" in payment_link.url
     assert "products%5B0%5D%5Bquantity%5D=1" in payment_link.url
     assert "products%5B0%5D%5Bsum%5D=2990.00" in payment_link.url
