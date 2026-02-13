@@ -747,6 +747,35 @@ async def edit_questionnaire_from_lk(callback: CallbackQuery, state: FSMContext)
     await callback.answer()
 
 
+@router.callback_query(F.data == "questionnaire:answers:expand")
+async def expand_questionnaire_answers_from_lk(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer()
+        return
+    screen_manager.update_state(callback.from_user.id, questionnaire_answers_expanded=True)
+    await screen_manager.show_screen(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+        screen_id="S11",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "questionnaire:answers:collapse")
+async def collapse_questionnaire_answers_from_lk(callback: CallbackQuery) -> None:
+    if not callback.message:
+        await callback.answer()
+        return
+    screen_manager.update_state(callback.from_user.id, questionnaire_answers_expanded=False)
+    await screen_manager.show_screen(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+        screen_id="S11",
+    )
+    await callback.answer()
+
 @router.callback_query(F.data == "questionnaire:delete:lk")
 async def delete_questionnaire_from_lk(callback: CallbackQuery, state: FSMContext) -> None:
     if not await _ensure_paid_access(callback):
@@ -797,6 +826,7 @@ async def confirm_delete_questionnaire_from_lk(callback: CallbackQuery, state: F
             session.flush()
     await state.clear()
     _refresh_questionnaire_state(callback.from_user.id, callback.from_user.username)
+    screen_manager.update_state(callback.from_user.id, questionnaire_answers_expanded=False)
     await screen_manager.show_screen(
         bot=callback.bot,
         chat_id=callback.message.chat.id,

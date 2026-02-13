@@ -3,6 +3,7 @@ from __future__ import annotations
 import html
 import logging
 import re
+from datetime import datetime
 from dataclasses import dataclass
 from typing import Any
 
@@ -80,6 +81,8 @@ _REPORT_ANY_TAG_RE = re.compile(r"</?[A-Za-z][A-Za-z0-9:_-]*(?:\s[^<>]*)?>")
 
 
 logger = logging.getLogger(__name__)
+_BOT_MENTION_PREFIX_RE = re.compile(r"^\s*@\w+\s+")
+_QUESTIONNAIRE_PREVIEW_LIMIT = 180
 
 
 def _sanitize_report_text(report_text: str, *, tariff: str = "unknown") -> str:
@@ -450,7 +453,11 @@ def _format_report_list(reports: list[dict[str, Any]] | None, total: int | None)
     return "\n".join(lines)
 
 
-def _format_questionnaire_profile(questionnaire: dict[str, Any] | None) -> str:
+def _format_questionnaire_profile(
+    questionnaire: dict[str, Any] | None,
+    *,
+    expanded_answers: bool = False,
+) -> str:
     if not questionnaire:
         return "Профиль расширенной анкеты: нет данных."
     status = questionnaire.get("status", "empty")
@@ -463,27 +470,50 @@ def _format_questionnaire_profile(questionnaire: dict[str, Any] | None) -> str:
     version = questionnaire.get("version", "—")
     answered_count = questionnaire.get("answered_count", 0)
     total_questions = questionnaire.get("total_questions", 0)
-    completed_at = questionnaire.get("completed_at") or "не завершена"
+    completed_at = _format_completed_at(questionnaire.get("completed_at"))
     answers = questionnaire.get("answers")
     lines = [
-        "Профиль расширенной анкеты:",
-        f"Статус: {display_status}",
-        f"Версия: {version}",
-        f"Прогресс: {answered_count}/{total_questions}",
-        f"Завершена: {completed_at}",
+        "🧾 Профиль расширенной анкеты",
+        f"• Статус: {display_status}",
+        f"• Версия: {version}",
+        f"• Прогресс: {answered_count}/{total_questions}",
+        f"• Завершена: {completed_at}",
     ]
     if isinstance(answers, dict) and answers:
         questionnaire_config = load_questionnaire_config()
-        lines.append("Ответы:")
-        for key, value in answers.items():
+        lines.append("\n💬 Ответы")
+        for answer_index, (key, value) in enumerate(answers.items(), start=1):
             question = questionnaire_config.get_question(key)
             label = question.text if question and question.text else (question.question_id if question else key)
-            lines.append(f"- {label}: {value}")
+            rendered_answer = _format_answer_for_profile(value, expanded=expanded_answers)
+            lines.append(f"{answer_index}. {label}\n   {rendered_answer}")
     elif answers:
-        lines.append(f"Ответы: {answers}")
+        rendered_answer = _format_answer_for_profile(answers, expanded=expanded_answers)
+        lines.append(f"\n💬 Ответы\n{rendered_answer}")
     else:
-        lines.append("Ответы: нет данных.")
+        lines.append("\n💬 Ответы\nнет данных.")
     return "\n".join(lines)
+
+
+def _format_completed_at(raw_completed_at: Any) -> str:
+    if not raw_completed_at:
+        return "не завершена"
+    completed_text = str(raw_completed_at)
+    try:
+        parsed = datetime.fromisoformat(completed_text)
+    except ValueError:
+        return completed_text
+    return parsed.strftime("%d.%m.%Y %H:%M")
+
+
+def _format_answer_for_profile(value: Any, *, expanded: bool = False) -> str:
+    answer_text = str(value)
+    if answer_text == "":
+        return "(пусто)"
+    clean_answer = _BOT_MENTION_PREFIX_RE.sub("", answer_text)
+    if expanded or len(clean_answer) <= _QUESTIONNAIRE_PREVIEW_LIMIT:
+        return clean_answer
+    return f"{clean_answer[:_QUESTIONNAIRE_PREVIEW_LIMIT].rstrip()}…"
 
 
 def _format_reports_for_payment_step(
@@ -519,6 +549,20 @@ def _format_reports_for_payment_step(
         lines.append(f"\nПоказаны последние {len(filtered_reports)} из {total}.")
     return "\n".join(lines)
 
+
+
+def _questionnaire_has_long_answers(questionnaire: dict[str, Any] | None) -> bool:
+    if not questionnaire:
+        return False
+    answers = questionnaire.get("answers")
+    if isinstance(answers, dict):
+        for value in answers.values():
+            if len(_format_answer_for_profile(value, expanded=True)) > _QUESTIONNAIRE_PREVIEW_LIMIT:
+                return True
+        return False
+    if answers is None:
+        return False
+    return len(_format_answer_for_profile(answers, expanded=True)) > _QUESTIONNAIRE_PREVIEW_LIMIT
 
 
 def screen_s4(state: dict[str, Any]) -> ScreenContent:
@@ -983,8 +1027,12 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
     reports_total = state.get("reports_total")
     reports_line = ""
     if reports_total is not None:
-        reports_line = f"\n\nСохранённых отчётов: {reports_total}."
-    questionnaire_text = _format_questionnaire_profile(state.get("questionnaire"))
+        reports_line = f"\n\n📁 Сохранённых отчётов: {reports_total}."
+    questionnaire_expanded = bool(state.get("questionnaire_answers_expanded"))
+    questionnaire_text = _format_questionnaire_profile(
+        state.get("questionnaire"),
+        expanded_answers=questionnaire_expanded,
+    )
     questionnaire = state.get("questionnaire") or {}
     questionnaire_status = questionnaire.get("status", "empty")
 
@@ -992,19 +1040,20 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
         text = _with_screen_prefix(
             "S11",
             (
-                "Личный кабинет.\n\n"
-                f"Имя: {profile.get('name')}\n"
-                f"Пол: {profile.get('gender') or 'не указано'}\n"
-                f"Дата рождения: {profile.get('birth_date')}\n"
-                f"Время рождения: {birth_time}\n"
-                f"Место рождения: {birth_place}"
+                "👤 Личный кабинет\n\n"
+                "🧩 Основные данные\n"
+                f"• Имя: {profile.get('name')}\n"
+                f"• Пол: {profile.get('gender') or 'не указано'}\n"
+                f"• Дата рождения: {profile.get('birth_date')}\n"
+                f"• Время рождения: {birth_time}\n"
+                f"• Место рождения: {birth_place}"
                 f"{reports_line}\n\n{questionnaire_text}"
             ),
         )
     else:
         text = _with_screen_prefix(
             "S11",
-            "Личный кабинет.\n\nДанные профиля ещё не заполнены."
+            "👤 Личный кабинет\n\nДанные профиля ещё не заполнены."
             f"{reports_line}\n\n{questionnaire_text}",
         )
 
@@ -1041,6 +1090,23 @@ def screen_s11(state: dict[str, Any]) -> ScreenContent:
                 InlineKeyboardButton(
                     text=_with_button_icons("Удалить анкету", "🗑️"),
                     callback_data="questionnaire:delete:lk",
+                )
+            ],
+        )
+    if _questionnaire_has_long_answers(questionnaire):
+        rows.insert(
+            3,
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons(
+                        "Свернуть ответы" if questionnaire_expanded else "Показать ответы полностью",
+                        "↕️",
+                    ),
+                    callback_data=(
+                        "questionnaire:answers:collapse"
+                        if questionnaire_expanded
+                        else "questionnaire:answers:expand"
+                    ),
                 )
             ],
         )
