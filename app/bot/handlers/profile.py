@@ -545,6 +545,12 @@ async def handle_profile_gender_callback(
         chat_id=callback.message.chat.id,
         user_id=callback.from_user.id,
     )
+    await screen_manager.enter_text_input_mode(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+        preserve_last_question=True,
+    )
     gender = GENDER_CALLBACK_TO_VALUE.get(callback.data or "", "")
     if current_state == ProfileStates.gender.state:
         await state.update_data(gender=gender)
