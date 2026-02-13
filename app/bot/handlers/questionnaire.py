@@ -733,9 +733,6 @@ async def edit_questionnaire(callback: CallbackQuery, state: FSMContext) -> None
 
 @router.callback_query(F.data == "questionnaire:edit:lk")
 async def edit_questionnaire_from_lk(callback: CallbackQuery, state: FSMContext) -> None:
-    if not await _ensure_paid_access(callback):
-        await callback.answer()
-        return
     if not await _ensure_profile_ready(callback, state):
         await callback.answer()
         return
@@ -778,9 +775,6 @@ async def collapse_questionnaire_answers_from_lk(callback: CallbackQuery) -> Non
 
 @router.callback_query(F.data == "questionnaire:delete:lk")
 async def delete_questionnaire_from_lk(callback: CallbackQuery, state: FSMContext) -> None:
-    if not await _ensure_paid_access(callback):
-        await callback.answer()
-        return
     if not await _ensure_profile_ready(callback, state):
         await callback.answer()
         return
@@ -806,9 +800,6 @@ async def cancel_delete_questionnaire_from_lk(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "questionnaire:delete:lk:confirm")
 async def confirm_delete_questionnaire_from_lk(callback: CallbackQuery, state: FSMContext) -> None:
-    if not await _ensure_paid_access(callback):
-        await callback.answer()
-        return
     if not await _ensure_profile_ready(callback, state):
         await callback.answer()
         return
