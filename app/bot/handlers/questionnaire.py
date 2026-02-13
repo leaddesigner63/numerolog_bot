@@ -473,6 +473,13 @@ async def _send_question(
             existing_answer,
             show_copy_hint=False,
         )
+    if keyboard is None:
+        await screen_manager.enter_text_input_mode(
+            bot=message.bot,
+            chat_id=message.chat.id,
+            user_id=user_id,
+            preserve_last_question=True,
+        )
     sent = await message.bot.send_message(
         chat_id=message.chat.id,
         text=question_text,

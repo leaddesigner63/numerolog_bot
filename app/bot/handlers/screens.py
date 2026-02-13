@@ -507,6 +507,12 @@ async def _show_screen_for_callback(
     screen_id: str,
     metadata_json: dict[str, Any] | None = None,
 ) -> bool:
+    if screen_id == "S8":
+        await screen_manager.enter_text_input_mode(
+            bot=callback.bot,
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+        )
     return await screen_manager.show_screen(
         bot=callback.bot,
         chat_id=callback.message.chat.id,

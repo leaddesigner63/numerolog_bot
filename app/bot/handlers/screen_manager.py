@@ -708,6 +708,40 @@ class ScreenManager:
             )
         self._store.clear_last_question_message_id(user_id)
 
+    async def clear_current_screen_inline_keyboards(
+        self, bot: Bot, chat_id: int, user_id: int
+    ) -> None:
+        state = self._store.get_state(user_id)
+        for message_id in list(state.message_ids):
+            try:
+                await bot.edit_message_reply_markup(
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    reply_markup=None,
+                )
+            except (TelegramBadRequest, TelegramForbiddenError, Exception):
+                continue
+
+    async def enter_text_input_mode(
+        self,
+        *,
+        bot: Bot,
+        chat_id: int,
+        user_id: int,
+        preserve_last_question: bool = False,
+    ) -> None:
+        if not preserve_last_question:
+            await self.delete_last_question_message(
+                bot=bot,
+                chat_id=chat_id,
+                user_id=user_id,
+            )
+        await self.clear_current_screen_inline_keyboards(
+            bot=bot,
+            chat_id=chat_id,
+            user_id=user_id,
+        )
+
     async def send_ephemeral_message(
         self,
         message: Message,
