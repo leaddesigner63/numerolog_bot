@@ -8,7 +8,12 @@ from typing import Any, Optional
 from fastapi import APIRouter, HTTPException, Request, status
 
 from app.core.config import settings
-from app.db.models import Order, OrderStatus, PaymentProvider as PaymentProviderEnum
+from app.db.models import (
+    Order,
+    OrderStatus,
+    PaymentConfirmationSource,
+    PaymentProvider as PaymentProviderEnum,
+)
 from app.db.session import get_session
 from app.payments import get_payment_provider
 from app.payments.prodamus import _find_signature, _parse_payload
@@ -140,9 +145,15 @@ async def handle_payment_webhook(request: Request) -> dict[str, str]:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Order not found")
 
         if is_paid:
+            now = datetime.now(timezone.utc)
             if order.status != OrderStatus.PAID:
                 order.status = OrderStatus.PAID
-                order.paid_at = datetime.now(timezone.utc)
+                order.paid_at = now
+
+            if not order.payment_confirmed_at:
+                order.payment_confirmed_at = now
+            order.payment_confirmation_source = PaymentConfirmationSource.PROVIDER_WEBHOOK
+            order.payment_confirmed = True
 
             if provider_payment_id and not order.provider_payment_id:
                 order.provider_payment_id = str(provider_payment_id)

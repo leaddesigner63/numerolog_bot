@@ -28,6 +28,7 @@ from app.db.models import (
     FeedbackStatus,
     LLMApiKey,
     Order,
+    PaymentConfirmationSource,
     OrderFulfillmentStatus,
     OrderStatus,
     Report,
@@ -3364,6 +3365,8 @@ async def admin_order_status(
                 updated = True
                 if order.status == OrderStatus.PAID and not order.paid_at:
                     order.paid_at = datetime.now(timezone.utc)
+                if order.status == OrderStatus.PAID:
+                    order.payment_confirmation_source = PaymentConfirmationSource.ADMIN_MANUAL
             except ValueError:
                 updated = False
     return {
@@ -3408,6 +3411,8 @@ async def admin_orders_bulk_status(
             order.status = status_update
             if status_update == OrderStatus.PAID and not order.paid_at:
                 order.paid_at = now
+            if status_update == OrderStatus.PAID:
+                order.payment_confirmation_source = PaymentConfirmationSource.ADMIN_MANUAL
         updated += 1
     return {"updated": updated}
 

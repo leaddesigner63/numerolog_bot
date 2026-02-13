@@ -9,7 +9,14 @@ from sqlalchemy.pool import StaticPool
 
 from app.api.routes import webhooks as webhook_routes
 from app.db.base import Base
-from app.db.models import Order, OrderStatus, PaymentProvider, Tariff, User
+from app.db.models import (
+    Order,
+    OrderStatus,
+    PaymentConfirmationSource,
+    PaymentProvider,
+    Tariff,
+    User,
+)
 from app.main import create_app
 from app.payments.base import WebhookResult
 
@@ -98,6 +105,12 @@ class PaymentWebhookRouteTests(unittest.TestCase):
             self.assertEqual(order.status, OrderStatus.PAID)
             self.assertEqual(order.provider_payment_id, "pay-1")
             self.assertIsNotNone(order.paid_at)
+            self.assertTrue(order.payment_confirmed)
+            self.assertIsNotNone(order.payment_confirmed_at)
+            self.assertEqual(
+                order.payment_confirmation_source,
+                PaymentConfirmationSource.PROVIDER_WEBHOOK,
+            )
 
     def test_prodamus_probe_with_sign_test_returns_ok(self) -> None:
         response = self.client.post(
