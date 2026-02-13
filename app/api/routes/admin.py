@@ -358,6 +358,19 @@ def admin_ui(request: Request) -> HTMLResponse:
       border: 1px solid #3a4150;
       color: var(--text);
     }
+    button.secondary.warning {
+      border-color: rgba(250, 204, 21, 0.55);
+      color: #fde68a;
+      background: rgba(250, 204, 21, 0.08);
+    }
+    .quick-filters {
+      margin-bottom: 6px;
+    }
+    .quick-filter-button.active {
+      border-color: rgba(59, 130, 246, 0.6);
+      background: rgba(59, 130, 246, 0.18);
+      color: #dbeafe;
+    }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -840,6 +853,11 @@ def admin_ui(request: Request) -> HTMLResponse:
           <input id="ordersSearch" class="table-search" type="text" placeholder="Поиск по любому столбцу" />
           <button class="secondary" onclick="clearTableFilters('orders')">Сбросить</button>
           <button class="secondary" onclick="loadOrders()">Обновить</button>
+        </div>
+        <div class="row quick-filters">
+          <button id="ordersFilterProviderConfirmed" class="secondary quick-filter-button" onclick="setOrdersQuickFilter('provider-confirmed')">Только provider-confirmed</button>
+          <button id="ordersFilterManualPaid" class="secondary quick-filter-button" onclick="setOrdersQuickFilter('manual-paid')">Только manual-paid</button>
+          <button id="ordersFilterUnconfirmed" class="secondary quick-filter-button" onclick="setOrdersQuickFilter('unconfirmed')">Неподтвержденные</button>
         </div>
         <div class="bulk-actions">
           <button class="secondary" onclick="bulkMarkOrders('paid')">Отметить выбранные как оплаченные</button>
@@ -1333,7 +1351,7 @@ def admin_ui(request: Request) -> HTMLResponse:
     const tableStates = {
       llmKeysActive: {search: "", sortKey: null, sortDir: "asc"},
       llmKeysInactive: {search: "", sortKey: null, sortDir: "asc"},
-      orders: {search: "", sortKey: null, sortDir: "asc"},
+      orders: {search: "", sortKey: null, sortDir: "asc", quickFilter: null},
       reports: {search: "", sortKey: null, sortDir: "asc"},
       users: {search: "", sortKey: null, sortDir: "asc"},
       feedbackInbox: {search: "", sortKey: null, sortDir: "asc"},
@@ -1443,6 +1461,15 @@ def admin_ui(request: Request) -> HTMLResponse:
           {label: "Пользователь", key: "telegram_user_id", sortable: true},
           {label: "Тариф", key: "tariff", sortable: true},
           {label: "Статус", key: "status", sortable: true},
+          {
+            label: "Фин. подтверждение",
+            key: "payment_confirmed",
+            sortable: true,
+            render: (order) => order.payment_confirmed ? "Да" : "Нет",
+            sortValue: (order) => order.payment_confirmed ? 1 : 0,
+          },
+          {label: "Источник подтверждения", key: "payment_confirmation_source", sortable: true},
+          {label: "ID платежа провайдера", key: "provider_payment_id", sortable: true},
           {label: "Выполнение", key: "fulfillment_status", sortable: true},
           {label: "Отчёт #", key: "report_id", sortable: true},
           {
@@ -1453,7 +1480,7 @@ def admin_ui(request: Request) -> HTMLResponse:
             render: (order) => `${normalizeValue(order.amount)} ${normalizeValue(order.currency)}`.trim(),
           },
           {label: "Действия", key: null, sortable: false, copyable: false, render: (order) => `
-            <button class="secondary" onclick="markOrder(${order.id}, 'paid')">Оплачен</button>
+            <button class="secondary warning" title="Ручной paid не влияет на финметрики provider-confirmed" onclick="markOrder(${order.id}, 'paid')">Пометить paid (ручной)</button>
             <button class="secondary" onclick="markOrder(${order.id}, 'completed')">Исполнен</button>
           `},
         ],
@@ -1707,6 +1734,9 @@ def admin_ui(request: Request) -> HTMLResponse:
       if (searchTerm) {
         filteredRows = rows.filter((row) => collectSearchableText(config.columns, row).includes(searchTerm));
       }
+      if (tableKey === "orders") {
+        filteredRows = applyOrdersQuickFilter(filteredRows, state.quickFilter);
+      }
       if (state.sortKey) {
         const column = config.columns.find((col) => col.key === state.sortKey);
         if (column) {
@@ -1838,11 +1868,57 @@ def admin_ui(request: Request) -> HTMLResponse:
 
     function clearTableFilters(tableKey) {
       tableStates[tableKey] = {search: "", sortKey: null, sortDir: "asc"};
+      if (tableKey === "orders") {
+        tableStates[tableKey].quickFilter = null;
+      }
       const input = document.getElementById(`${tableKey}Search`);
       if (input) {
         input.value = "";
       }
+      if (tableKey === "orders") {
+        updateOrdersQuickFilterButtons();
+      }
       renderTableForKey(tableKey);
+    }
+
+    function applyOrdersQuickFilter(rows, quickFilter) {
+      if (!quickFilter) {
+        return rows;
+      }
+      if (quickFilter === "provider-confirmed") {
+        return rows.filter((row) => row.payment_confirmed === true);
+      }
+      if (quickFilter === "manual-paid") {
+        return rows.filter((row) => row.status === "paid" && row.payment_confirmed !== true && row.payment_confirmation_source === "admin_manual");
+      }
+      if (quickFilter === "unconfirmed") {
+        return rows.filter((row) => row.payment_confirmed !== true);
+      }
+      return rows;
+    }
+
+    function updateOrdersQuickFilterButtons() {
+      const state = tableStates.orders || {};
+      const mapping = {
+        "provider-confirmed": "ordersFilterProviderConfirmed",
+        "manual-paid": "ordersFilterManualPaid",
+        "unconfirmed": "ordersFilterUnconfirmed",
+      };
+      Object.entries(mapping).forEach(([value, id]) => {
+        const button = document.getElementById(id);
+        if (button) {
+          button.classList.toggle("active", state.quickFilter === value);
+        }
+      });
+    }
+
+    function setOrdersQuickFilter(filterValue) {
+      if (!tableStates.orders) {
+        return;
+      }
+      tableStates.orders.quickFilter = tableStates.orders.quickFilter === filterValue ? null : filterValue;
+      updateOrdersQuickFilterButtons();
+      renderTableForKey("orders");
     }
 
     async function loadOrders() {
@@ -1872,6 +1948,12 @@ def admin_ui(request: Request) -> HTMLResponse:
       if (!ids.length) {
         alert("Выберите хотя бы один заказ.");
         return;
+      }
+      if (status === "paid") {
+        const confirmed = confirm("Массовая установка paid — это ручная отметка и не является финансовым подтверждением provider-confirmed. Продолжить?");
+        if (!confirmed) {
+          return;
+        }
       }
       try {
         await fetchJson("/orders/bulk-status", {
@@ -2638,6 +2720,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         });
       }
     });
+    updateOrdersQuickFilterButtons();
 
     const llmTabButtons = document.querySelectorAll("[data-llm-tab]");
     const llmTabPanels = document.querySelectorAll("[data-llm-panel]");
@@ -3442,7 +3525,11 @@ def admin_orders(limit: int = 50, session: Session = Depends(_get_db_session)) -
                 "amount": float(order.amount),
                 "currency": order.currency,
                 "provider": order.provider.value,
+                "provider_payment_id": order.provider_payment_id,
                 "status": order.status.value,
+                "payment_confirmed": order.payment_confirmed,
+                "payment_confirmed_at": order.payment_confirmed_at.isoformat() if order.payment_confirmed_at else None,
+                "payment_confirmation_source": order.payment_confirmation_source.value if order.payment_confirmation_source else None,
                 "fulfillment_status": order.fulfillment_status.value,
                 "fulfilled_at": order.fulfilled_at.isoformat() if order.fulfilled_at else None,
                 "report_id": report_id,
