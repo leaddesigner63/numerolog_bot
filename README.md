@@ -204,6 +204,7 @@ python -m app.bot.polling
 - в разделе **«Отчёты»** добавлены финполя заказа (`order_status`, `payment_confirmed`, `payment_confirmation_source`, `payment_confirmed_at`) и колонка **«Фин. основание»** (`provider_confirmed` / `manual` / `none`), а также быстрые фильтры по provider-confirmed и по неподтверждённой оплате;
 - endpoint `/admin/api/reports` поддерживает серверные фильтры `financial_basis` и `payment_not_confirmed_only`, поэтому UI-фильтры масштабируются на большие выборки без клиентской перегрузки;
 - раздел **Analytics** дополнен финансовыми блоками «Финансовая воронка», «Выручка по тарифам» и «Финансы по дням» (источник данных: только `provider-confirmed` оплаты), а также мини-графиком тренда выручки по дням;
+- в разделе **«Заказы»** добавлен блок **«Финансовый аудит»** с фильтрами по дате, `order_id` и типу события (`manual_paid_set`, `manual_status_change`, `bulk_paid_set`), а также отображение кто и когда вручную поставил `paid`;
 - добавлены API-эндпоинты `/admin/api/analytics/finance/summary`, `/admin/api/analytics/finance/by-tariff`, `/admin/api/analytics/finance/timeseries` с поддержкой фильтров `period/from/to/tariff`;
 - если найден кейс «report exists + payment not confirmed», в разделе **«Отчёты»** показывается алерт для ручной проверки с кнопкой «Показать только проблемные»;
 - в разделе **«Обратная связь»** администратор может вручную отправить ответ пользователю прямо из админки; текст ответа сохраняется в БД и помечается временем отправки;

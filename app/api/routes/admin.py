@@ -25,6 +25,7 @@ from app.services.admin_analytics import (
 )
 from pydantic import BaseModel
 from app.db.models import (
+    AdminFinanceEvent,
     AdminNote,
     FeedbackMessage,
     FeedbackStatus,
@@ -78,6 +79,49 @@ def _extract_basic_auth(request: Request) -> tuple[str | None, str | None]:
         return None, None
     login, password = decoded.split(":", 1)
     return login, password
+
+
+def _resolve_admin_actor(request: Request) -> str:
+    login, password = _extract_basic_auth(request)
+    if _is_valid_admin_credentials(login, password) and login:
+        return f"login:{login}"
+    session_token = request.cookies.get("admin_session")
+    if session_token:
+        return f"session:{session_token[:12]}"
+    if settings.admin_login:
+        return f"login:{settings.admin_login}"
+    return "unknown"
+
+
+def _order_finance_payload(order: Order) -> dict:
+    return {
+        "status": order.status.value if order.status else None,
+        "payment_confirmed": order.payment_confirmed,
+        "payment_confirmed_at": order.payment_confirmed_at.isoformat() if order.payment_confirmed_at else None,
+        "payment_confirmation_source": order.payment_confirmation_source.value if order.payment_confirmation_source else None,
+        "paid_at": order.paid_at.isoformat() if order.paid_at else None,
+        "fulfillment_status": order.fulfillment_status.value if order.fulfillment_status else None,
+        "fulfilled_at": order.fulfilled_at.isoformat() if order.fulfilled_at else None,
+    }
+
+
+def _create_finance_event(
+    session: Session,
+    order: Order,
+    action: str,
+    actor: str,
+    payload_before: dict,
+    payload_after: dict,
+) -> None:
+    session.add(
+        AdminFinanceEvent(
+            order_id=order.id,
+            action=action,
+            actor=actor,
+            payload_before=payload_before,
+            payload_after=payload_after,
+        )
+    )
 
 
 def _is_valid_admin_credentials(login: str | None, password: str | None) -> bool:
@@ -875,6 +919,21 @@ def admin_ui(request: Request) -> HTMLResponse:
           <button class="secondary danger" onclick="bulkDeleteOrders()">Удалить выбранные</button>
         </div>
         <div id="orders" class="muted">Загрузка...</div>
+        <h3 style="margin-top: 24px;">Финансовый аудит</h3>
+        <div class="row table-controls">
+          <input id="financeAuditOrderId" class="table-search" type="text" placeholder="Order ID" />
+          <select id="financeAuditAction">
+            <option value="">Все действия</option>
+            <option value="manual_paid_set">manual_paid_set</option>
+            <option value="manual_status_change">manual_status_change</option>
+            <option value="bulk_paid_set">bulk_paid_set</option>
+          </select>
+          <input id="financeAuditFrom" type="datetime-local" />
+          <input id="financeAuditTo" type="datetime-local" />
+          <button class="secondary" onclick="loadFinanceAudit()">Применить</button>
+          <button class="secondary" onclick="resetFinanceAuditFilters()">Сбросить</button>
+        </div>
+        <div id="financeAudit" class="muted">Загрузка...</div>
       </section>
       <section data-panel="reports">
         <h2>Отчёты</h2>
@@ -1379,6 +1438,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       llmKeysInactive: [],
       orders: [],
       reports: [],
+      financeAudit: [],
       users: [],
       feedbackInbox: [],
       feedbackArchive: [],
@@ -1391,6 +1451,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       llmKeysInactive: {search: "", sortKey: null, sortDir: "asc"},
       orders: {search: "", sortKey: null, sortDir: "asc", quickFilter: null},
       reports: {search: "", sortKey: null, sortDir: "asc", quickFilter: null},
+      financeAudit: {search: "", sortKey: "created_at", sortDir: "desc"},
       users: {search: "", sortKey: "confirmed_revenue_total", sortDir: "desc"},
       feedbackInbox: {search: "", sortKey: null, sortDir: "asc"},
       feedbackArchive: {search: "", sortKey: null, sortDir: "asc"},
@@ -1402,6 +1463,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       llmKeysInactive: new Set(),
       orders: new Set(),
       reports: new Set(),
+      financeAudit: new Set(),
       users: new Set(),
       feedbackInbox: new Set(),
       feedbackArchive: new Set(),
@@ -1507,6 +1569,17 @@ def admin_ui(request: Request) -> HTMLResponse:
             sortValue: (order) => order.payment_confirmed ? 1 : 0,
           },
           {label: "Источник подтверждения", key: "payment_confirmation_source", sortable: true},
+          {
+            label: "Ручной paid поставил",
+            key: "manual_paid_set_by",
+            sortable: true,
+            render: (order) => {
+              if (!order.manual_paid_set_at && !order.manual_paid_set_by) {
+                return "";
+              }
+              return `${normalizeValue(order.manual_paid_set_by)} ${normalizeValue(order.manual_paid_set_at)}`.trim();
+            },
+          },
           {label: "ID платежа провайдера", key: "provider_payment_id", sortable: true},
           {label: "Выполнение", key: "fulfillment_status", sortable: true},
           {label: "Отчёт #", key: "report_id", sortable: true},
@@ -1569,6 +1642,18 @@ def admin_ui(request: Request) -> HTMLResponse:
               <button class="secondary" onclick="openUserOrdersWithFinancialFilter(${row.id})">Открыть заказы пользователя с фин-фильтром</button>
             `,
           },
+        ],
+      },
+      financeAudit: {
+        targetId: "financeAudit",
+        selectable: false,
+        columns: [
+          {label: "Создано", key: "created_at", sortable: true},
+          {label: "Order ID", key: "order_id", sortable: true},
+          {label: "Событие", key: "action", sortable: true},
+          {label: "Кто", key: "actor", sortable: true},
+          {label: "До", key: "payload_before", sortable: false, render: (row) => `<pre class="muted">${normalizeValue(row.payload_before)}</pre>`},
+          {label: "После", key: "payload_after", sortable: false, render: (row) => `<pre class="muted">${normalizeValue(row.payload_after)}</pre>`},
         ],
       },
       feedbackInbox: {
@@ -2062,8 +2147,49 @@ def admin_ui(request: Request) -> HTMLResponse:
         const data = await fetchJson(endpoint);
         tableData.orders = data.orders || [];
         renderTableForKey("orders");
+        await loadFinanceAudit();
       } catch (error) {
         document.getElementById("orders").textContent = error.message;
+      }
+    }
+
+    function resetFinanceAuditFilters() {
+      const ids = ["financeAuditOrderId", "financeAuditAction", "financeAuditFrom", "financeAuditTo"];
+      ids.forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.value = "";
+        }
+      });
+      loadFinanceAudit();
+    }
+
+    async function loadFinanceAudit() {
+      try {
+        const params = new URLSearchParams();
+        const orderId = document.getElementById("financeAuditOrderId")?.value;
+        const action = document.getElementById("financeAuditAction")?.value;
+        const from = document.getElementById("financeAuditFrom")?.value;
+        const to = document.getElementById("financeAuditTo")?.value;
+        if (orderId) {
+          params.set("order_id", orderId);
+        }
+        if (action) {
+          params.set("action", action);
+        }
+        if (from) {
+          params.set("from_dt", new Date(from).toISOString());
+        }
+        if (to) {
+          params.set("to_dt", new Date(to).toISOString());
+        }
+        const query = params.toString();
+        const endpoint = query ? `/finance-audit?${query}` : "/finance-audit";
+        const data = await fetchJson(endpoint);
+        tableData.financeAudit = data.events || [];
+        renderTableForKey("financeAudit");
+      } catch (error) {
+        document.getElementById("financeAudit").textContent = error.message;
       }
     }
 
@@ -3936,9 +4062,29 @@ def admin_orders(
     payment_confirmed: bool | None = Query(default=None),
     session: Session = Depends(_get_db_session),
 ) -> dict:
+    latest_manual_paid_event = (
+        select(
+            AdminFinanceEvent.order_id.label("event_order_id"),
+            AdminFinanceEvent.actor.label("manual_paid_set_by"),
+            AdminFinanceEvent.created_at.label("manual_paid_set_at"),
+            func.row_number().over(
+                partition_by=AdminFinanceEvent.order_id,
+                order_by=AdminFinanceEvent.created_at.desc(),
+            ).label("rn"),
+        )
+        .where(AdminFinanceEvent.action.in_(["manual_paid_set", "bulk_paid_set"]))
+        .subquery()
+    )
     query = (
-        select(Order, User)
+        select(Order, User, latest_manual_paid_event.c.manual_paid_set_by, latest_manual_paid_event.c.manual_paid_set_at)
         .join(User, User.id == Order.user_id)
+        .outerjoin(
+            latest_manual_paid_event,
+            and_(
+                latest_manual_paid_event.c.event_order_id == Order.id,
+                latest_manual_paid_event.c.rn == 1,
+            ),
+        )
     )
     if user_id is not None:
         query = query.where(Order.user_id == user_id)
@@ -3949,7 +4095,7 @@ def admin_orders(
         .order_by(Order.created_at.desc())
         .limit(limit)
     ).all()
-    order_ids = [order.id for order, _ in rows]
+    order_ids = [order.id for order, _, _, _ in rows]
     report_ids_by_order: dict[int, int] = {}
     if order_ids:
         report_rows = session.execute(
@@ -3961,7 +4107,7 @@ def admin_orders(
             if report_order_id is not None and report_id is not None
         }
     orders = []
-    for order, user in rows:
+    for order, user, manual_paid_set_by, manual_paid_set_at in rows:
         report_id = order.fulfilled_report_id or report_ids_by_order.get(order.id)
         orders.append(
             {
@@ -3982,6 +4128,8 @@ def admin_orders(
                 "report_id": report_id,
                 "created_at": order.created_at.isoformat(),
                 "paid_at": order.paid_at.isoformat() if order.paid_at else None,
+                "manual_paid_set_by": manual_paid_set_by,
+                "manual_paid_set_at": manual_paid_set_at.isoformat() if manual_paid_set_at else None,
             }
         )
     return {"orders": orders}
@@ -4004,12 +4152,16 @@ async def admin_order_status(
         raise HTTPException(status_code=404, detail="Order not found")
     previous = order.status.value
     updated = False
+    action: str | None = None
+    payload_before = _order_finance_payload(order)
+    actor = _resolve_admin_actor(request)
     if isinstance(new_status, str):
         if new_status == OrderFulfillmentStatus.COMPLETED.value:
             order.fulfillment_status = OrderFulfillmentStatus.COMPLETED
             if not order.fulfilled_at:
                 order.fulfilled_at = datetime.now(timezone.utc)
             updated = True
+            action = "manual_status_change"
         else:
             try:
                 order.status = OrderStatus(new_status)
@@ -4018,14 +4170,63 @@ async def admin_order_status(
                     order.paid_at = datetime.now(timezone.utc)
                 if order.status == OrderStatus.PAID:
                     order.payment_confirmation_source = PaymentConfirmationSource.ADMIN_MANUAL
+                    action = "manual_paid_set"
+                else:
+                    action = "manual_status_change"
             except ValueError:
                 updated = False
+    if updated and action:
+        payload_after = _order_finance_payload(order)
+        _create_finance_event(
+            session=session,
+            order=order,
+            action=action,
+            actor=actor,
+            payload_before=payload_before,
+            payload_after=payload_after,
+        )
     return {
         "order_id": order.id,
         "previous_status": previous,
         "current_status": order.status.value,
         "updated": updated,
     }
+
+
+@router.get("/api/finance-audit")
+def admin_finance_audit(
+    limit: int = 100,
+    order_id: int | None = Query(default=None),
+    action: str | None = Query(default=None),
+    from_dt: datetime | None = Query(default=None),
+    to_dt: datetime | None = Query(default=None),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    query = select(AdminFinanceEvent)
+    if order_id is not None:
+        query = query.where(AdminFinanceEvent.order_id == order_id)
+    if isinstance(action, str) and action:
+        query = query.where(AdminFinanceEvent.action == action)
+    if from_dt is not None:
+        query = query.where(AdminFinanceEvent.created_at >= from_dt)
+    if to_dt is not None:
+        query = query.where(AdminFinanceEvent.created_at <= to_dt)
+    rows = session.execute(
+        query.order_by(AdminFinanceEvent.created_at.desc()).limit(limit)
+    ).scalars().all()
+    events = [
+        {
+            "id": row.id,
+            "order_id": row.order_id,
+            "action": row.action,
+            "actor": row.actor,
+            "payload_before": json.dumps(row.payload_before, ensure_ascii=False, indent=2) if row.payload_before is not None else "",
+            "payload_after": json.dumps(row.payload_after, ensure_ascii=False, indent=2) if row.payload_after is not None else "",
+            "created_at": row.created_at.isoformat() if row.created_at else None,
+        }
+        for row in rows
+    ]
+    return {"events": events}
 
 
 @router.post("/api/orders/bulk-status")
@@ -4053,17 +4254,34 @@ async def admin_orders_bulk_status(
     orders = session.execute(select(Order).where(Order.id.in_(ids))).scalars().all()
     updated = 0
     now = datetime.now(timezone.utc)
+    actor = _resolve_admin_actor(request)
     for order in orders:
+        payload_before = _order_finance_payload(order)
+        action: str | None = None
         if fulfillment_update is not None:
             order.fulfillment_status = fulfillment_update
             if fulfillment_update == OrderFulfillmentStatus.COMPLETED and not order.fulfilled_at:
                 order.fulfilled_at = now
+            action = "manual_status_change"
         if status_update is not None:
             order.status = status_update
             if status_update == OrderStatus.PAID and not order.paid_at:
                 order.paid_at = now
             if status_update == OrderStatus.PAID:
                 order.payment_confirmation_source = PaymentConfirmationSource.ADMIN_MANUAL
+                action = "bulk_paid_set"
+            else:
+                action = "manual_status_change"
+        if action:
+            payload_after = _order_finance_payload(order)
+            _create_finance_event(
+                session=session,
+                order=order,
+                action=action,
+                actor=actor,
+                payload_before=payload_before,
+                payload_after=payload_after,
+            )
         updated += 1
     return {"updated": updated}
 

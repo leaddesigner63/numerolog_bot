@@ -11,6 +11,7 @@ from sqlalchemy.pool import StaticPool
 from app.api.routes import admin as admin_routes
 from app.db.base import Base
 from app.db.models import (
+    AdminFinanceEvent,
     Order,
     OrderFulfillmentStatus,
     OrderStatus,
@@ -180,6 +181,37 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(len(payload["orders"]), 1)
         self.assertEqual(payload["orders"][0]["user_id"], 140)
         self.assertTrue(payload["orders"][0]["payment_confirmed"])
+
+    def test_orders_payload_includes_latest_manual_paid_actor(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=142, telegram_user_id=700742)
+            order = Order(
+                id=250,
+                user_id=142,
+                tariff=Tariff.T2,
+                amount=2000,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+            )
+            session.add_all([user, order])
+            session.flush()
+            session.add(
+                AdminFinanceEvent(
+                    order_id=250,
+                    action="manual_paid_set",
+                    actor="login:root",
+                    payload_before={"status": "created"},
+                    payload_after={"status": "paid"},
+                )
+            )
+            session.commit()
+
+        response = self.client.get("/admin/api/orders")
+        self.assertEqual(response.status_code, 200)
+        order_payload = next(item for item in response.json()["orders"] if item["id"] == 250)
+        self.assertEqual(order_payload["manual_paid_set_by"], "login:root")
+        self.assertIsNotNone(order_payload["manual_paid_set_at"])
 
     def test_users_payload_includes_confirmed_order_aggregates_and_sorting(self) -> None:
         with self.SessionLocal() as session:
@@ -614,6 +646,8 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertIn("analyticsFinanceByTariff", html)
         self.assertIn("analyticsFinanceChart", html)
         self.assertIn("provider-confirmed only", html)
+        self.assertIn("financeAudit", html)
+        self.assertIn("Финансовый аудит", html)
 
     def test_admin_orders_bulk_status_completed_sets_fulfillment(self) -> None:
         with self.SessionLocal() as session:
@@ -684,6 +718,11 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
             )
             self.assertFalse(refreshed.payment_confirmed)
             self.assertIsNone(refreshed.payment_confirmed_at)
+            event = session.query(AdminFinanceEvent).filter(AdminFinanceEvent.order_id == 206).one()
+            self.assertEqual(event.action, "manual_paid_set")
+            self.assertIsNotNone(event.actor)
+            self.assertEqual(event.payload_before.get("status"), OrderStatus.CREATED.value)
+            self.assertEqual(event.payload_after.get("status"), OrderStatus.PAID.value)
 
     def test_admin_orders_bulk_status_paid_marks_manual_source_without_payment_confirmation(self) -> None:
         with self.SessionLocal() as session:
@@ -727,6 +766,28 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
                 )
                 self.assertFalse(order.payment_confirmed)
                 self.assertIsNone(order.payment_confirmed_at)
+            actions = [
+                item[0]
+                for item in session.query(AdminFinanceEvent.action).filter(AdminFinanceEvent.order_id.in_([207, 208])).all()
+            ]
+            self.assertEqual(actions.count("bulk_paid_set"), 2)
+
+    def test_finance_audit_endpoint_filters(self) -> None:
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    AdminFinanceEvent(order_id=500, action="manual_paid_set", actor="login:admin", payload_before={"status": "created"}, payload_after={"status": "paid"}),
+                    AdminFinanceEvent(order_id=501, action="manual_status_change", actor="login:admin", payload_before={"status": "paid"}, payload_after={"status": "failed"}),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/admin/api/finance-audit", params={"order_id": 500, "action": "manual_paid_set"})
+        self.assertEqual(response.status_code, 200)
+        events = response.json()["events"]
+        self.assertEqual(len(events), 1)
+        self.assertEqual(events[0]["order_id"], 500)
+        self.assertEqual(events[0]["action"], "manual_paid_set")
 
     def test_admin_orders_bulk_delete_removes_selected_orders(self) -> None:
         with self.SessionLocal() as session:
