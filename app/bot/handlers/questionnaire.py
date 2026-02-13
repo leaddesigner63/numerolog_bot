@@ -29,6 +29,7 @@ from app.db.session import get_session
 
 router = Router()
 _TELEGRAM_MESSAGE_LIMIT = 4096
+_QUESTIONNAIRE_PROGRESS_BAR_WIDTH = 10
 
 
 class QuestionnaireStates(StatesGroup):
@@ -178,6 +179,46 @@ def _build_answers_summary_messages(
     if current_chunk:
         chunks.append(current_chunk)
     return chunks
+
+
+def _build_questionnaire_progress_bar(
+    *,
+    answered_count: int | None,
+    total_questions: int | None,
+    bar_width: int = _QUESTIONNAIRE_PROGRESS_BAR_WIDTH,
+) -> str:
+    safe_total = max(int(total_questions or 0), 0)
+    if safe_total == 0:
+        return ""
+
+    safe_answered = max(int(answered_count or 0), 0)
+    if safe_answered > safe_total:
+        safe_answered = safe_total
+
+    safe_bar_width = max(int(bar_width), 1)
+    progress_ratio = safe_answered / safe_total
+    filled_blocks = min(int(round(progress_ratio * safe_bar_width)), safe_bar_width)
+    progress_percent = int(progress_ratio * 100)
+    bar = f"{'█' * filled_blocks}{'░' * (safe_bar_width - filled_blocks)}"
+    return (
+        f"Прогресс анкеты: [{bar}] "
+        f"{safe_answered}/{safe_total} ({progress_percent}%)"
+    )
+
+
+def _decorate_question_text_with_progress(
+    *,
+    question_text: str,
+    answered_count: int | None,
+    total_questions: int | None,
+) -> str:
+    progress_text = _build_questionnaire_progress_bar(
+        answered_count=answered_count,
+        total_questions=total_questions,
+    )
+    if not progress_text:
+        return question_text
+    return f"{progress_text}\n\n{question_text}"
 
 
 def _render_existing_answer(answer: Any) -> str:
@@ -431,6 +472,8 @@ async def _send_question(
     existing_answer: Any | None = None,
     show_edit_actions: bool = False,
     force_input: bool = False,
+    answered_count: int | None = None,
+    total_questions: int | None = None,
 ) -> None:
     if not question:
         await screen_manager.send_ephemeral_message(
@@ -480,6 +523,11 @@ async def _send_question(
             user_id=user_id,
             preserve_last_question=True,
         )
+    question_text = _decorate_question_text_with_progress(
+        question_text=question_text,
+        answered_count=answered_count,
+        total_questions=total_questions,
+    )
     sent = await message.bot.send_message(
         chat_id=message.chat.id,
         text=question_text,
@@ -585,6 +633,8 @@ async def _start_edit_questionnaire(
         question=config.get_question(current_question_id),
         existing_answer=answers.get(current_question_id),
         show_edit_actions=True,
+        answered_count=len(answers),
+        total_questions=len(config.questions),
     )
     _update_screen_state(callback.from_user.id, payload)
 
@@ -670,6 +720,8 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
         message=callback.message,
         user_id=callback.from_user.id,
         question=config.get_question(current_question_id),
+        answered_count=len(answers),
+        total_questions=len(config.questions),
     )
     _update_screen_state(callback.from_user.id, payload)
     await callback.answer()
@@ -710,6 +762,8 @@ async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> N
         message=callback.message,
         user_id=callback.from_user.id,
         question=config.get_question(config.start_question_id),
+        answered_count=0,
+        total_questions=len(config.questions),
     )
     _update_screen_state(callback.from_user.id, payload)
     await callback.answer()
@@ -877,6 +931,8 @@ async def change_current_edit_answer(callback: CallbackQuery, state: FSMContext)
         question=config.get_question(current_question_id),
         existing_answer=answers.get(current_question_id),
         force_input=True,
+        answered_count=len(answers),
+        total_questions=len(config.questions),
     )
     await callback.answer()
 
@@ -1013,6 +1069,8 @@ async def _handle_answer(
         question=config.get_question(next_question_id),
         existing_answer=answers.get(next_question_id) if questionnaire_mode == "edit" else None,
         show_edit_actions=questionnaire_mode == "edit",
+        answered_count=len(answers),
+        total_questions=len(config.questions),
     )
 
 
