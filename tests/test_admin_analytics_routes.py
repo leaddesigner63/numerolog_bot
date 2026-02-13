@@ -256,6 +256,169 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
             self.assertEqual(refreshed.fulfillment_status, OrderFulfillmentStatus.COMPLETED)
             self.assertIsNotNone(refreshed.fulfilled_at)
 
+
+    def test_reports_payload_includes_order_payment_fields_and_financial_basis(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=120, telegram_user_id=700720)
+            provider_order = Order(
+                id=220,
+                user_id=120,
+                tariff=Tariff.T1,
+                amount=1000,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                payment_confirmed=True,
+                payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                payment_confirmed_at=datetime.now(timezone.utc),
+            )
+            manual_order = Order(
+                id=221,
+                user_id=120,
+                tariff=Tariff.T2,
+                amount=2000,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                payment_confirmed=True,
+                payment_confirmation_source=PaymentConfirmationSource.ADMIN_MANUAL,
+            )
+            unpaid_order = Order(
+                id=222,
+                user_id=120,
+                tariff=Tariff.T3,
+                amount=3000,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PENDING,
+                payment_confirmed=False,
+            )
+            reports = [
+                Report(id=320, user_id=120, order_id=220, tariff=Tariff.T1, report_text="provider"),
+                Report(id=321, user_id=120, order_id=221, tariff=Tariff.T2, report_text="manual"),
+                Report(id=322, user_id=120, order_id=222, tariff=Tariff.T3, report_text="none"),
+            ]
+            session.add_all([user, provider_order, manual_order, unpaid_order, *reports])
+            session.commit()
+
+        response = self.client.get("/admin/api/reports")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        provider_row = next(item for item in payload["reports"] if item["id"] == 320)
+        self.assertEqual(provider_row["order_status"], OrderStatus.PAID.value)
+        self.assertTrue(provider_row["payment_confirmed"])
+        self.assertEqual(provider_row["payment_confirmation_source"], PaymentConfirmationSource.PROVIDER_WEBHOOK.value)
+        self.assertIsNotNone(provider_row["payment_confirmed_at"])
+        self.assertEqual(provider_row["financial_basis"], "provider_confirmed")
+
+        manual_row = next(item for item in payload["reports"] if item["id"] == 321)
+        self.assertEqual(manual_row["financial_basis"], "manual")
+
+        unpaid_row = next(item for item in payload["reports"] if item["id"] == 322)
+        self.assertEqual(unpaid_row["financial_basis"], "none")
+        self.assertFalse(unpaid_row["payment_confirmed"])
+
+
+    def test_reports_api_supports_financial_basis_filter(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=121, telegram_user_id=700721)
+            provider_order = Order(
+                id=223,
+                user_id=121,
+                tariff=Tariff.T1,
+                amount=1000,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                payment_confirmed=True,
+                payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+            )
+            manual_order = Order(
+                id=224,
+                user_id=121,
+                tariff=Tariff.T2,
+                amount=2000,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                payment_confirmed=True,
+                payment_confirmation_source=PaymentConfirmationSource.ADMIN_MANUAL,
+            )
+            session.add_all(
+                [
+                    user,
+                    provider_order,
+                    manual_order,
+                    Report(id=323, user_id=121, order_id=223, tariff=Tariff.T1, report_text="provider"),
+                    Report(id=324, user_id=121, order_id=224, tariff=Tariff.T2, report_text="manual"),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/admin/api/reports", params={"financial_basis": "provider_confirmed"})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["reports"]), 1)
+        self.assertEqual(payload["reports"][0]["financial_basis"], "provider_confirmed")
+
+    def test_reports_api_supports_payment_not_confirmed_filter(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=122, telegram_user_id=700722)
+            confirmed_order = Order(
+                id=225,
+                user_id=122,
+                tariff=Tariff.T1,
+                amount=1000,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                payment_confirmed=True,
+                payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+            )
+            pending_order = Order(
+                id=226,
+                user_id=122,
+                tariff=Tariff.T2,
+                amount=2000,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PENDING,
+                payment_confirmed=False,
+            )
+            session.add_all(
+                [
+                    user,
+                    confirmed_order,
+                    pending_order,
+                    Report(id=325, user_id=122, order_id=225, tariff=Tariff.T1, report_text="ok"),
+                    Report(id=326, user_id=122, order_id=226, tariff=Tariff.T2, report_text="warn"),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/admin/api/reports", params={"payment_not_confirmed_only": "true"})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["reports"]), 1)
+        self.assertEqual(payload["reports"][0]["id"], 326)
+        self.assertFalse(payload["reports"][0]["payment_confirmed"])
+
+    def test_admin_ui_contains_reports_financial_filter_and_alert_container(self) -> None:
+        with patch.object(admin_routes, "_admin_credentials_ready", return_value=True), patch.object(
+            admin_routes,
+            "_admin_session_token",
+            return_value="token",
+        ):
+            response = self.client.get("/admin", cookies={"admin_session": "token"})
+
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("reportsFilterProviderConfirmed", html)
+        self.assertIn("reportsFilterPaymentNotConfirmed", html)
+        self.assertIn("reportsAlerts", html)
+        self.assertIn("showProblemReportsFromAlert", html)
+        self.assertIn("Фин. основание", html)
     def test_admin_orders_bulk_status_completed_sets_fulfillment(self) -> None:
         with self.SessionLocal() as session:
             user = User(id=102, telegram_user_id=700702)
