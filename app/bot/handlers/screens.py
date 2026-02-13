@@ -47,6 +47,10 @@ router = Router()
 logger = logging.getLogger(__name__)
 
 PAID_TARIFFS = {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}
+FEEDBACK_SENT_NOTICE = (
+    "Сообщение отправлено администраторам. "
+    "Они обязательно ответят в ближайшее время!"
+)
 
 
 def _tariff_prices() -> dict[Tariff, int]:
@@ -2338,9 +2342,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         )
 
         if status == FeedbackStatus.SENT:
-            await _send_notice(
-                callback, "Сообщение отправлено в админку. Спасибо за обратную связь!"
-            )
+            await _send_notice(callback, FEEDBACK_SENT_NOTICE)
         else:
             await _send_notice(
                 callback,
