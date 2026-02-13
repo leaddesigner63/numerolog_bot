@@ -379,6 +379,18 @@ class PdfThemeRenderer:
         pdf = canvas.Canvas(buffer, pagesize=A4)
         page_width, page_height = A4
 
+        self._draw_cover_page(
+            pdf,
+            theme,
+            font_map,
+            payload_meta,
+            tariff,
+            page_width,
+            page_height,
+            asset_bundle,
+            report_document=report_document,
+        )
+
         self._draw_background(pdf, theme, page_width, page_height, randomizer, asset_bundle)
         self._draw_decorative_layers(pdf, theme, page_width, page_height, randomizer, asset_bundle)
         body_start_y = self._draw_header(
@@ -405,6 +417,90 @@ class PdfThemeRenderer:
 
         pdf.save()
         return buffer.getvalue()
+
+    def _draw_cover_page(
+        self,
+        pdf: canvas.Canvas,
+        theme: PdfTheme,
+        font_map: dict[str, str],
+        meta: dict[str, Any],
+        tariff: Any,
+        page_width: float,
+        page_height: float,
+        asset_bundle: PdfThemeAssetBundle,
+        report_document: ReportDocument | None = None,
+    ) -> bool:
+        cover_background = asset_bundle.background_main.with_name(
+            asset_bundle.background_main.name.replace("_bg_main", "_bg_cover")
+        )
+        if not cover_background.exists():
+            return False
+
+        self._try_draw_image_layer(
+            pdf,
+            layer_type="cover_background",
+            primary=cover_background,
+            fallback=cover_background,
+            x=0,
+            y=0,
+            width=page_width,
+            height=page_height,
+        )
+
+        cover_icon = asset_bundle.icon_main.with_name(
+            asset_bundle.icon_main.name.replace("_icon_main", "_icon_cover")
+        )
+        if not cover_icon.exists():
+            cover_icon = asset_bundle.icon_main
+
+        self._try_draw_image_layer(
+            pdf,
+            layer_type="cover_icon",
+            primary=cover_icon,
+            fallback=asset_bundle.icon_main,
+            x=(page_width - 80) / 2,
+            y=page_height - 220,
+            width=80,
+            height=80,
+        )
+
+        margin = theme.margin
+        title_size = min(theme.typography.title_size + 4, 28)
+        title = (report_document.title if report_document else "") or "Персональный аналитический отчёт"
+        subtitle = (report_document.subtitle if report_document else "") or f"Тариф: {tariff or 'N/A'}"
+        report_id = str(meta.get("id") or "")
+        if report_id:
+            subtitle = f"{subtitle} · Report #{report_id}"
+
+        max_width = page_width - (margin * 2)
+        title_lines = self._split_text_into_visual_lines(title, font_map["title"], title_size, max_width)
+        subtitle_size = theme.typography.subtitle_size
+        subtitle_lines = self._split_text_into_visual_lines(
+            subtitle,
+            font_map["subtitle"],
+            subtitle_size,
+            max_width,
+        )
+
+        y = page_height - 280
+        pdf.saveState()
+        pdf.setFillColor(theme.palette[2], alpha=0.98)
+        pdf.setFont(font_map["title"], title_size)
+        for line in title_lines:
+            text_width = pdfmetrics.stringWidth(line, font_map["title"], title_size)
+            pdf.drawString((page_width - text_width) / 2, y, line)
+            y -= int(title_size * theme.typography.line_height_ratio)
+
+        y -= 8
+        pdf.setFont(font_map["subtitle"], subtitle_size)
+        for line in subtitle_lines:
+            text_width = pdfmetrics.stringWidth(line, font_map["subtitle"], subtitle_size)
+            pdf.drawString((page_width - text_width) / 2, y, line)
+            y -= int(subtitle_size * theme.typography.line_height_ratio)
+        pdf.restoreState()
+
+        pdf.showPage()
+        return True
 
     def _draw_background(
         self,

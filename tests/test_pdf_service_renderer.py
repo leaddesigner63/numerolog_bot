@@ -1,4 +1,5 @@
 from pathlib import Path
+import tempfile
 import unittest
 from unittest import mock
 
@@ -142,6 +143,75 @@ class PdfServiceRendererTests(unittest.TestCase):
         rendered_title_lines = [text for _, _, text in canvas.draw_calls[:-1]]
         self.assertEqual("".join(rendered_title_lines).replace(" ", ""), long_title.replace(" ", ""))
         self.assertLess(body_start_y, 760)
+
+    def test_draw_cover_page_returns_false_when_cover_background_is_missing(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        pdf = mock.Mock()
+        font_map = {"title": "Helvetica", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            background_main = root / "t1_bg_main.webp"
+            icon_main = root / "t1_icon_main.png"
+            icon_main.write_bytes(b"icon")
+            asset_bundle = mock.Mock(
+                background_main=background_main,
+                icon_main=icon_main,
+            )
+
+            result = renderer._draw_cover_page(
+                pdf,
+                theme,
+                font_map,
+                meta={},
+                tariff="T1",
+                page_width=595,
+                page_height=842,
+                asset_bundle=asset_bundle,
+            )
+
+        self.assertFalse(result)
+        pdf.showPage.assert_not_called()
+
+    def test_draw_cover_page_uses_cover_icon_and_creates_new_page(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        pdf = mock.Mock()
+        font_map = {"title": "Helvetica", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            background_main = root / "t1_bg_main.webp"
+            cover_background = root / "t1_bg_cover.webp"
+            icon_main = root / "t1_icon_main.png"
+            cover_icon = root / "t1_icon_cover.png"
+            background_main.write_bytes(b"bg-main")
+            cover_background.write_bytes(b"bg-cover")
+            icon_main.write_bytes(b"icon-main")
+            cover_icon.write_bytes(b"icon-cover")
+            asset_bundle = mock.Mock(
+                background_main=background_main,
+                icon_main=icon_main,
+            )
+
+            with mock.patch.object(renderer, "_try_draw_image_layer", return_value=True) as draw_layer:
+                result = renderer._draw_cover_page(
+                    pdf,
+                    theme,
+                    font_map,
+                    meta={"id": "123"},
+                    tariff="T1",
+                    page_width=595,
+                    page_height=842,
+                    asset_bundle=asset_bundle,
+                )
+
+        self.assertTrue(result)
+        self.assertEqual(draw_layer.call_count, 2)
+        self.assertEqual(draw_layer.call_args_list[0].kwargs["primary"], cover_background)
+        self.assertEqual(draw_layer.call_args_list[1].kwargs["primary"], cover_icon)
+        pdf.showPage.assert_called_once()
 
 
 if __name__ == "__main__":
