@@ -379,6 +379,61 @@ class PdfThemeRenderer:
         pdf = canvas.Canvas(buffer, pagesize=A4)
         page_width, page_height = A4
 
+        # --- COVER PAGE (optional) ---
+        cover_bg = asset_bundle.background_main.with_name(
+            asset_bundle.background_main.name.replace("_bg_main", "_bg_cover")
+        )
+
+        if cover_bg.exists():
+            # 1) рисуем титульный фон как отдельную страницу
+            self._try_draw_image_layer(
+                pdf,
+                layer_type="background",
+                primary=cover_bg,
+                fallback=asset_bundle.background_fallback,
+                x=0,
+                y=0,
+                width=page_width,
+                height=page_height,
+            )
+
+            # 2) крупная иконка по центру (если есть отдельная cover-иконка)
+            cover_icon = asset_bundle.icon_main.with_name(
+                asset_bundle.icon_main.name.replace("_icon_main", "_icon_cover")
+            )
+            icon_path = cover_icon if cover_icon.exists() else asset_bundle.icon_main
+
+            icon_size = 110
+            self._try_draw_image_layer(
+                pdf,
+                layer_type="icon",
+                primary=icon_path,
+                fallback=asset_bundle.icon_fallback,
+                x=page_width / 2 - icon_size / 2,
+                y=page_height * 0.66 - icon_size / 2,
+                width=icon_size,
+                height=icon_size,
+            )
+
+            # 3) Заголовок (только заголовок, без даты, без подзаголовка)
+            title_map = {
+                "T0": "Твоё новое начало",
+                "T1": "В чём твоя сила?",
+                "T2": "Где твои деньги?",
+                "T3": "Твой путь к себе!",
+            }
+            cover_title = title_map.get(str(tariff).upper(), "Персональный отчёт")
+
+            pdf.saveState()
+            pdf.setFillColor(theme.palette[2])
+            pdf.setFont(font_map["title"], 34)
+            pdf.drawCentredString(page_width / 2, page_height * 0.46, cover_title)
+            pdf.restoreState()
+
+            # 4) Переключаемся на страницу 2 (inner)
+            pdf.showPage()
+        # --- END COVER PAGE ---
+
         self._draw_background(pdf, theme, page_width, page_height, randomizer, asset_bundle)
         self._draw_decorative_layers(pdf, theme, page_width, page_height, randomizer, asset_bundle)
         body_start_y = self._draw_header(
@@ -489,14 +544,6 @@ class PdfThemeRenderer:
 
         pdf.saveState()
         pdf.setFillColor(theme.palette[2], alpha=0.22)
-        for _ in range(theme.stars_count):
-            x = randomizer.uniform(20, page_width - 20)
-            y = randomizer.uniform(20, page_height - 20)
-            pdf.drawString(x, y, "✦")
-        for _ in range(theme.number_symbols_count):
-            x = randomizer.uniform(20, page_width - 20)
-            y = randomizer.uniform(20, page_height - 20)
-            pdf.drawString(x, y, str(randomizer.randint(1, 9)))
         pdf.restoreState()
 
     def _draw_header(
@@ -729,7 +776,7 @@ class PdfThemeRenderer:
                 self._draw_content_surface(pdf, theme, page_width, page_height)
                 y = page_height - theme.margin
             line_font = numeric_font if any(ch.isdigit() for ch in paragraph) else font
-            pdf.setFillColor(theme.palette[2], alpha=0.96)
+            pdf.setFillColorRGB(0.95, 0.94, 0.90, alpha=0.98)
             pdf.setFont(line_font, size)
             pdf.drawString(margin, y, paragraph)
             y -= line_height
@@ -857,7 +904,7 @@ class PdfThemeRenderer:
             line_font = font
             if font != _FONT_FALLBACK_NAME and any(ch.isdigit() for ch in line):
                 line_font = font
-            pdf.setFillColor(theme.palette[2], alpha=0.96)
+            pdf.setFillColorRGB(0.95, 0.94, 0.90, alpha=0.98)
             pdf.setFont(line_font, size)
             pdf.drawString(margin, y, line)
             y -= line_height
@@ -875,10 +922,10 @@ class PdfThemeRenderer:
         panel_height = page_height - (panel_margin * 2) - panel_top_gap
 
         pdf.saveState()
-        pdf.setFillColorRGB(1, 1, 1)
-        pdf.setFillAlpha(0.08)
-        pdf.setStrokeColor(theme.palette[2], alpha=0.35)
-        pdf.setLineWidth(0.8)
+        pdf.setFillColorRGB(0.06, 0.08, 0.11)
+        pdf.setFillAlpha(0.82)
+        pdf.setStrokeColor(theme.palette[2], alpha=0.16)
+        pdf.setLineWidth(1.0)
         pdf.roundRect(
             panel_margin,
             panel_margin,
