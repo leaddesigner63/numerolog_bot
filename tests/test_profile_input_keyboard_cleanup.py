@@ -14,12 +14,14 @@ class ProfileInputKeyboardCleanupTests(unittest.IsolatedAsyncioTestCase):
         )
         message.bot.send_message = AsyncMock(return_value=SimpleNamespace(message_id=55))
 
-        with patch.object(profile.screen_manager, "delete_last_question_message", new=AsyncMock()), patch.object(
-            profile.screen_manager, "clear_current_screen_inline_keyboards", new=AsyncMock()
-        ) as clear_inline, patch.object(profile.screen_manager, "update_last_question_message_id"):
+        with patch.object(
+            profile.screen_manager,
+            "enter_text_input_mode",
+            new=AsyncMock(),
+        ) as enter_mode, patch.object(profile.screen_manager, "update_last_question_message_id"):
             await profile.start_profile_wizard(message, state, user_id=7)
 
-        clear_inline.assert_awaited_once_with(bot=message.bot, chat_id=100, user_id=7)
+        enter_mode.assert_awaited_once_with(bot=message.bot, chat_id=100, user_id=7)
 
     async def test_start_profile_edit_text_clears_screen_inline_keyboard(self) -> None:
         state = AsyncMock()
@@ -31,8 +33,10 @@ class ProfileInputKeyboardCleanupTests(unittest.IsolatedAsyncioTestCase):
         callback.bot.send_message = AsyncMock(return_value=SimpleNamespace(message_id=77))
 
         with patch.object(profile.screen_manager, "delete_last_question_message", new=AsyncMock()), patch.object(
-            profile.screen_manager, "clear_current_screen_inline_keyboards", new=AsyncMock()
-        ) as clear_inline, patch.object(profile.screen_manager, "update_last_question_message_id"):
+            profile.screen_manager,
+            "enter_text_input_mode",
+            new=AsyncMock(),
+        ) as enter_mode, patch.object(profile.screen_manager, "update_last_question_message_id"):
             await profile._start_profile_edit(
                 callback,
                 state,
@@ -41,7 +45,12 @@ class ProfileInputKeyboardCleanupTests(unittest.IsolatedAsyncioTestCase):
                 reply_markup=None,
             )
 
-        clear_inline.assert_awaited_once_with(bot=callback.bot, chat_id=100, user_id=7)
+        enter_mode.assert_awaited_once_with(
+            bot=callback.bot,
+            chat_id=100,
+            user_id=7,
+            preserve_last_question=True,
+        )
 
 
 if __name__ == "__main__":

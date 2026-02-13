@@ -25,9 +25,9 @@ class QuestionnaireForceInputKeyboardTests(unittest.IsolatedAsyncioTestCase):
             new=AsyncMock(),
         ), patch.object(
             questionnaire.screen_manager,
-            "clear_current_screen_inline_keyboards",
+            "enter_text_input_mode",
             new=AsyncMock(),
-        ) as clear_inline, patch.object(questionnaire.screen_manager, "update_last_question_message_id"):
+        ) as enter_mode, patch.object(questionnaire.screen_manager, "update_last_question_message_id"):
             await questionnaire._send_question(
                 message=message,
                 user_id=42,
@@ -39,7 +39,12 @@ class QuestionnaireForceInputKeyboardTests(unittest.IsolatedAsyncioTestCase):
         kwargs = message.bot.send_message.await_args.kwargs
         self.assertIsNone(kwargs["reply_markup"])
         self.assertNotIn("Редактировать текущий ответ", kwargs["text"])
-        clear_inline.assert_awaited_once_with(bot=message.bot, chat_id=123, user_id=42)
+        enter_mode.assert_awaited_once_with(
+            bot=message.bot,
+            chat_id=123,
+            user_id=42,
+            preserve_last_question=True,
+        )
 
     async def test_force_input_for_text_question_has_no_copy_button(self) -> None:
         message = SimpleNamespace(
@@ -60,9 +65,9 @@ class QuestionnaireForceInputKeyboardTests(unittest.IsolatedAsyncioTestCase):
             new=AsyncMock(),
         ), patch.object(
             questionnaire.screen_manager,
-            "clear_current_screen_inline_keyboards",
+            "enter_text_input_mode",
             new=AsyncMock(),
-        ) as clear_inline, patch.object(questionnaire.screen_manager, "update_last_question_message_id"):
+        ) as enter_mode, patch.object(questionnaire.screen_manager, "update_last_question_message_id"):
             await questionnaire._send_question(
                 message=message,
                 user_id=42,
@@ -74,7 +79,12 @@ class QuestionnaireForceInputKeyboardTests(unittest.IsolatedAsyncioTestCase):
         kwargs = message.bot.send_message.await_args.kwargs
         self.assertIsNone(kwargs["reply_markup"])
         self.assertNotIn("Редактировать текущий ответ", kwargs["text"])
-        clear_inline.assert_awaited_once_with(bot=message.bot, chat_id=123, user_id=42)
+        enter_mode.assert_awaited_once_with(
+            bot=message.bot,
+            chat_id=123,
+            user_id=42,
+            preserve_last_question=True,
+        )
 
 
 if __name__ == "__main__":

@@ -226,12 +226,7 @@ async def start_profile_wizard(
 ) -> None:
     await state.clear()
     await state.set_state(ProfileStates.name)
-    await screen_manager.delete_last_question_message(
-        bot=message.bot,
-        chat_id=message.chat.id,
-        user_id=user_id,
-    )
-    await screen_manager.clear_current_screen_inline_keyboards(
+    await screen_manager.enter_text_input_mode(
         bot=message.bot,
         chat_id=message.chat.id,
         user_id=user_id,
@@ -258,10 +253,11 @@ async def _start_profile_edit(
         user_id=callback.from_user.id,
     )
     if reply_markup is None:
-        await screen_manager.clear_current_screen_inline_keyboards(
+        await screen_manager.enter_text_input_mode(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
             user_id=callback.from_user.id,
+            preserve_last_question=True,
         )
     sent = await callback.bot.send_message(
         chat_id=callback.message.chat.id,
