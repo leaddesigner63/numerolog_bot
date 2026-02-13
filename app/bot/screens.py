@@ -634,7 +634,9 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 )
             ]
         )
-    if profile_flow and has_profile and not requires_payment:
+    show_profile_flow_compact_keyboard = profile_flow and has_profile and not requires_payment
+
+    if show_profile_flow_compact_keyboard:
         rows.append(
             [
                 InlineKeyboardButton(
@@ -643,24 +645,29 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 )
             ]
         )
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text=_with_button_icons("Кабинет", "👤"),
-                callback_data="screen:S11",
-            )
-        ]
-    )
-    if not is_t0 or has_profile:
+
+    if not show_profile_flow_compact_keyboard:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Кабинет", "👤"),
+                    callback_data="screen:S11",
+                )
+            ]
+        )
+
+    if (not is_t0 or has_profile) and not show_profile_flow_compact_keyboard:
         rows.extend(_global_menu())
-    rows.append(
-        [
-            InlineKeyboardButton(
-                text=_with_button_icons("Тарифы", "➡️"),
-                callback_data="screen:S1",
-            )
-        ]
-    )
+
+    if not show_profile_flow_compact_keyboard:
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Тарифы", "➡️"),
+                    callback_data="screen:S1",
+                )
+            ]
+        )
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
