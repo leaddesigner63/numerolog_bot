@@ -873,6 +873,11 @@ def admin_ui(request: Request) -> HTMLResponse:
           <button class="secondary" onclick="clearTableFilters('reports')">Сбросить</button>
           <button class="secondary" onclick="loadReports()">Обновить</button>
         </div>
+        <div class="row quick-filters">
+          <button id="reportsFilterProviderConfirmed" class="secondary quick-filter-button" onclick="setReportsQuickFilter('provider-confirmed')">Только provider-confirmed</button>
+          <button id="reportsFilterPaymentNotConfirmed" class="secondary quick-filter-button" onclick="setReportsQuickFilter('payment-not-confirmed')">Только без подтверждённой оплаты</button>
+        </div>
+        <div id="reportsAlerts" class="muted"></div>
         <div id="reports" class="muted">Загрузка...</div>
       </section>
       <section data-panel="users">
@@ -1352,7 +1357,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       llmKeysActive: {search: "", sortKey: null, sortDir: "asc"},
       llmKeysInactive: {search: "", sortKey: null, sortDir: "asc"},
       orders: {search: "", sortKey: null, sortDir: "asc", quickFilter: null},
-      reports: {search: "", sortKey: null, sortDir: "asc"},
+      reports: {search: "", sortKey: null, sortDir: "asc", quickFilter: null},
       users: {search: "", sortKey: null, sortDir: "asc"},
       feedbackInbox: {search: "", sortKey: null, sortDir: "asc"},
       feedbackArchive: {search: "", sortKey: null, sortDir: "asc"},
@@ -1490,6 +1495,17 @@ def admin_ui(request: Request) -> HTMLResponse:
         columns: [
           {label: "ID", key: "id", sortable: true},
           {label: "Пользователь", key: "telegram_user_id", sortable: true},
+          {label: "Статус заказа", key: "order_status", sortable: true},
+          {
+            label: "Оплата подтверждена",
+            key: "payment_confirmed",
+            sortable: true,
+            render: (report) => report.payment_confirmed ? "Да" : "Нет",
+            sortValue: (report) => report.payment_confirmed ? 1 : 0,
+          },
+          {label: "Источник подтверждения", key: "payment_confirmation_source", sortable: true},
+          {label: "Подтверждено в", key: "payment_confirmed_at", sortable: true},
+          {label: "Фин. основание", key: "financial_basis", sortable: true},
           {label: "Тариф", key: "tariff", sortable: true},
           {label: "Создан", key: "created_at", sortable: true},
           {label: "Модель", key: "model_used", sortable: true},
@@ -1737,6 +1753,9 @@ def admin_ui(request: Request) -> HTMLResponse:
       if (tableKey === "orders") {
         filteredRows = applyOrdersQuickFilter(filteredRows, state.quickFilter);
       }
+      if (tableKey === "reports") {
+        filteredRows = applyReportsQuickFilter(filteredRows, state.quickFilter);
+      }
       if (state.sortKey) {
         const column = config.columns.find((col) => col.key === state.sortKey);
         if (column) {
@@ -1871,12 +1890,18 @@ def admin_ui(request: Request) -> HTMLResponse:
       if (tableKey === "orders") {
         tableStates[tableKey].quickFilter = null;
       }
+      if (tableKey === "reports") {
+        tableStates[tableKey].quickFilter = null;
+      }
       const input = document.getElementById(`${tableKey}Search`);
       if (input) {
         input.value = "";
       }
       if (tableKey === "orders") {
         updateOrdersQuickFilterButtons();
+      }
+      if (tableKey === "reports") {
+        updateReportsQuickFilterButtons();
       }
       renderTableForKey(tableKey);
     }
@@ -1893,6 +1918,19 @@ def admin_ui(request: Request) -> HTMLResponse:
       }
       if (quickFilter === "unconfirmed") {
         return rows.filter((row) => row.payment_confirmed !== true);
+      }
+      return rows;
+    }
+
+    function applyReportsQuickFilter(rows, quickFilter) {
+      if (!quickFilter) {
+        return rows;
+      }
+      if (quickFilter === "provider-confirmed") {
+        return rows.filter((row) => row.financial_basis === "provider_confirmed");
+      }
+      if (quickFilter === "payment-not-confirmed") {
+        return rows.filter((row) => row.order_id && row.payment_confirmed !== true);
       }
       return rows;
     }
@@ -1919,6 +1957,29 @@ def admin_ui(request: Request) -> HTMLResponse:
       tableStates.orders.quickFilter = tableStates.orders.quickFilter === filterValue ? null : filterValue;
       updateOrdersQuickFilterButtons();
       renderTableForKey("orders");
+    }
+
+    function updateReportsQuickFilterButtons() {
+      const state = tableStates.reports || {};
+      const mapping = {
+        "provider-confirmed": "reportsFilterProviderConfirmed",
+        "payment-not-confirmed": "reportsFilterPaymentNotConfirmed",
+      };
+      Object.entries(mapping).forEach(([value, id]) => {
+        const button = document.getElementById(id);
+        if (button) {
+          button.classList.toggle("active", state.quickFilter === value);
+        }
+      });
+    }
+
+    function setReportsQuickFilter(filterValue) {
+      if (!tableStates.reports) {
+        return;
+      }
+      tableStates.reports.quickFilter = tableStates.reports.quickFilter === filterValue ? null : filterValue;
+      updateReportsQuickFilterButtons();
+      loadReports();
     }
 
     async function loadOrders() {
@@ -1990,14 +2051,56 @@ def admin_ui(request: Request) -> HTMLResponse:
       }
     }
 
+    function buildReportsQuery() {
+      const params = new URLSearchParams();
+      const state = tableStates.reports || {};
+      if (state.quickFilter === "provider-confirmed") {
+        params.set("financial_basis", "provider_confirmed");
+      }
+      if (state.quickFilter === "payment-not-confirmed") {
+        params.set("payment_not_confirmed_only", "true");
+      }
+      const query = params.toString();
+      return query ? `/reports?${query}` : "/reports";
+    }
+
     async function loadReports() {
       try {
-        const data = await fetchJson("/reports");
+        const data = await fetchJson(buildReportsQuery());
         tableData.reports = data.reports || [];
+        renderReportsAlerts(tableData.reports);
         renderTableForKey("reports");
       } catch (error) {
+        renderReportsAlerts([]);
         document.getElementById("reports").textContent = error.message;
       }
+    }
+
+    function showProblemReportsFromAlert() {
+      if (!tableStates.reports) {
+        return;
+      }
+      tableStates.reports.quickFilter = "payment-not-confirmed";
+      updateReportsQuickFilterButtons();
+      loadReports();
+    }
+
+    function renderReportsAlerts(rows) {
+      const target = document.getElementById("reportsAlerts");
+      if (!target) {
+        return;
+      }
+      const riskyReports = rows.filter((row) => row.order_id && row.payment_confirmed !== true);
+      if (!riskyReports.length) {
+        target.className = "muted";
+        target.textContent = "";
+        return;
+      }
+      target.className = "status bad";
+      target.innerHTML = `
+        Внимание: найдено отчётов без подтверждённой оплаты: ${riskyReports.length}. Проверьте кейсы report exists + payment not confirmed.
+        <button class="secondary warning" style="margin-left: 8px" onclick="showProblemReportsFromAlert()">Показать только проблемные</button>
+      `;
     }
 
     async function loadUsers() {
@@ -3641,27 +3744,61 @@ async def admin_orders_bulk_delete(
 
 
 @router.get("/api/reports")
-def admin_reports(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
+def admin_reports(
+    limit: int = 50,
+    financial_basis: str | None = Query(default=None),
+    payment_not_confirmed_only: bool = Query(default=False),
+    session: Session = Depends(_get_db_session),
+) -> dict:
     rows = session.execute(
-        select(Report, User)
+        select(Report, User, Order)
         .join(User, User.id == Report.user_id)
+        .outerjoin(Order, Order.id == Report.order_id)
         .order_by(Report.created_at.desc())
         .limit(limit)
     ).all()
     reports = []
-    for report, user in rows:
-        reports.append(
-            {
-                "id": report.id,
-                "user_id": report.user_id,
-                "telegram_user_id": user.telegram_user_id if user else None,
-                "order_id": report.order_id,
-                "tariff": report.tariff.value,
-                "model_used": report.model_used.value if report.model_used else None,
-                "created_at": report.created_at.isoformat(),
-                "pdf_storage_key": report.pdf_storage_key,
-            }
-        )
+    for report, user, order in rows:
+        financial_basis_value = "none"
+        order_status = None
+        payment_confirmed = False
+        payment_confirmation_source = None
+        payment_confirmed_at = None
+        if order:
+            order_status = order.status.value
+            payment_confirmed = bool(order.payment_confirmed)
+            payment_confirmation_source = (
+                order.payment_confirmation_source.value if order.payment_confirmation_source else None
+            )
+            payment_confirmed_at = order.payment_confirmed_at.isoformat() if order.payment_confirmed_at else None
+            if payment_confirmed and payment_confirmation_source in {
+                PaymentConfirmationSource.PROVIDER_WEBHOOK.value,
+                PaymentConfirmationSource.PROVIDER_POLL.value,
+                PaymentConfirmationSource.SYSTEM.value,
+            }:
+                financial_basis_value = "provider_confirmed"
+            elif payment_confirmed and payment_confirmation_source == PaymentConfirmationSource.ADMIN_MANUAL.value:
+                financial_basis_value = "manual"
+        report_payload = {
+            "id": report.id,
+            "user_id": report.user_id,
+            "telegram_user_id": user.telegram_user_id if user else None,
+            "order_id": report.order_id,
+            "order_status": order_status,
+            "payment_confirmed": payment_confirmed,
+            "payment_confirmation_source": payment_confirmation_source,
+            "payment_confirmed_at": payment_confirmed_at,
+            "financial_basis": financial_basis_value,
+            "tariff": report.tariff.value,
+            "model_used": report.model_used.value if report.model_used else None,
+            "created_at": report.created_at.isoformat(),
+            "pdf_storage_key": report.pdf_storage_key,
+        }
+        if financial_basis and report_payload["financial_basis"] != financial_basis:
+            continue
+        if payment_not_confirmed_only and not (report_payload["order_id"] and report_payload["payment_confirmed"] is not True):
+            continue
+        reports.append(report_payload)
     return {"reports": reports}
 
 
