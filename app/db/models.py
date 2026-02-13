@@ -385,6 +385,25 @@ class AdminNote(Base):
     payload: Mapped[dict | None] = mapped_column(JSON)
 
 
+class AdminFinanceEvent(Base):
+    __tablename__ = "admin_finance_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders.id", ondelete="CASCADE"),
+        index=True,
+    )
+    action: Mapped[str] = mapped_column(String(64), index=True)
+    actor: Mapped[str | None] = mapped_column(String(255), index=True)
+    payload_before: Mapped[dict | None] = mapped_column(JSON)
+    payload_after: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+
 class SystemPrompt(Base):
     __tablename__ = "system_prompts"
 
