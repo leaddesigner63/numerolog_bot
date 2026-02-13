@@ -1199,20 +1199,20 @@ def screen_s15(state: dict[str, Any]) -> ScreenContent:
         (
             f"Перед оплатой тарифа {tariff_button_title(selected_tariff, fallback='T1/T2/T3')} посмотрите последние отчёты:\n\n"
             f"{reports_list}\n\n"
-            "Можно перейти в личный кабинет или продолжить к оплате и создать новый заказ."
+            "Можно перейти в личный кабинет или к оплате и создать новый заказ."
         ),
     )
     rows = [
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Перейти в ЛК", "🗂️"),
-                callback_data="existing_report:lk",
+                text=_with_button_icons("К оплате", "💳"),
+                callback_data="existing_report:continue",
             )
         ],
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Продолжить к оплате", "💳"),
-                callback_data="existing_report:continue",
+                text=_with_button_icons("Перейти в ЛК", "🗂️"),
+                callback_data="existing_report:lk",
             )
         ],
     ]

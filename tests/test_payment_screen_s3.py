@@ -64,6 +64,17 @@ class PaymentScreenS15Tests(unittest.TestCase):
         self.assertNotIn("Отчёт #1", message)
         self.assertNotIn("Отчёт #3", message)
 
+    def test_s15_shows_payment_button_first_with_short_label(self) -> None:
+        content = screen_s15({"selected_tariff": "T1", "reports": [], "reports_total": 0})
+
+        keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
+        self.assertGreaterEqual(len(keyboard_rows), 2)
+        self.assertEqual(keyboard_rows[0][0].callback_data, "existing_report:continue")
+        self.assertIn("К оплате", keyboard_rows[0][0].text)
+        self.assertEqual(keyboard_rows[1][0].callback_data, "existing_report:lk")
+        self.assertIn("Перейти в ЛК", keyboard_rows[1][0].text)
+        self.assertNotIn("Продолжить к оплате", keyboard_rows[0][0].text)
+
 
 if __name__ == "__main__":
     unittest.main()
