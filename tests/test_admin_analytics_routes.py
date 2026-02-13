@@ -126,6 +126,11 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(order_payload["fulfillment_status"], OrderFulfillmentStatus.PENDING.value)
         self.assertIsNone(order_payload["fulfilled_at"])
         self.assertEqual(order_payload["report_id"], 300)
+        self.assertIn("payment_confirmed", order_payload)
+        self.assertIn("payment_confirmed_at", order_payload)
+        self.assertIn("payment_confirmation_source", order_payload)
+        self.assertIn("manual_paid_set_by", order_payload)
+        self.assertIn("manual_paid_set_at", order_payload)
 
 
     def test_orders_endpoint_supports_user_and_payment_confirmed_filters(self) -> None:
@@ -338,6 +343,54 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(payload["manual_paid_orders"], 1)
         self.assertEqual(payload["manual_paid_amount_total"], 3000.0)
         self.assertEqual(payload["arpu_confirmed"], 1500.0)
+
+    def test_overview_and_finance_exclude_manual_paid_from_provider_confirmed_metrics(self) -> None:
+        now = datetime.now(timezone.utc)
+        with self.SessionLocal() as session:
+            user = User(id=111, telegram_user_id=700711)
+            session.add(user)
+            session.add_all(
+                [
+                    Order(
+                        id=213,
+                        user_id=111,
+                        tariff=Tariff.T1,
+                        amount=900,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=False,
+                        payment_confirmation_source=PaymentConfirmationSource.ADMIN_MANUAL,
+                    ),
+                    Order(
+                        id=214,
+                        user_id=111,
+                        tariff=Tariff.T2,
+                        amount=1900,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=now,
+                    ),
+                ]
+            )
+            session.commit()
+
+        overview = self.client.get("/admin/api/overview")
+        self.assertEqual(overview.status_code, 200)
+        overview_payload = overview.json()
+        self.assertEqual(overview_payload["confirmed_paid_orders"], 1)
+        self.assertEqual(overview_payload["confirmed_revenue_total"], 1900.0)
+        self.assertEqual(overview_payload["manual_paid_orders"], 1)
+        self.assertEqual(overview_payload["manual_paid_amount_total"], 900.0)
+
+        finance = self.client.get("/admin/api/analytics/finance/summary")
+        self.assertEqual(finance.status_code, 200)
+        finance_payload = finance.json()
+        self.assertEqual(finance_payload["data"]["summary"]["provider_confirmed_orders"], 1)
+        self.assertEqual(finance_payload["data"]["summary"]["provider_confirmed_revenue"], 1900.0)
 
     def test_transitions_summary_contract(self) -> None:
         self._seed_events()
@@ -618,6 +671,80 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         timeseries = self.client.get("/admin/api/analytics/finance/timeseries", params={"tariff": "T2"})
         self.assertEqual(timeseries.status_code, 200)
         self.assertTrue(timeseries.json()["data"]["timeseries"])
+
+    def test_finance_analytics_endpoints_apply_period_filters(self) -> None:
+        day_1 = datetime(2026, 1, 1, 10, 0, tzinfo=timezone.utc)
+        day_2 = datetime(2026, 1, 2, 10, 0, tzinfo=timezone.utc)
+        with self.SessionLocal() as session:
+            user = User(id=161, telegram_user_id=700761)
+            session.add(user)
+            early_entry = ScreenTransitionEvent.build_fail_safe(
+                telegram_user_id=700761,
+                from_screen_id="S1",
+                to_screen_id="S3",
+                trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                metadata_json={"tariff": "T2"},
+            )
+            late_entry = ScreenTransitionEvent.build_fail_safe(
+                telegram_user_id=700761,
+                from_screen_id="S1",
+                to_screen_id="S3",
+                trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                metadata_json={"tariff": "T2"},
+            )
+            session.add_all([
+                early_entry,
+                late_entry,
+                Order(
+                    id=260,
+                    user_id=161,
+                    tariff=Tariff.T2,
+                    amount=1000,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    payment_confirmed=True,
+                    payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                    payment_confirmed_at=day_1,
+                ),
+                Order(
+                    id=261,
+                    user_id=161,
+                    tariff=Tariff.T2,
+                    amount=4000,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    payment_confirmed=True,
+                    payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                    payment_confirmed_at=day_2,
+                ),
+            ])
+            session.flush()
+            early_entry.created_at = day_1
+            late_entry.created_at = day_2
+            session.commit()
+
+        params = {"from": "2026-01-02T00:00:00Z", "to": "2026-01-02T23:59:59Z", "tariff": "T2"}
+        summary = self.client.get("/admin/api/analytics/finance/summary", params=params)
+        self.assertEqual(summary.status_code, 200)
+        self.assertEqual(summary.json()["data"]["summary"]["provider_confirmed_orders"], 1)
+        self.assertEqual(summary.json()["data"]["summary"]["provider_confirmed_revenue"], 4000.0)
+
+        by_tariff = self.client.get("/admin/api/analytics/finance/by-tariff", params=params)
+        self.assertEqual(by_tariff.status_code, 200)
+        by_tariff_rows = by_tariff.json()["data"]["by_tariff"]
+        self.assertEqual(len(by_tariff_rows), 1)
+        self.assertEqual(by_tariff_rows[0]["provider_confirmed_orders"], 1)
+        self.assertEqual(by_tariff_rows[0]["provider_confirmed_revenue"], 4000.0)
+
+        timeseries = self.client.get("/admin/api/analytics/finance/timeseries", params=params)
+        self.assertEqual(timeseries.status_code, 200)
+        timeseries_rows = timeseries.json()["data"]["timeseries"]
+        self.assertEqual(len(timeseries_rows), 1)
+        self.assertEqual(timeseries_rows[0]["date"], "2026-01-02")
+        self.assertEqual(timeseries_rows[0]["provider_confirmed_orders"], 1)
+        self.assertEqual(timeseries_rows[0]["provider_confirmed_revenue"], 4000.0)
 
 
     def test_finance_endpoints_return_503_on_database_overload(self) -> None:

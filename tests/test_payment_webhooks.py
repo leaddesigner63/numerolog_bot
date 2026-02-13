@@ -112,6 +112,64 @@ class PaymentWebhookRouteTests(unittest.TestCase):
                 PaymentConfirmationSource.PROVIDER_WEBHOOK,
             )
 
+    def test_paid_webhook_sets_payment_confirmation_fields(self) -> None:
+        self._seed_order()
+        provider_stub = _ProviderStub(
+            WebhookResult(order_id=1001, provider_payment_id="pay-777", is_paid=True)
+        )
+        original = webhook_routes.get_payment_provider
+        webhook_routes.get_payment_provider = lambda provider_name=None: provider_stub
+        try:
+            payload = json.dumps({"order_id": "1001", "status": "paid"}).encode("utf-8")
+            response = self.client.post("/webhooks/payments", content=payload)
+        finally:
+            webhook_routes.get_payment_provider = original
+
+        self.assertEqual(response.status_code, 200)
+        with self.SessionLocal() as session:
+            order = session.get(Order, 1001)
+            self.assertIsNotNone(order)
+            assert order is not None
+            self.assertTrue(order.payment_confirmed)
+            self.assertEqual(order.payment_confirmation_source, PaymentConfirmationSource.PROVIDER_WEBHOOK)
+            self.assertIsNotNone(order.payment_confirmed_at)
+
+    def test_paid_webhook_repeat_delivery_is_idempotent_for_confirmation_metadata(self) -> None:
+        self._seed_order()
+        first_provider_stub = _ProviderStub(
+            WebhookResult(order_id=1001, provider_payment_id="pay-first", is_paid=True)
+        )
+        second_provider_stub = _ProviderStub(
+            WebhookResult(order_id=1001, provider_payment_id="pay-second", is_paid=True)
+        )
+        original = webhook_routes.get_payment_provider
+        try:
+            webhook_routes.get_payment_provider = lambda provider_name=None: first_provider_stub
+            payload = json.dumps({"order_id": "1001", "status": "paid"}).encode("utf-8")
+            first_response = self.client.post("/webhooks/payments", content=payload)
+            self.assertEqual(first_response.status_code, 200)
+            with self.SessionLocal() as session:
+                saved_after_first = session.get(Order, 1001)
+                self.assertIsNotNone(saved_after_first)
+                assert saved_after_first is not None
+                first_confirmed_at = saved_after_first.payment_confirmed_at
+                self.assertIsNotNone(first_confirmed_at)
+
+            webhook_routes.get_payment_provider = lambda provider_name=None: second_provider_stub
+            second_response = self.client.post("/webhooks/payments", content=payload)
+            self.assertEqual(second_response.status_code, 200)
+        finally:
+            webhook_routes.get_payment_provider = original
+
+        with self.SessionLocal() as session:
+            order = session.get(Order, 1001)
+            self.assertIsNotNone(order)
+            assert order is not None
+            self.assertEqual(order.provider_payment_id, "pay-first")
+            self.assertEqual(order.payment_confirmed_at, first_confirmed_at)
+            self.assertTrue(order.payment_confirmed)
+            self.assertEqual(order.payment_confirmation_source, PaymentConfirmationSource.PROVIDER_WEBHOOK)
+
     def test_prodamus_probe_with_sign_test_returns_ok(self) -> None:
         response = self.client.post(
             "/webhooks/payments?provider=prodamus",
