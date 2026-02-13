@@ -27,7 +27,11 @@ class FeedbackSentNoticeTests(unittest.IsolatedAsyncioTestCase):
             await handle_feedback_text(message)
 
         add_message_id.assert_called_once_with(1001, 3003)
-        send_notice.assert_awaited_once_with(message, FEEDBACK_SENT_NOTICE)
+        send_notice.assert_awaited_once_with(
+            message,
+            FEEDBACK_SENT_NOTICE,
+            delete_delay_seconds=5,
+        )
         delete_user_message.assert_awaited_once_with(
             bot=message.bot,
             chat_id=2002,

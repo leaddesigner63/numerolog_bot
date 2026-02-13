@@ -6,6 +6,10 @@ from aiogram.types import Message
 
 from app.bot.handlers.screen_manager import screen_manager
 from app.bot.handlers.screens import FEEDBACK_SENT_NOTICE, _submit_feedback
+
+
+FEEDBACK_SENT_NOTICE_DELETE_DELAY_SECONDS = 5
+
 router = Router()
 
 
@@ -35,6 +39,7 @@ async def handle_feedback_text(message: Message) -> None:
         await screen_manager.send_ephemeral_message(
             message,
             FEEDBACK_SENT_NOTICE,
+            delete_delay_seconds=FEEDBACK_SENT_NOTICE_DELETE_DELAY_SECONDS,
         )
     else:
         await screen_manager.send_ephemeral_message(

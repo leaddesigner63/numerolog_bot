@@ -747,6 +747,7 @@ class ScreenManager:
         message: Message,
         text: str,
         user_id: int | None = None,
+        delete_delay_seconds: float = 0,
         **kwargs: Any,
     ) -> None:
         if user_id is None:
@@ -758,13 +759,32 @@ class ScreenManager:
         reply_markup = kwargs.get("reply_markup")
         if reply_markup is None:
             asyncio.create_task(
-                self.delete_screen_message(
+                self._delete_screen_message_with_delay(
                     bot=message.bot,
                     chat_id=message.chat.id,
                     user_id=user_id,
                     message_id=sent.message_id,
+                    delay_seconds=delete_delay_seconds,
                 )
             )
+
+    async def _delete_screen_message_with_delay(
+        self,
+        *,
+        bot: Bot,
+        chat_id: int,
+        user_id: int,
+        message_id: int,
+        delay_seconds: float,
+    ) -> None:
+        if delay_seconds > 0:
+            await asyncio.sleep(delay_seconds)
+        await self.delete_screen_message(
+            bot=bot,
+            chat_id=chat_id,
+            user_id=user_id,
+            message_id=message_id,
+        )
 
     async def delete_user_message(
         self,
