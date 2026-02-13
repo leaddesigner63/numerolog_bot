@@ -14,6 +14,7 @@ from app.db.models import (
     Order,
     OrderFulfillmentStatus,
     OrderStatus,
+    PaymentConfirmationSource,
     PaymentProvider,
     Report,
     ScreenTransitionEvent,
@@ -243,6 +244,78 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
             for order in refreshed:
                 self.assertEqual(order.fulfillment_status, OrderFulfillmentStatus.COMPLETED)
                 self.assertIsNotNone(order.fulfilled_at)
+
+    def test_admin_order_status_paid_marks_manual_source_without_payment_confirmation(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=104, telegram_user_id=700704)
+            order = Order(
+                id=206,
+                user_id=104,
+                tariff=Tariff.T1,
+                amount=990,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.CREATED,
+            )
+            session.add_all([user, order])
+            session.commit()
+
+        response = self.client.post("/admin/api/orders/206/status", json={"status": "paid"})
+        self.assertEqual(response.status_code, 200)
+
+        with self.SessionLocal() as session:
+            refreshed = session.get(Order, 206)
+            self.assertIsNotNone(refreshed)
+            self.assertEqual(refreshed.status, OrderStatus.PAID)
+            self.assertEqual(
+                refreshed.payment_confirmation_source,
+                PaymentConfirmationSource.ADMIN_MANUAL,
+            )
+            self.assertFalse(refreshed.payment_confirmed)
+            self.assertIsNone(refreshed.payment_confirmed_at)
+
+    def test_admin_orders_bulk_status_paid_marks_manual_source_without_payment_confirmation(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=105, telegram_user_id=700705)
+            first = Order(
+                id=207,
+                user_id=105,
+                tariff=Tariff.T1,
+                amount=990,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.CREATED,
+            )
+            second = Order(
+                id=208,
+                user_id=105,
+                tariff=Tariff.T2,
+                amount=1990,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PENDING,
+            )
+            session.add_all([user, first, second])
+            session.commit()
+
+        response = self.client.post(
+            "/admin/api/orders/bulk-status",
+            json={"ids": [207, 208], "status": "paid"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["updated"], 2)
+
+        with self.SessionLocal() as session:
+            refreshed = session.query(Order).filter(Order.id.in_([207, 208])).all()
+            self.assertEqual(len(refreshed), 2)
+            for order in refreshed:
+                self.assertEqual(order.status, OrderStatus.PAID)
+                self.assertEqual(
+                    order.payment_confirmation_source,
+                    PaymentConfirmationSource.ADMIN_MANUAL,
+                )
+                self.assertFalse(order.payment_confirmed)
+                self.assertIsNone(order.payment_confirmed_at)
 
     def test_admin_orders_bulk_delete_removes_selected_orders(self) -> None:
         with self.SessionLocal() as session:

@@ -51,6 +51,13 @@ class OrderFulfillmentStatus(enum.StrEnum):
     COMPLETED = "completed"
 
 
+class PaymentConfirmationSource(enum.StrEnum):
+    PROVIDER_WEBHOOK = "provider_webhook"
+    PROVIDER_POLL = "provider_poll"
+    ADMIN_MANUAL = "admin_manual"
+    SYSTEM = "system"
+
+
 class ReportModel(enum.StrEnum):
     GEMINI = "gemini"
     CHATGPT = "chatgpt"
@@ -171,6 +178,20 @@ class Order(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     paid_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    payment_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        index=True,
+    )
+    payment_confirmation_source: Mapped[PaymentConfirmationSource | None] = mapped_column(
+        Enum(
+            PaymentConfirmationSource,
+            values_callable=_enum_values,
+            name="paymentconfirmationsource",
+        ),
+        index=True,
+        nullable=True,
+    )
+    payment_confirmed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     fulfillment_status: Mapped[OrderFulfillmentStatus] = mapped_column(
         Enum(
             OrderFulfillmentStatus,
