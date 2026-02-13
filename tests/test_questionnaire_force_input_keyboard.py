@@ -23,7 +23,11 @@ class QuestionnaireForceInputKeyboardTests(unittest.IsolatedAsyncioTestCase):
             questionnaire.screen_manager,
             "delete_last_question_message",
             new=AsyncMock(),
-        ), patch.object(questionnaire.screen_manager, "update_last_question_message_id"):
+        ), patch.object(
+            questionnaire.screen_manager,
+            "clear_current_screen_inline_keyboards",
+            new=AsyncMock(),
+        ) as clear_inline, patch.object(questionnaire.screen_manager, "update_last_question_message_id"):
             await questionnaire._send_question(
                 message=message,
                 user_id=42,
@@ -35,6 +39,7 @@ class QuestionnaireForceInputKeyboardTests(unittest.IsolatedAsyncioTestCase):
         kwargs = message.bot.send_message.await_args.kwargs
         self.assertIsNone(kwargs["reply_markup"])
         self.assertNotIn("Редактировать текущий ответ", kwargs["text"])
+        clear_inline.assert_awaited_once_with(bot=message.bot, chat_id=123, user_id=42)
 
     async def test_force_input_for_text_question_has_no_copy_button(self) -> None:
         message = SimpleNamespace(
@@ -53,7 +58,11 @@ class QuestionnaireForceInputKeyboardTests(unittest.IsolatedAsyncioTestCase):
             questionnaire.screen_manager,
             "delete_last_question_message",
             new=AsyncMock(),
-        ), patch.object(questionnaire.screen_manager, "update_last_question_message_id"):
+        ), patch.object(
+            questionnaire.screen_manager,
+            "clear_current_screen_inline_keyboards",
+            new=AsyncMock(),
+        ) as clear_inline, patch.object(questionnaire.screen_manager, "update_last_question_message_id"):
             await questionnaire._send_question(
                 message=message,
                 user_id=42,
@@ -65,6 +74,7 @@ class QuestionnaireForceInputKeyboardTests(unittest.IsolatedAsyncioTestCase):
         kwargs = message.bot.send_message.await_args.kwargs
         self.assertIsNone(kwargs["reply_markup"])
         self.assertNotIn("Редактировать текущий ответ", kwargs["text"])
+        clear_inline.assert_awaited_once_with(bot=message.bot, chat_id=123, user_id=42)
 
 
 if __name__ == "__main__":

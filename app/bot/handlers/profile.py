@@ -231,6 +231,11 @@ async def start_profile_wizard(
         chat_id=message.chat.id,
         user_id=user_id,
     )
+    await screen_manager.clear_current_screen_inline_keyboards(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=user_id,
+    )
     sent = await message.bot.send_message(
         chat_id=message.chat.id,
         text="Введите свое имя",
@@ -252,6 +257,12 @@ async def _start_profile_edit(
         chat_id=callback.message.chat.id,
         user_id=callback.from_user.id,
     )
+    if reply_markup is None:
+        await screen_manager.clear_current_screen_inline_keyboards(
+            bot=callback.bot,
+            chat_id=callback.message.chat.id,
+            user_id=callback.from_user.id,
+        )
     sent = await callback.bot.send_message(
         chat_id=callback.message.chat.id,
         text=prompt,

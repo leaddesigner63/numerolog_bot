@@ -930,17 +930,7 @@ def screen_s8(_: dict[str, Any]) -> ScreenContent:
             "Напишите нам. Наши администраторы внимательны к вашим обращениям и обожают ваши отзывы ❤️"
         ),
     )
-    rows = [
-        [
-            InlineKeyboardButton(
-                text=_with_button_icons("В кабинет", "◀️"),
-                callback_data="screen:S11",
-            )
-        ],
-    ]
-    rows.extend(_global_menu())
-    keyboard = _build_keyboard(rows)
-    return ScreenContent(messages=[text], keyboard=keyboard)
+    return ScreenContent(messages=[text], keyboard=None)
 
 
 def screen_s9(state: dict[str, Any]) -> ScreenContent:
