@@ -112,6 +112,48 @@ class ProfileGenderTests(unittest.TestCase):
         ]
         self.assertIn("questionnaire:delete:lk", callback_data)
 
+
+    def test_screen_s11_shows_expand_answers_button_for_long_answers(self) -> None:
+        content = screen_s11(
+            {
+                "questionnaire": {
+                    "status": "completed",
+                    "answers": {
+                        "Цели": "А" * 300,
+                    },
+                }
+            }
+        )
+
+        callback_data = [
+            button.callback_data
+            for row in content.keyboard.inline_keyboard
+            for button in row
+            if button.callback_data
+        ]
+        self.assertIn("questionnaire:answers:expand", callback_data)
+
+    def test_screen_s11_shows_collapse_answers_button_when_expanded(self) -> None:
+        content = screen_s11(
+            {
+                "questionnaire_answers_expanded": True,
+                "questionnaire": {
+                    "status": "completed",
+                    "answers": {
+                        "Цели": "А" * 300,
+                    },
+                },
+            }
+        )
+
+        callback_data = [
+            button.callback_data
+            for row in content.keyboard.inline_keyboard
+            for button in row
+            if button.callback_data
+        ]
+        self.assertIn("questionnaire:answers:collapse", callback_data)
+
     def test_screen_s11_hides_questionnaire_delete_button_when_empty(self) -> None:
         content = screen_s11(
             {
