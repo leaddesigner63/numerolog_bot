@@ -95,6 +95,10 @@ def _with_button_icons(text: str, icon: str) -> str:
     return f"{icon} {clean_text}"
 
 
+def _requires_text_input(question: QuestionnaireQuestion) -> bool:
+    return question.question_type == "text"
+
+
 def _question_payload(
     response: QuestionnaireResponse | None, config_version: str
 ) -> dict[str, Any]:
@@ -444,14 +448,20 @@ async def _send_question(
         question_text = _build_edit_decision_message(question.text, existing_answer)
     else:
         keyboard = _build_keyboard(question)
-        show_copy_hint = keyboard is None and existing_answer is not None
+        if _requires_text_input(question):
+            keyboard = None
+        show_copy_hint = (
+            keyboard is None
+            and existing_answer is not None
+            and not _requires_text_input(question)
+        )
         if existing_answer is not None:
             question_text = _build_edit_change_message(
                 question.text,
                 existing_answer,
                 show_copy_hint=show_copy_hint,
             )
-            if keyboard is None:
+            if keyboard is None and not _requires_text_input(question):
                 keyboard = _build_copy_answer_keyboard(existing_answer)
         else:
             question_text = question.text
