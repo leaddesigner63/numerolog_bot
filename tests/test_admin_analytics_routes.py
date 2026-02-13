@@ -126,6 +126,58 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertIsNone(order_payload["fulfilled_at"])
         self.assertEqual(order_payload["report_id"], 300)
 
+    def test_overview_financial_kpi_split_provider_confirmed_and_manual(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=110, telegram_user_id=700710)
+            provider_confirmed = Order(
+                id=210,
+                user_id=110,
+                tariff=Tariff.T1,
+                amount=1000,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                payment_confirmed=True,
+                payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                payment_confirmed_at=datetime.now(timezone.utc),
+            )
+            provider_confirmed_by_source = Order(
+                id=211,
+                user_id=110,
+                tariff=Tariff.T2,
+                amount=2000,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                payment_confirmed=False,
+                payment_confirmation_source=PaymentConfirmationSource.PROVIDER_POLL,
+                payment_confirmed_at=datetime.now(timezone.utc),
+            )
+            manual_paid = Order(
+                id=212,
+                user_id=110,
+                tariff=Tariff.T3,
+                amount=3000,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                payment_confirmed=True,
+                payment_confirmation_source=PaymentConfirmationSource.ADMIN_MANUAL,
+                payment_confirmed_at=datetime.now(timezone.utc),
+            )
+            session.add_all([user, provider_confirmed, provider_confirmed_by_source, manual_paid])
+            session.commit()
+
+        response = self.client.get("/admin/api/overview")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertEqual(payload["confirmed_paid_orders"], 2)
+        self.assertEqual(payload["confirmed_revenue_total"], 3000.0)
+        self.assertEqual(payload["manual_paid_orders"], 1)
+        self.assertEqual(payload["manual_paid_amount_total"], 3000.0)
+        self.assertEqual(payload["arpu_confirmed"], 1500.0)
+
     def test_transitions_summary_contract(self) -> None:
         self._seed_events()
         response = self.client.get("/admin/api/analytics/transitions/summary")

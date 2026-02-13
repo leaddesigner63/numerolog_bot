@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import HTMLResponse, RedirectResponse
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.exc import OperationalError, TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import Session
 
@@ -664,6 +664,36 @@ def admin_ui(request: Request) -> HTMLResponse:
       font-size: 13px;
       color: var(--muted);
     }
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .overview-card {
+      border: 1px solid #2a2f3a;
+      border-radius: 12px;
+      background: #11151c;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .overview-card h3 {
+      margin: 0;
+      font-size: 13px;
+      color: #cbd5e1;
+    }
+    .overview-card .overview-value {
+      font-size: 22px;
+      font-weight: 600;
+      color: #f8fafc;
+    }
+    .overview-card .overview-note {
+      font-size: 12px;
+      color: #94a3b8;
+      line-height: 1.35;
+    }
   </style>
 </head>
 <body>
@@ -1034,7 +1064,55 @@ def admin_ui(request: Request) -> HTMLResponse:
     async function loadOverview() {
       try {
         const data = await fetchJson("/overview");
-        renderKeyValue("overview", data);
+        const cards = [
+          {
+            title: "Пользователи",
+            value: data.users,
+            note: "Все зарегистрированные пользователи"
+          },
+          {
+            title: "Заказы",
+            value: data.orders,
+            note: "Все заказы вне зависимости от статуса"
+          },
+          {
+            title: "Подтверждено провайдером",
+            value: data.confirmed_paid_orders,
+            note: `Сумма: ${data.confirmed_revenue_total} ₽ • финучёт строится по provider-confirmed оплатам`
+          },
+          {
+            title: "Отмечено вручную",
+            value: data.manual_paid_orders,
+            note: `Сумма: ${data.manual_paid_amount_total} ₽ • не входит в provider-confirmed финучёт`
+          },
+          {
+            title: "ARPU по provider-confirmed",
+            value: data.arpu_confirmed,
+            note: "Средняя выручка на заказ, подтверждённый провайдером"
+          },
+          {
+            title: "Отчёты",
+            value: data.reports,
+            note: "Сформированные отчёты"
+          },
+          {
+            title: "Сообщения обратной связи",
+            value: data.feedback_messages,
+            note: "Все обращения в поддержку"
+          }
+        ];
+        document.getElementById("overview").innerHTML = `
+          <div class="muted">Финансовые KPI ниже учитывают только provider-confirmed оплаты (подтверждённые платёжным провайдером).</div>
+          <div class="overview-grid">
+            ${cards.map((card) => `
+              <div class="overview-card">
+                <h3>${card.title}</h3>
+                <div class="overview-value">${card.value ?? 0}</div>
+                <div class="overview-note">${card.note}</div>
+              </div>
+            `).join("")}
+          </div>
+        `;
       } catch (error) {
         document.getElementById("overview").textContent = error.message;
       }
@@ -2676,13 +2754,52 @@ def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
     orders_count = session.scalar(select(func.count()).select_from(Order)) or 0
     reports_count = session.scalar(select(func.count()).select_from(Report)) or 0
     feedback_count = session.scalar(select(func.count()).select_from(FeedbackMessage)) or 0
-    paid_count = session.scalar(
-        select(func.count()).select_from(Order).where(Order.status == OrderStatus.PAID)
+    provider_sources = [
+        PaymentConfirmationSource.PROVIDER_WEBHOOK,
+        PaymentConfirmationSource.PROVIDER_POLL,
+    ]
+    provider_confirmed_filter = or_(
+        and_(
+            Order.payment_confirmed.is_(True),
+            Order.payment_confirmation_source.in_(provider_sources),
+        ),
+        and_(
+            Order.payment_confirmed_at.is_not(None),
+            Order.payment_confirmation_source.in_(provider_sources),
+        ),
+    )
+    confirmed_paid_orders = session.scalar(
+        select(func.count())
+        .select_from(Order)
+        .where(provider_confirmed_filter)
     ) or 0
+    confirmed_revenue_total = session.scalar(
+        select(func.coalesce(func.sum(Order.amount), 0))
+        .select_from(Order)
+        .where(provider_confirmed_filter)
+    ) or 0
+    manual_paid_orders = session.scalar(
+        select(func.count())
+        .select_from(Order)
+        .where(Order.payment_confirmation_source == PaymentConfirmationSource.ADMIN_MANUAL)
+    ) or 0
+    manual_paid_amount_total = session.scalar(
+        select(func.coalesce(func.sum(Order.amount), 0))
+        .select_from(Order)
+        .where(Order.payment_confirmation_source == PaymentConfirmationSource.ADMIN_MANUAL)
+    ) or 0
+    arpu_confirmed = 0
+    if confirmed_paid_orders:
+        arpu_confirmed = round(float(confirmed_revenue_total) / confirmed_paid_orders, 2)
+
     return {
         "users": users_count,
         "orders": orders_count,
-        "paid_orders": paid_count,
+        "confirmed_paid_orders": confirmed_paid_orders,
+        "confirmed_revenue_total": float(confirmed_revenue_total),
+        "manual_paid_orders": manual_paid_orders,
+        "manual_paid_amount_total": float(manual_paid_amount_total),
+        "arpu_confirmed": arpu_confirmed,
         "reports": reports_count,
         "feedback_messages": feedback_count,
     }
