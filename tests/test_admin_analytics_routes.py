@@ -126,6 +126,135 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertIsNone(order_payload["fulfilled_at"])
         self.assertEqual(order_payload["report_id"], 300)
 
+
+    def test_orders_endpoint_supports_user_and_payment_confirmed_filters(self) -> None:
+        with self.SessionLocal() as session:
+            user_a = User(id=140, telegram_user_id=700740)
+            user_b = User(id=141, telegram_user_id=700741)
+            session.add_all([user_a, user_b])
+            session.flush()
+            session.add_all(
+                [
+                    Order(
+                        user_id=140,
+                        tariff=Tariff.T1,
+                        amount=1000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=datetime.now(timezone.utc),
+                    ),
+                    Order(
+                        user_id=140,
+                        tariff=Tariff.T2,
+                        amount=2000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=False,
+                        payment_confirmation_source=PaymentConfirmationSource.ADMIN_MANUAL,
+                    ),
+                    Order(
+                        user_id=141,
+                        tariff=Tariff.T3,
+                        amount=3000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_POLL,
+                        payment_confirmed_at=datetime.now(timezone.utc),
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/admin/api/orders",
+            params={"user_id": 140, "payment_confirmed": True},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload["orders"]), 1)
+        self.assertEqual(payload["orders"][0]["user_id"], 140)
+        self.assertTrue(payload["orders"][0]["payment_confirmed"])
+
+    def test_users_payload_includes_confirmed_order_aggregates_and_sorting(self) -> None:
+        with self.SessionLocal() as session:
+            user_a = User(id=130, telegram_user_id=700730)
+            user_b = User(id=131, telegram_user_id=700731)
+            session.add_all([user_a, user_b])
+            session.flush()
+            session.add_all(
+                [
+                    Order(
+                        user_id=130,
+                        tariff=Tariff.T1,
+                        amount=1000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=datetime.now(timezone.utc),
+                    ),
+                    Order(
+                        user_id=130,
+                        tariff=Tariff.T2,
+                        amount=2000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.ADMIN_MANUAL,
+                        payment_confirmed_at=datetime.now(timezone.utc),
+                    ),
+                    Order(
+                        user_id=130,
+                        tariff=Tariff.T3,
+                        amount=9999,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=False,
+                        payment_confirmation_source=PaymentConfirmationSource.ADMIN_MANUAL,
+                        payment_confirmed_at=datetime.now(timezone.utc),
+                    ),
+                    Order(
+                        user_id=131,
+                        tariff=Tariff.T1,
+                        amount=500,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=datetime.now(timezone.utc),
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get(
+            "/admin/api/users",
+            params={"sort_by": "confirmed_revenue_total", "sort_dir": "desc"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertIn("users", payload)
+        self.assertGreaterEqual(len(payload["users"]), 2)
+
+        first = payload["users"][0]
+        second = payload["users"][1]
+
+        self.assertEqual(first["id"], 130)
+        self.assertEqual(first["confirmed_orders_count"], 2)
+        self.assertEqual(first["confirmed_revenue_total"], 3000.0)
+        self.assertEqual(first["manual_paid_orders_count"], 1)
+        self.assertEqual(second["id"], 131)
+
     def test_overview_financial_kpi_split_provider_confirmed_and_manual(self) -> None:
         with self.SessionLocal() as session:
             user = User(id=110, telegram_user_id=700710)
