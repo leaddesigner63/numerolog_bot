@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import HTMLResponse, RedirectResponse
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.exc import OperationalError, TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import Session
 
@@ -1358,7 +1358,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       llmKeysInactive: {search: "", sortKey: null, sortDir: "asc"},
       orders: {search: "", sortKey: null, sortDir: "asc", quickFilter: null},
       reports: {search: "", sortKey: null, sortDir: "asc", quickFilter: null},
-      users: {search: "", sortKey: null, sortDir: "asc"},
+      users: {search: "", sortKey: "confirmed_revenue_total", sortDir: "desc"},
       feedbackInbox: {search: "", sortKey: null, sortDir: "asc"},
       feedbackArchive: {search: "", sortKey: null, sortDir: "asc"},
       systemPrompts: {search: "", sortKey: null, sortDir: "asc"},
@@ -1518,6 +1518,24 @@ def admin_ui(request: Request) -> HTMLResponse:
           {label: "Telegram", key: "telegram_user_id", sortable: true},
           {label: "Имя", key: "name", sortable: true},
           {label: "Дата рождения", key: "birth_date", sortable: true},
+          {label: "Подтв. заказов", key: "confirmed_orders_count", sortable: true},
+          {
+            label: "Подтв. выручка",
+            key: "confirmed_revenue_total",
+            sortable: true,
+            sortValue: (row) => Number(row.confirmed_revenue_total) || 0,
+            render: (row) => `${Number(row.confirmed_revenue_total || 0).toFixed(2)} ₽`,
+          },
+          {label: "Ручных paid (подтв.)", key: "manual_paid_orders_count", sortable: true},
+          {
+            label: "Действия",
+            key: null,
+            sortable: false,
+            copyable: false,
+            render: (row) => `
+              <button class="secondary" onclick="openUserOrdersWithFinancialFilter(${row.id})">Открыть заказы пользователя с фин-фильтром</button>
+            `,
+          },
         ],
       },
       feedbackInbox: {
@@ -1959,6 +1977,21 @@ def admin_ui(request: Request) -> HTMLResponse:
       renderTableForKey("orders");
     }
 
+    async function openUserOrdersWithFinancialFilter(userId) {
+      switchSection("orders");
+      if (!tableStates.orders) {
+        return;
+      }
+      tableStates.orders.quickFilter = "provider-confirmed";
+      tableStates.orders.search = "";
+      const ordersSearch = document.getElementById("ordersSearch");
+      if (ordersSearch) {
+        ordersSearch.value = "";
+      }
+      updateOrdersQuickFilterButtons();
+      await loadOrders({userId, paymentConfirmed: true});
+    }
+
     function updateReportsQuickFilterButtons() {
       const state = tableStates.reports || {};
       const mapping = {
@@ -1982,9 +2015,18 @@ def admin_ui(request: Request) -> HTMLResponse:
       loadReports();
     }
 
-    async function loadOrders() {
+    async function loadOrders(options = {}) {
       try {
-        const data = await fetchJson("/orders");
+        const params = new URLSearchParams();
+        if (options.userId !== undefined && options.userId !== null) {
+          params.set("user_id", String(options.userId));
+        }
+        if (options.paymentConfirmed !== undefined && options.paymentConfirmed !== null) {
+          params.set("payment_confirmed", String(options.paymentConfirmed));
+        }
+        const query = params.toString();
+        const endpoint = query ? `/orders?${query}` : "/orders";
+        const data = await fetchJson(endpoint);
         tableData.orders = data.orders || [];
         renderTableForKey("orders");
       } catch (error) {
@@ -3598,10 +3640,22 @@ def admin_delete_llm_key(
 
 
 @router.get("/api/orders")
-def admin_orders(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
-    rows = session.execute(
+def admin_orders(
+    limit: int = 50,
+    user_id: int | None = Query(default=None),
+    payment_confirmed: bool | None = Query(default=None),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    query = (
         select(Order, User)
         .join(User, User.id == Order.user_id)
+    )
+    if user_id is not None:
+        query = query.where(Order.user_id == user_id)
+    if payment_confirmed is not None:
+        query = query.where(Order.payment_confirmed.is_(payment_confirmed))
+    rows = session.execute(
+        query
         .order_by(Order.created_at.desc())
         .limit(limit)
     ).all()
@@ -3803,15 +3857,60 @@ def admin_reports(
 
 
 @router.get("/api/users")
-def admin_users(limit: int = 50, session: Session = Depends(_get_db_session)) -> dict:
+def admin_users(
+    limit: int = 50,
+    sort_by: str = Query(default="created_at"),
+    sort_dir: str = Query(default="desc"),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    order_agg = (
+        select(
+            Order.user_id.label("user_id"),
+            func.sum(case((Order.payment_confirmed.is_(True), 1), else_=0)).label("confirmed_orders_count"),
+            func.sum(case((Order.payment_confirmed.is_(True), Order.amount), else_=0)).label("confirmed_revenue_total"),
+            func.sum(
+                case(
+                    (
+                        and_(
+                            Order.payment_confirmed.is_(True),
+                            Order.payment_confirmation_source == PaymentConfirmationSource.ADMIN_MANUAL,
+                        ),
+                        1,
+                    ),
+                    else_=0,
+                )
+            ).label("manual_paid_orders_count"),
+        )
+        .group_by(Order.user_id)
+        .subquery()
+    )
+
+    sortable_fields = {
+        "id": User.id,
+        "created_at": User.created_at,
+        "telegram_user_id": User.telegram_user_id,
+        "confirmed_orders_count": func.coalesce(order_agg.c.confirmed_orders_count, 0),
+        "confirmed_revenue_total": func.coalesce(order_agg.c.confirmed_revenue_total, 0),
+        "manual_paid_orders_count": func.coalesce(order_agg.c.manual_paid_orders_count, 0),
+    }
+    sort_column = sortable_fields.get(sort_by, User.created_at)
+    sort_expression = sort_column.asc() if str(sort_dir).lower() == "asc" else sort_column.desc()
+
     rows = session.execute(
-        select(User, UserProfile)
+        select(
+            User,
+            UserProfile,
+            func.coalesce(order_agg.c.confirmed_orders_count, 0).label("confirmed_orders_count"),
+            func.coalesce(order_agg.c.confirmed_revenue_total, 0).label("confirmed_revenue_total"),
+            func.coalesce(order_agg.c.manual_paid_orders_count, 0).label("manual_paid_orders_count"),
+        )
         .outerjoin(UserProfile, UserProfile.user_id == User.id)
-        .order_by(User.created_at.desc())
+        .outerjoin(order_agg, order_agg.c.user_id == User.id)
+        .order_by(sort_expression, User.id.desc())
         .limit(limit)
     ).all()
     users = []
-    for user, profile in rows:
+    for user, profile, confirmed_orders_count, confirmed_revenue_total, manual_paid_orders_count in rows:
         users.append(
             {
                 "id": user.id,
@@ -3820,6 +3919,9 @@ def admin_users(limit: int = 50, session: Session = Depends(_get_db_session)) ->
                 "name": profile.name if profile else None,
                 "gender": profile.gender if profile else None,
                 "birth_date": profile.birth_date if profile else None,
+                "confirmed_orders_count": int(confirmed_orders_count or 0),
+                "confirmed_revenue_total": float(confirmed_revenue_total or 0),
+                "manual_paid_orders_count": int(manual_paid_orders_count or 0),
             }
         )
     return {"users": users}
