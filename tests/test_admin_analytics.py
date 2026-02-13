@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -170,6 +171,71 @@ class AdminAnalyticsTests(unittest.TestCase):
         self.assertEqual(result["summary"]["provider_confirmed_orders"], 1)
         self.assertEqual(result["summary"]["provider_confirmed_revenue"], 1200.0)
         self.assertEqual(result["by_tariff"][0]["tariff"], "T1")
+
+    def test_admin_users_are_excluded_from_transition_analytics(self) -> None:
+        with self.Session() as session:
+            session.add_all(
+                [
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=999,
+                        from_screen_id="S0",
+                        to_screen_id="S1",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T1"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=100,
+                        from_screen_id="S0",
+                        to_screen_id="S1",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T1"},
+                    ),
+                ]
+            )
+            session.commit()
+
+            with patch("app.services.admin_analytics.settings.admin_ids", "999"):
+                result = build_screen_transition_analytics(session, AnalyticsFilters())
+
+        self.assertEqual(result["summary"]["events"], 1)
+        self.assertEqual(result["summary"]["users"], 1)
+
+    def test_admin_users_are_excluded_from_finance_analytics_entry_users(self) -> None:
+        base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        from app.db.models import User
+
+        with self.Session() as session:
+            session.add_all([
+                User(id=1, telegram_user_id=999),
+                User(id=2, telegram_user_id=100),
+            ])
+            session.add_all(
+                [
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=999,
+                        from_screen_id="S1",
+                        to_screen_id="S3",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T1"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=100,
+                        from_screen_id="S1",
+                        to_screen_id="S3",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T1"},
+                    ),
+                ]
+            )
+            session.flush()
+            for event in session.query(ScreenTransitionEvent).order_by(ScreenTransitionEvent.id.asc()).all():
+                event.created_at = base_time
+            session.commit()
+
+            with patch("app.services.admin_analytics.settings.admin_ids", "999"):
+                result = build_finance_analytics(session, FinanceAnalyticsFilters())
+
+        self.assertEqual(result["summary"]["entry_users"], 1)
 
 
 if __name__ == "__main__":

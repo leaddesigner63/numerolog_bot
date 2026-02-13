@@ -9,6 +9,7 @@ from statistics import median
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.models import (
     Order,
     OrderStatus,
@@ -212,6 +213,7 @@ def _build_finance_timeseries(entries: list[EventPoint], orders: list[FinanceOrd
 
 
 def _load_events(session: Session, filters: AnalyticsFilters) -> list[EventPoint]:
+    admin_ids = _parse_admin_ids(settings.admin_ids)
     query: Select[tuple[ScreenTransitionEvent]] = select(ScreenTransitionEvent)
     if filters.from_dt:
         query = query.where(ScreenTransitionEvent.created_at >= filters.from_dt)
@@ -233,6 +235,9 @@ def _load_events(session: Session, filters: AnalyticsFilters) -> list[EventPoint
     events: list[EventPoint] = []
     screen_filter = filters.screen_ids
     for row in rows:
+        telegram_user_id = row.telegram_user_id or 0
+        if telegram_user_id in admin_ids:
+            continue
         metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
         tariff_value = metadata.get("tariff")
         if tariff_filter and str(tariff_value or "").upper() != tariff_filter:
@@ -245,7 +250,7 @@ def _load_events(session: Session, filters: AnalyticsFilters) -> list[EventPoint
         events.append(
             EventPoint(
                 id=row.id,
-                user_id=row.telegram_user_id or 0,
+                user_id=telegram_user_id,
                 from_screen=from_screen,
                 to_screen=to_screen,
                 trigger_type=(row.trigger_type.value if hasattr(row.trigger_type, "value") else str(row.trigger_type)),
@@ -254,6 +259,21 @@ def _load_events(session: Session, filters: AnalyticsFilters) -> list[EventPoint
             )
         )
     return events
+
+
+def _parse_admin_ids(raw_value: str | None) -> set[int]:
+    if not raw_value:
+        return set()
+    admin_ids: set[int] = set()
+    for item in raw_value.split(","):
+        candidate = item.strip()
+        if not candidate:
+            continue
+        try:
+            admin_ids.add(int(candidate))
+        except ValueError:
+            continue
+    return admin_ids
 
 
 def _normalize_screen_id(screen_id: str | None) -> str:
