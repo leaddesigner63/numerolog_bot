@@ -18,6 +18,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.services.admin_analytics import (
     AnalyticsFilters,
+    FinanceAnalyticsFilters,
+    build_finance_analytics,
     build_screen_transition_analytics,
     parse_trigger_type,
 )
@@ -677,6 +679,14 @@ def admin_ui(request: Request) -> HTMLResponse:
       font-size: 13px;
       color: var(--muted);
     }
+    .timeseries-chart {
+      width: 100%;
+      height: 220px;
+      margin-bottom: 8px;
+      border: 1px solid #2a2f3a;
+      border-radius: 8px;
+      background: #0f1115;
+    }
     .overview-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -932,6 +942,16 @@ def admin_ui(request: Request) -> HTMLResponse:
         <h2>Analytics: переходы и воронка</h2>
         <div class="analytics-filters">
           <div class="field">
+            <label for="analyticsPeriod">Период</label>
+            <select id="analyticsPeriod">
+              <option value="24h">Последние 24 часа</option>
+              <option value="7d" selected>Последние 7 дней</option>
+              <option value="30d">Последние 30 дней</option>
+              <option value="90d">Последние 90 дней</option>
+              <option value="custom">Кастомный</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="analyticsFrom">Период c</label>
             <input id="analyticsFrom" type="datetime-local" />
           </div>
@@ -975,6 +995,19 @@ def admin_ui(request: Request) -> HTMLResponse:
         <div class="analytics-block">
           <div class="analytics-title">Узкие места (высокий отвал / долгое время)</div>
           <div id="analyticsBottlenecks" class="muted">Нет данных</div>
+        </div>
+        <div class="analytics-block">
+          <div class="analytics-title">Финансовая воронка <span class="muted">(источник: provider-confirmed only)</span></div>
+          <div id="analyticsFinanceSummary" class="muted">Нет данных</div>
+        </div>
+        <div class="analytics-block">
+          <div class="analytics-title">Выручка по тарифам <span class="muted">(источник: provider-confirmed only)</span></div>
+          <div id="analyticsFinanceByTariff" class="muted">Нет данных</div>
+        </div>
+        <div class="analytics-block">
+          <div class="analytics-title">Финансы по дням <span class="muted">(источник: provider-confirmed only)</span></div>
+          <svg id="analyticsFinanceChart" class="timeseries-chart" viewBox="0 0 900 220" preserveAspectRatio="none"></svg>
+          <div id="analyticsFinanceTimeseries" class="muted">Нет данных</div>
         </div>
       </section>
       <section data-panel="system-prompts">
@@ -2696,13 +2729,88 @@ def admin_ui(request: Request) -> HTMLResponse:
       `;
     }
 
+    function syncAnalyticsPeriodToInputs(period) {
+      const fromInput = document.getElementById("analyticsFrom");
+      const toInput = document.getElementById("analyticsTo");
+      if (!fromInput || !toInput || period === "custom") {
+        return;
+      }
+      const now = new Date();
+      const from = new Date(now);
+      const days = period === "24h" ? 1 : Number((period || "").replace("d", "")) || 7;
+      from.setDate(now.getDate() - days);
+      fromInput.value = from.toISOString().slice(0, 16);
+      toInput.value = now.toISOString().slice(0, 16);
+    }
+
+    function ensurePeriodSelection() {
+      const period = document.getElementById("analyticsPeriod");
+      if (!period) {
+        return "custom";
+      }
+      return period.value || "custom";
+    }
+
+    function renderFinanceSummary(summary) {
+      const target = document.getElementById("analyticsFinanceSummary");
+      if (!target) {
+        return;
+      }
+      if (!summary || !Object.keys(summary).length) {
+        target.innerHTML = '<div class="muted">Нет данных по финансовой воронке.</div>';
+        return;
+      }
+      target.innerHTML = `
+        <div class="kpi-grid">
+          <div class="kpi-card"><h3>Пользователи дошли до ${summary.entry_screens?.join("/") || "S3/S4"}</h3><div class="value">${Number(summary.entry_users) || 0}</div></div>
+          <div class="kpi-card"><h3>Provider-confirmed оплаты</h3><div class="value">${Number(summary.provider_confirmed_orders) || 0}</div></div>
+          <div class="kpi-card"><h3>Конверсия в оплату</h3><div class="value">${formatPercent(summary.conversion_to_provider_confirmed)}</div></div>
+          <div class="kpi-card"><h3>Выручка</h3><div class="value">${Number(summary.provider_confirmed_revenue || 0).toFixed(2)} ₽</div></div>
+        </div>
+      `;
+    }
+
+    function renderFinanceTimeseriesChart(rows) {
+      const svg = document.getElementById("analyticsFinanceChart");
+      if (!svg) {
+        return;
+      }
+      if (!rows || !rows.length) {
+        svg.innerHTML = "";
+        return;
+      }
+      const width = 900;
+      const height = 220;
+      const padX = 40;
+      const padY = 20;
+      const usableW = width - padX * 2;
+      const usableH = height - padY * 2;
+      const revenue = rows.map((row) => Number(row.provider_confirmed_revenue) || 0);
+      const maxRevenue = Math.max(...revenue, 1);
+      const points = rows.map((row, idx) => {
+        const x = padX + (usableW * (rows.length === 1 ? 0.5 : idx / (rows.length - 1)));
+        const y = height - padY - ((Number(row.provider_confirmed_revenue) || 0) / maxRevenue) * usableH;
+        return {x, y, date: row.date, value: Number(row.provider_confirmed_revenue) || 0};
+      });
+      const polyline = points.map((p) => `${p.x},${p.y}`).join(" ");
+      svg.innerHTML = `
+        <line x1="${padX}" y1="${height - padY}" x2="${width - padX}" y2="${height - padY}" stroke="#334155" stroke-width="1" />
+        <polyline points="${polyline}" fill="none" stroke="#22c55e" stroke-width="2.5" />
+        ${points.map((p) => `<circle cx="${p.x}" cy="${p.y}" r="3" fill="#3b82f6"><title>${p.date}: ${p.value.toFixed(2)} ₽</title></circle>`).join("")}
+      `;
+    }
+
     function buildAnalyticsQuery() {
       const query = new URLSearchParams();
+      const period = ensurePeriodSelection();
       const fromIso = toIsoFromLocal(document.getElementById("analyticsFrom")?.value || "");
       const toIso = toIsoFromLocal(document.getElementById("analyticsTo")?.value || "");
       const tariff = document.getElementById("analyticsTariff")?.value || "";
       const dropoffWindow = Number(document.getElementById("analyticsDropoffWindow")?.value || "60");
       const topN = Number(document.getElementById("analyticsTopN")?.value || "50");
+      if (period) {
+        query.set("period", period);
+      }
       if (fromIso) {
         query.set("from", fromIso);
       }
@@ -2725,12 +2833,15 @@ def admin_ui(request: Request) -> HTMLResponse:
       stateNode.textContent = "Загрузка аналитики...";
       try {
         const query = buildAnalyticsQuery();
-        const [summaryRes, matrixRes, funnelRes, timingRes, fullRes] = await Promise.all([
+        const [summaryRes, matrixRes, funnelRes, timingRes, fullRes, financeSummaryRes, financeTariffRes, financeTimeseriesRes] = await Promise.all([
           fetchJson(`/analytics/transitions/summary?${query}`),
           fetchJson(`/analytics/transitions/matrix?${query}`),
           fetchJson(`/analytics/transitions/funnel?${query}`),
           fetchJson(`/analytics/transitions/timing?${query}`),
           fetchJson(`/analytics/screen-transitions?${query}`),
+          fetchJson(`/analytics/finance/summary?${query}`),
+          fetchJson(`/analytics/finance/by-tariff?${query}`),
+          fetchJson(`/analytics/finance/timeseries?${query}`),
         ]);
 
         const summary = summaryRes?.data?.summary || {};
@@ -2738,6 +2849,9 @@ def admin_ui(request: Request) -> HTMLResponse:
         const funnelRows = funnelRes?.data?.funnel || [];
         const timingRows = timingRes?.data?.transition_timing || [];
         const dropoffRows = fullRes?.data?.dropoff || [];
+        const financeSummary = financeSummaryRes?.data?.summary || {};
+        const financeByTariff = financeTariffRes?.data?.by_tariff || [];
+        const financeTimeseries = financeTimeseriesRes?.data?.timeseries || [];
 
         const isEmpty = !matrixRows.length && !funnelRows.length && !dropoffRows.length;
         if (isEmpty) {
@@ -2746,11 +2860,39 @@ def admin_ui(request: Request) -> HTMLResponse:
           renderFunnelChart([]);
           renderAnalyticsTable("analyticsMatrix", ["from", "to", "count", "share"], []);
           renderAnalyticsTable("analyticsBottlenecks", ["Переход", "CR", "Drop-off", "Медиана времени"], []);
+          renderFinanceSummary({});
+          renderAnalyticsTable("analyticsFinanceByTariff", ["Тариф", "Оплаты", "Выручка", "Средний чек", "Источник"], []);
+          renderAnalyticsTable("analyticsFinanceTimeseries", ["Дата", "S3/S4 users", "Оплаты", "Конверсия", "Выручка"], []);
+          renderFinanceTimeseriesChart([]);
           return;
         }
 
         renderKpis(summary, funnelRows, dropoffRows);
         renderFunnelChart(funnelRows);
+        renderFinanceSummary(financeSummary);
+        renderAnalyticsTable(
+          "analyticsFinanceByTariff",
+          ["Тариф", "Оплаты", "Выручка", "Средний чек", "Источник"],
+          financeByTariff.map((row) => [
+            {value: row.tariff || "—"},
+            {value: Number(row.provider_confirmed_orders) || 0},
+            {value: `${Number(row.provider_confirmed_revenue || 0).toFixed(2)} ₽`},
+            {value: `${Number(row.avg_check || 0).toFixed(2)} ₽`},
+            {value: row.data_source || "provider_confirmed_only"},
+          ])
+        );
+        renderFinanceTimeseriesChart(financeTimeseries);
+        renderAnalyticsTable(
+          "analyticsFinanceTimeseries",
+          ["Дата", "S3/S4 users", "Оплаты", "Конверсия", "Выручка"],
+          financeTimeseries.map((row) => [
+            {value: row.date || "—"},
+            {value: Number(row.entry_users) || 0},
+            {value: Number(row.provider_confirmed_orders) || 0},
+            {value: formatPercent(row.conversion_to_provider_confirmed)},
+            {value: `${Number(row.provider_confirmed_revenue || 0).toFixed(2)} ₽`},
+          ])
+        );
 
         renderAnalyticsTable(
           "analyticsMatrix",
@@ -2840,6 +2982,23 @@ def admin_ui(request: Request) -> HTMLResponse:
         alert(error.message);
       }
     }
+
+    const analyticsPeriodNode = document.getElementById("analyticsPeriod");
+    if (analyticsPeriodNode) {
+      syncAnalyticsPeriodToInputs(analyticsPeriodNode.value || "7d");
+      analyticsPeriodNode.addEventListener("change", (event) => {
+        syncAnalyticsPeriodToInputs(event.target?.value || "custom");
+      });
+    }
+    const analyticsFromNode = document.getElementById("analyticsFrom");
+    const analyticsToNode = document.getElementById("analyticsTo");
+    const markCustomPeriod = () => {
+      if (analyticsPeriodNode) {
+        analyticsPeriodNode.value = "custom";
+      }
+    };
+    analyticsFromNode?.addEventListener("change", markCustomPeriod);
+    analyticsToNode?.addEventListener("change", markCustomPeriod);
 
     const sectionButtons = document.querySelectorAll("[data-section]");
     const panels = document.querySelectorAll("[data-panel]");
@@ -3085,6 +3244,7 @@ class TransitionTimingItem(BaseModel):
 class TransitionFiltersApplied(BaseModel):
     from_dt: datetime | None
     to_dt: datetime | None
+    period: str | None
     tariff: str | None
     trigger_type: str | None
     unique_users_only: bool
@@ -3099,6 +3259,33 @@ class TransitionAnalyticsEnvelope(BaseModel):
     filters_applied: TransitionFiltersApplied
     data: dict
     warnings: list[str]
+
+
+class FinanceSummaryItem(BaseModel):
+    entry_screens: list[str]
+    entry_users: int
+    provider_confirmed_orders: int
+    provider_confirmed_users: int
+    conversion_to_provider_confirmed: float
+    provider_confirmed_revenue: float
+    data_source: str
+
+
+class FinanceTariffItem(BaseModel):
+    tariff: str
+    provider_confirmed_orders: int
+    provider_confirmed_revenue: float
+    avg_check: float
+    data_source: str
+
+
+class FinanceTimeseriesItem(BaseModel):
+    date: str
+    entry_users: int
+    provider_confirmed_orders: int
+    provider_confirmed_revenue: float
+    conversion_to_provider_confirmed: float
+    data_source: str
 
 
 _TRANSITION_SCREEN_WHITELIST: frozenset[str] = frozenset(
@@ -3138,10 +3325,27 @@ def _normalize_screen_filter(screen_ids: list[str] | None) -> tuple[list[str], f
     return cleaned, (frozenset(cleaned) if cleaned else None)
 
 
+def _resolve_period_bounds(period: str | None, from_dt: datetime | None, to_dt: datetime | None) -> tuple[datetime | None, datetime | None, str | None]:
+    selected_period = (period or "").strip().lower() or None
+    if from_dt or to_dt:
+        return from_dt, to_dt, selected_period
+    now = datetime.now(timezone.utc)
+    if selected_period == "24h":
+        return now - timedelta(hours=24), now, selected_period
+    if selected_period == "7d":
+        return now - timedelta(days=7), now, selected_period
+    if selected_period == "30d":
+        return now - timedelta(days=30), now, selected_period
+    if selected_period == "90d":
+        return now - timedelta(days=90), now, selected_period
+    return from_dt, to_dt, selected_period
+
+
 def _build_transition_filters(
     *,
     from_dt: datetime | None,
     to_dt: datetime | None,
+    period: str | None,
     tariff: str | None,
     trigger_type: str | None,
     unique_users_only: bool,
@@ -3149,6 +3353,7 @@ def _build_transition_filters(
     limit: int,
     screen_ids: list[str] | None,
 ) -> tuple[AnalyticsFilters, TransitionFiltersApplied]:
+    from_dt, to_dt, _ = _resolve_period_bounds(period, from_dt, to_dt)
     if from_dt and to_dt and from_dt > to_dt:
         raise HTTPException(status_code=422, detail="Parameter 'from' must be less than or equal to 'to'")
 
@@ -3168,6 +3373,7 @@ def _build_transition_filters(
     filters_applied = TransitionFiltersApplied(
         from_dt=from_dt,
         to_dt=to_dt,
+        period=period,
         tariff=tariff,
         trigger_type=normalized_trigger_type,
         unique_users_only=unique_users_only,
@@ -3203,6 +3409,17 @@ def _safe_build_transition_analytics(session: Session, filters: AnalyticsFilters
         return build_screen_transition_analytics(session, filters)
     except (OperationalError, SQLAlchemyTimeoutError) as exc:
         logger.exception("admin_transition_analytics_db_unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail="База данных временно перегружена. Попробуйте повторить запрос позже.",
+        ) from exc
+
+
+def _safe_build_finance_analytics(session: Session, filters: FinanceAnalyticsFilters) -> dict:
+    try:
+        return build_finance_analytics(session, filters)
+    except (OperationalError, SQLAlchemyTimeoutError) as exc:
+        logger.exception("admin_finance_analytics_db_unavailable")
         raise HTTPException(
             status_code=503,
             detail="База данных временно перегружена. Попробуйте повторить запрос позже.",
@@ -3258,6 +3475,7 @@ def _slice_top_n(items: list[dict], top_n: int) -> list[dict]:
 def admin_screen_transition_analytics(
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
     tariff: str | None = Query(default=None),
     trigger_type: str | None = Query(default=None),
     unique_users_only: bool = Query(default=False),
@@ -3270,6 +3488,7 @@ def admin_screen_transition_analytics(
     filters, filters_applied = _build_transition_filters(
         from_dt=from_dt,
         to_dt=to_dt,
+        period=period,
         tariff=tariff,
         trigger_type=trigger_type,
         unique_users_only=unique_users_only,
@@ -3292,6 +3511,7 @@ def admin_screen_transition_analytics(
 def admin_transitions_summary(
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
     tariff: str | None = Query(default=None),
     trigger_type: str | None = Query(default=None),
     unique_users_only: bool = Query(default=False),
@@ -3303,6 +3523,7 @@ def admin_transitions_summary(
     filters, filters_applied = _build_transition_filters(
         from_dt=from_dt,
         to_dt=to_dt,
+        period=period,
         tariff=tariff,
         trigger_type=trigger_type,
         unique_users_only=unique_users_only,
@@ -3319,6 +3540,7 @@ def admin_transitions_summary(
 def admin_transitions_matrix(
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
     tariff: str | None = Query(default=None),
     trigger_type: str | None = Query(default=None),
     unique_users_only: bool = Query(default=False),
@@ -3331,6 +3553,7 @@ def admin_transitions_matrix(
     filters, filters_applied = _build_transition_filters(
         from_dt=from_dt,
         to_dt=to_dt,
+        period=period,
         tariff=tariff,
         trigger_type=trigger_type,
         unique_users_only=unique_users_only,
@@ -3350,6 +3573,7 @@ def admin_transitions_matrix(
 def admin_transitions_funnel(
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
     tariff: str | None = Query(default=None),
     trigger_type: str | None = Query(default=None),
     unique_users_only: bool = Query(default=False),
@@ -3362,6 +3586,7 @@ def admin_transitions_funnel(
     filters, filters_applied = _build_transition_filters(
         from_dt=from_dt,
         to_dt=to_dt,
+        period=period,
         tariff=tariff,
         trigger_type=trigger_type,
         unique_users_only=unique_users_only,
@@ -3381,6 +3606,7 @@ def admin_transitions_funnel(
 def admin_transitions_timing(
     from_dt: datetime | None = Query(default=None, alias="from"),
     to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
     tariff: str | None = Query(default=None),
     trigger_type: str | None = Query(default=None),
     unique_users_only: bool = Query(default=False),
@@ -3393,6 +3619,7 @@ def admin_transitions_timing(
     filters, filters_applied = _build_transition_filters(
         from_dt=from_dt,
         to_dt=to_dt,
+        period=period,
         tariff=tariff,
         trigger_type=trigger_type,
         unique_users_only=unique_users_only,
@@ -3410,6 +3637,69 @@ def admin_transitions_timing(
     if not timing_items:
         envelope["warnings"].append("Недостаточно данных за период")
     return envelope
+
+
+def _build_finance_filters(
+    *,
+    from_dt: datetime | None,
+    to_dt: datetime | None,
+    period: str | None,
+    tariff: str | None,
+) -> FinanceAnalyticsFilters:
+    from_dt, to_dt, _ = _resolve_period_bounds(period, from_dt, to_dt)
+    if from_dt and to_dt and from_dt > to_dt:
+        raise HTTPException(status_code=422, detail="Parameter 'from' must be less than or equal to 'to'")
+    return FinanceAnalyticsFilters(from_dt=from_dt, to_dt=to_dt, tariff=tariff)
+
+
+@router.get("/api/analytics/finance/summary")
+def admin_finance_summary(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
+    tariff: str | None = Query(default=None),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters = _build_finance_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
+    result = _safe_build_finance_analytics(session, filters)
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "data": {"summary": FinanceSummaryItem.model_validate(result["summary"]).model_dump(mode="json")},
+    }
+
+
+@router.get("/api/analytics/finance/by-tariff")
+def admin_finance_by_tariff(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
+    tariff: str | None = Query(default=None),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters = _build_finance_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
+    result = _safe_build_finance_analytics(session, filters)
+    items = [FinanceTariffItem.model_validate(item).model_dump(mode="json") for item in result["by_tariff"]]
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "data": {"by_tariff": items},
+    }
+
+
+@router.get("/api/analytics/finance/timeseries")
+def admin_finance_timeseries(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
+    tariff: str | None = Query(default=None),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters = _build_finance_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
+    result = _safe_build_finance_analytics(session, filters)
+    items = [FinanceTimeseriesItem.model_validate(item).model_dump(mode="json") for item in result["timeseries"]]
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "data": {"timeseries": items},
+    }
 
 
 def _mask_key(value: str | None) -> str:

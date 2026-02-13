@@ -4,7 +4,12 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.services.admin_analytics import AnalyticsFilters, build_screen_transition_analytics
+from app.services.admin_analytics import (
+    AnalyticsFilters,
+    FinanceAnalyticsFilters,
+    build_finance_analytics,
+    build_screen_transition_analytics,
+)
 from app.db.base import Base
 from app.db.models import ScreenTransitionEvent, ScreenTransitionTriggerType
 
@@ -100,6 +105,71 @@ class AdminAnalyticsTests(unittest.TestCase):
         self.assertTrue(result["dropoff"])
         duration_pairs = {(item["from_screen"], item["to_screen"]) for item in result["transition_durations"]}
         self.assertIn(("S1", "UNKNOWN"), duration_pairs)
+
+    def test_finance_layer_provider_confirmed_only(self) -> None:
+        base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        from app.db.models import (
+            Order,
+            OrderStatus,
+            PaymentConfirmationSource,
+            PaymentProvider,
+            Tariff,
+            User,
+        )
+        with self.Session() as session:
+            session.add_all([
+                User(id=1, telegram_user_id=1001),
+                User(id=2, telegram_user_id=1002),
+            ])
+            session.add_all([
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=1001,
+                    from_screen_id="S1",
+                    to_screen_id="S3",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                    metadata_json={"tariff": "T1"},
+                ),
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=1002,
+                    from_screen_id="S1",
+                    to_screen_id="S4",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                    metadata_json={"tariff": "T1"},
+                ),
+                Order(
+                    user_id=1,
+                    tariff=Tariff.T1,
+                    amount=1200,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    payment_confirmed=True,
+                    payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                    payment_confirmed_at=base_time + timedelta(hours=1),
+                ),
+                Order(
+                    user_id=2,
+                    tariff=Tariff.T1,
+                    amount=900,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    payment_confirmed=True,
+                    payment_confirmation_source=PaymentConfirmationSource.ADMIN_MANUAL,
+                    payment_confirmed_at=base_time + timedelta(hours=2),
+                ),
+            ])
+            session.flush()
+            for idx, event in enumerate(session.query(ScreenTransitionEvent).order_by(ScreenTransitionEvent.id.asc()).all()):
+                event.created_at = base_time + timedelta(minutes=idx)
+            session.commit()
+
+            result = build_finance_analytics(session, FinanceAnalyticsFilters(from_dt=base_time - timedelta(days=1), to_dt=base_time + timedelta(days=1), tariff="T1"))
+
+        self.assertEqual(result["summary"]["entry_users"], 2)
+        self.assertEqual(result["summary"]["provider_confirmed_orders"], 1)
+        self.assertEqual(result["summary"]["provider_confirmed_revenue"], 1200.0)
+        self.assertEqual(result["by_tariff"][0]["tariff"], "T1")
 
 
 if __name__ == "__main__":

@@ -548,6 +548,73 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertIn("reportsAlerts", html)
         self.assertIn("showProblemReportsFromAlert", html)
         self.assertIn("Фин. основание", html)
+    def test_finance_analytics_endpoints_return_provider_confirmed_metrics(self) -> None:
+        base_time = datetime.now(timezone.utc)
+        with self.SessionLocal() as session:
+            user = User(id=160, telegram_user_id=700760)
+            session.add(user)
+            session.add_all([
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=700760,
+                    from_screen_id="S1",
+                    to_screen_id="S3",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                    metadata_json={"tariff": "T2"},
+                ),
+                Order(
+                    user_id=160,
+                    tariff=Tariff.T2,
+                    amount=2500,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    payment_confirmed=True,
+                    payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                    payment_confirmed_at=base_time,
+                ),
+            ])
+            session.commit()
+
+        summary = self.client.get("/admin/api/analytics/finance/summary", params={"tariff": "T2"})
+        self.assertEqual(summary.status_code, 200)
+        self.assertEqual(summary.json()["data"]["summary"]["provider_confirmed_orders"], 1)
+
+        by_tariff = self.client.get("/admin/api/analytics/finance/by-tariff", params={"tariff": "T2"})
+        self.assertEqual(by_tariff.status_code, 200)
+        self.assertEqual(by_tariff.json()["data"]["by_tariff"][0]["provider_confirmed_revenue"], 2500.0)
+
+        timeseries = self.client.get("/admin/api/analytics/finance/timeseries", params={"tariff": "T2"})
+        self.assertEqual(timeseries.status_code, 200)
+        self.assertTrue(timeseries.json()["data"]["timeseries"])
+
+
+    def test_finance_endpoints_return_503_on_database_overload(self) -> None:
+        with patch.object(
+            admin_routes,
+            "build_finance_analytics",
+            side_effect=OperationalError("SELECT 1", {}, Exception("too many clients")),
+        ):
+            response = self.client.get("/admin/api/analytics/finance/summary")
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("временно перегружена", response.json()["detail"])
+
+    def test_admin_ui_contains_finance_blocks_and_period_filter(self) -> None:
+        with patch.object(admin_routes, "_admin_credentials_ready", return_value=True), patch.object(
+            admin_routes,
+            "_admin_session_token",
+            return_value="token",
+        ):
+            response = self.client.get("/admin", cookies={"admin_session": "token"})
+
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("analyticsPeriod", html)
+        self.assertIn("analyticsFinanceSummary", html)
+        self.assertIn("analyticsFinanceByTariff", html)
+        self.assertIn("analyticsFinanceChart", html)
+        self.assertIn("provider-confirmed only", html)
+
     def test_admin_orders_bulk_status_completed_sets_fulfillment(self) -> None:
         with self.SessionLocal() as session:
             user = User(id=102, telegram_user_id=700702)

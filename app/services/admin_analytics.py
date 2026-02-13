@@ -9,7 +9,13 @@ from statistics import median
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
-from app.db.models import ScreenTransitionEvent, ScreenTransitionTriggerType
+from app.db.models import (
+    Order,
+    OrderStatus,
+    PaymentConfirmationSource,
+    ScreenTransitionEvent,
+    ScreenTransitionTriggerType,
+)
 
 
 _UNKNOWN_SCREEN = "UNKNOWN"
@@ -21,6 +27,11 @@ _FUNNEL_STEPS: list[tuple[str, set[str]]] = [
     ("S5", {"S5"}),
     ("S6_OR_S7", {"S6", "S7"}),
 ]
+_FINANCE_ENTRY_SCREENS = {"S3", "S4"}
+_PROVIDER_CONFIRMATION_SOURCES = {
+    PaymentConfirmationSource.PROVIDER_WEBHOOK,
+    PaymentConfirmationSource.PROVIDER_POLL,
+}
 
 
 @dataclass(frozen=True)
@@ -46,6 +57,22 @@ class EventPoint:
     created_at: datetime
 
 
+@dataclass(frozen=True)
+class FinanceOrderPoint:
+    id: int
+    user_id: int
+    tariff: str
+    amount: float
+    confirmed_at: datetime
+
+
+@dataclass(frozen=True)
+class FinanceAnalyticsFilters:
+    from_dt: datetime | None = None
+    to_dt: datetime | None = None
+    tariff: str | None = None
+
+
 def build_screen_transition_analytics(session: Session, filters: AnalyticsFilters) -> dict:
     events = _load_events(session, filters)
     if not events:
@@ -68,6 +95,120 @@ def build_screen_transition_analytics(session: Session, filters: AnalyticsFilter
         "dropoff": _build_dropoff(events_by_user, filters),
         "transition_durations": _build_transition_durations(events_by_user),
     }
+
+
+def build_finance_analytics(session: Session, filters: FinanceAnalyticsFilters) -> dict:
+    entries = _load_finance_entries(session, filters)
+    confirmed_orders = _load_provider_confirmed_orders(session, filters)
+    reached_users = {item.user_id for item in entries}
+    paid_users = {item.user_id for item in confirmed_orders}
+    conversion = (len(paid_users) / len(reached_users)) if reached_users else 0.0
+
+    return {
+        "summary": {
+            "entry_screens": sorted(_FINANCE_ENTRY_SCREENS),
+            "entry_users": len(reached_users),
+            "provider_confirmed_orders": len(confirmed_orders),
+            "provider_confirmed_users": len(paid_users),
+            "conversion_to_provider_confirmed": round(conversion, 6),
+            "provider_confirmed_revenue": round(sum(item.amount for item in confirmed_orders), 2),
+            "data_source": "provider_confirmed_only",
+        },
+        "by_tariff": _build_revenue_by_tariff(confirmed_orders),
+        "timeseries": _build_finance_timeseries(entries, confirmed_orders),
+    }
+
+
+def _load_finance_entries(session: Session, filters: FinanceAnalyticsFilters) -> list[EventPoint]:
+    event_filters = AnalyticsFilters(from_dt=filters.from_dt, to_dt=filters.to_dt, tariff=filters.tariff)
+    events = _load_events(session, event_filters)
+    entries: list[EventPoint] = []
+    seen_user_ids: set[int] = set()
+    for event in events:
+        if event.user_id in seen_user_ids:
+            continue
+        if event.from_screen in _FINANCE_ENTRY_SCREENS or event.to_screen in _FINANCE_ENTRY_SCREENS:
+            seen_user_ids.add(event.user_id)
+            entries.append(event)
+    return entries
+
+
+def _load_provider_confirmed_orders(session: Session, filters: FinanceAnalyticsFilters) -> list[FinanceOrderPoint]:
+    query: Select[tuple[Order]] = select(Order).where(
+        Order.status == OrderStatus.PAID,
+        Order.payment_confirmation_source.in_(list(_PROVIDER_CONFIRMATION_SOURCES)),
+    )
+    if filters.from_dt:
+        query = query.where(Order.payment_confirmed_at >= filters.from_dt)
+    if filters.to_dt:
+        query = query.where(Order.payment_confirmed_at <= filters.to_dt)
+    if filters.tariff:
+        query = query.where(Order.tariff == filters.tariff.upper())
+    rows = session.execute(query.order_by(Order.payment_confirmed_at.asc(), Order.id.asc())).scalars().all()
+
+    points: list[FinanceOrderPoint] = []
+    for row in rows:
+        confirmed_at = row.payment_confirmed_at or row.paid_at or row.created_at or datetime.now(timezone.utc)
+        points.append(
+            FinanceOrderPoint(
+                id=row.id,
+                user_id=row.user_id,
+                tariff=(row.tariff.value if hasattr(row.tariff, "value") else str(row.tariff)).upper(),
+                amount=float(row.amount or 0),
+                confirmed_at=confirmed_at,
+            )
+        )
+    return points
+
+
+def _build_revenue_by_tariff(orders: list[FinanceOrderPoint]) -> list[dict]:
+    grouped: dict[str, dict[str, float]] = {}
+    for item in orders:
+        bucket = grouped.setdefault(item.tariff, {"orders": 0, "revenue": 0.0})
+        bucket["orders"] += 1
+        bucket["revenue"] += item.amount
+    return [
+        {
+            "tariff": tariff,
+            "provider_confirmed_orders": int(stats["orders"]),
+            "provider_confirmed_revenue": round(float(stats["revenue"]), 2),
+            "avg_check": round(float(stats["revenue"]) / float(stats["orders"]), 2) if stats["orders"] else 0.0,
+            "data_source": "provider_confirmed_only",
+        }
+        for tariff, stats in sorted(grouped.items(), key=lambda item: item[0])
+    ]
+
+
+def _build_finance_timeseries(entries: list[EventPoint], orders: list[FinanceOrderPoint]) -> list[dict]:
+    days: dict[str, dict[str, object]] = {}
+
+    for item in entries:
+        day = item.created_at.date().isoformat()
+        day_bucket = days.setdefault(day, {"entry_users": set(), "provider_confirmed_orders": 0, "provider_confirmed_revenue": 0.0})
+        day_bucket["entry_users"].add(item.user_id)
+
+    for item in orders:
+        day = item.confirmed_at.date().isoformat()
+        day_bucket = days.setdefault(day, {"entry_users": set(), "provider_confirmed_orders": 0, "provider_confirmed_revenue": 0.0})
+        day_bucket["provider_confirmed_orders"] = int(day_bucket["provider_confirmed_orders"]) + 1
+        day_bucket["provider_confirmed_revenue"] = float(day_bucket["provider_confirmed_revenue"]) + item.amount
+
+    rows: list[dict] = []
+    for day in sorted(days.keys()):
+        entry_users = len(days[day]["entry_users"])
+        confirmed_orders = int(days[day]["provider_confirmed_orders"])
+        conversion = (confirmed_orders / entry_users) if entry_users else 0.0
+        rows.append(
+            {
+                "date": day,
+                "entry_users": entry_users,
+                "provider_confirmed_orders": confirmed_orders,
+                "provider_confirmed_revenue": round(float(days[day]["provider_confirmed_revenue"]), 2),
+                "conversion_to_provider_confirmed": round(conversion, 6),
+                "data_source": "provider_confirmed_only",
+            }
+        )
+    return rows
 
 
 def _load_events(session: Session, filters: AnalyticsFilters) -> list[EventPoint]:

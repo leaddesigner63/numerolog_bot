@@ -37,7 +37,7 @@ app/
   db/                 # модели и подключение к БД
     models.py         # включает report_jobs, support_dialog_messages и screen_transition_events (аналитика переходов экранов)
   services/           # сервисы бизнес-логики API/бота
-    admin_analytics.py # агрегации аналитики переходов экранов (матрица/funnel/drop-off/p95)
+    admin_analytics.py # агрегации аналитики переходов + финансовый слой (provider-confirmed funnel/revenue/timeseries)
   payments/           # платёжные провайдеры и проверки webhook
 scripts/              # вспомогательные скрипты
   deploy.sh           # серверный деплой-скрипт (используется GitHub Actions)
@@ -203,6 +203,8 @@ python -m app.bot.polling
 - endpoint `/admin/api/orders` поддерживает серверные фильтры `user_id` и `payment_confirmed`, а в UI есть кнопка «Открыть заказы пользователя с фин-фильтром» для быстрого перехода к подтверждённым оплатам конкретного пользователя;
 - в разделе **«Отчёты»** добавлены финполя заказа (`order_status`, `payment_confirmed`, `payment_confirmation_source`, `payment_confirmed_at`) и колонка **«Фин. основание»** (`provider_confirmed` / `manual` / `none`), а также быстрые фильтры по provider-confirmed и по неподтверждённой оплате;
 - endpoint `/admin/api/reports` поддерживает серверные фильтры `financial_basis` и `payment_not_confirmed_only`, поэтому UI-фильтры масштабируются на большие выборки без клиентской перегрузки;
+- раздел **Analytics** дополнен финансовыми блоками «Финансовая воронка», «Выручка по тарифам» и «Финансы по дням» (источник данных: только `provider-confirmed` оплаты), а также мини-графиком тренда выручки по дням;
+- добавлены API-эндпоинты `/admin/api/analytics/finance/summary`, `/admin/api/analytics/finance/by-tariff`, `/admin/api/analytics/finance/timeseries` с поддержкой фильтров `period/from/to/tariff`;
 - если найден кейс «report exists + payment not confirmed», в разделе **«Отчёты»** показывается алерт для ручной проверки с кнопкой «Показать только проблемные»;
 - в разделе **«Обратная связь»** администратор может вручную отправить ответ пользователю прямо из админки; текст ответа сохраняется в БД и помечается временем отправки;
 - восстановление ожидания оплаты после перезапуска бота: при старте поднимаются фоновые задачи для пользователей, оставшихся на экране S3, и оплата доводится до перехода на S4 без ручного подтверждения;
