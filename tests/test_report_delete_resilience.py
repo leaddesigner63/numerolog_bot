@@ -37,6 +37,17 @@ class ReportDeleteResilienceTests(unittest.TestCase):
 
         self.assertFalse(deleted)
 
+    def test_delete_report_with_assets_flushes_session_after_delete(self) -> None:
+        session = Mock()
+        report = Report(id=9)
+        report.pdf_storage_key = None
+
+        with patch.object(screens.pdf_service, "delete_pdf"):
+            deleted = screens._delete_report_with_assets(session, report)
+
+        self.assertTrue(deleted)
+        session.flush.assert_called_once_with()
+
     def test_delete_report_with_assets_clears_fulfilled_report_link_for_orders(self) -> None:
         engine = create_engine(
             "sqlite://",

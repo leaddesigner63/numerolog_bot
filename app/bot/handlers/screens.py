@@ -1043,6 +1043,7 @@ def _delete_report_with_assets(session, report: Report) -> bool:
                 linked_order.fulfilled_at = None
             session.add(linked_order)
         session.delete(report)
+        session.flush()
         return True
     except Exception as exc:
         logger.warning(
