@@ -1,7 +1,7 @@
 import unittest
 
 from app.core.pdf_service import PdfThemeRenderer
-from app.core.report_document import ReportDocumentBuilder
+from app.core.report_document import SUBSECTION_CONTRACT_PREFIX, ReportDocumentBuilder
 
 
 class ReportDocumentBuilderTests(unittest.TestCase):
@@ -76,6 +76,27 @@ class ReportDocumentBuilderTests(unittest.TestCase):
                 "Удали из головы одну ненужную заботу.",
             ],
         )
+
+    def test_marks_explicit_subsection_lines_with_contract_prefix(self) -> None:
+        builder = ReportDocumentBuilder()
+        doc = builder.build(
+            """Персональный аналитический отчёт
+
+Раздел:
+## Фокус: держи темп
+Обычный абзац.
+""",
+            tariff="T1",
+            meta={"id": "88"},
+        )
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        section = next((item for item in doc.sections if item.title == "Раздел"), None)
+        self.assertIsNotNone(section)
+        assert section is not None
+        self.assertEqual(section.paragraphs[0], f"{SUBSECTION_CONTRACT_PREFIX}Фокус: держи темп")
+        self.assertEqual(section.paragraphs[1], "Обычный абзац.")
 
     def test_keeps_bullets_inside_named_section_after_paragraphs(self) -> None:
         builder = ReportDocumentBuilder()
