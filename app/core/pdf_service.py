@@ -15,7 +15,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
 from app.core.config import settings
-from app.core.report_document import ReportDocument, report_document_builder
+from app.core.report_document import SUBSECTION_CONTRACT_PREFIX, ReportDocument, report_document_builder
 from app.core.tariff_labels import TARIFF_DISPLAY_TITLES, tariff_display_title
 from app.core.pdf_theme_config import PdfThemeAssetBundle, resolve_pdf_asset_bundle
 from app.core.pdf_themes import PdfTheme, resolve_pdf_theme
@@ -1279,6 +1279,27 @@ class PdfThemeRenderer:
         if not text:
             return "", ""
 
+        if text.startswith(SUBSECTION_CONTRACT_PREFIX):
+            payload = text[len(SUBSECTION_CONTRACT_PREFIX) :].strip()
+            if not payload:
+                return "", ""
+
+            title, separator, body = payload.partition(":")
+            label = title.strip()
+            if not label:
+                return "", payload
+
+            if separator:
+                return label, body.lstrip()
+            return label, ""
+
+        if not settings.pdf_subsection_fallback_heuristic_enabled:
+            return "", text
+
+        return self._extract_subsection_title_fallback(text)
+
+    def _extract_subsection_title_fallback(self, text: str) -> tuple[str, str]:
+        # Временная эвристика, сохранена для совместимости и выключена по умолчанию.
         marker_prefix = next(
             (marker for marker in _SUBSECTION_PREFIX_MARKERS if text.startswith(marker)),
             None,

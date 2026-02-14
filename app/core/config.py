@@ -77,6 +77,7 @@ class Settings(BaseSettings):
     pdf_font_regular_path: str | None = None
     pdf_font_bold_path: str | None = None
     pdf_font_accent_path: str | None = None
+    pdf_subsection_fallback_heuristic_enabled: bool = False
 
     monitoring_webhook_url: str | None = None
     admin_login: str | None = None

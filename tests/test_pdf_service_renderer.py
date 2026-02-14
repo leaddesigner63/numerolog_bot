@@ -6,7 +6,7 @@ from unittest import mock
 from app.core.config import settings
 from app.core.pdf_service import PdfService, PdfThemeRenderer
 from app.core.pdf_themes import resolve_pdf_theme
-from app.core.report_document import ReportAccentBlock, ReportDocument, ReportSection
+from app.core.report_document import SUBSECTION_CONTRACT_PREFIX, ReportAccentBlock, ReportDocument, ReportSection
 
 
 class _CanvasTextSpy:
@@ -424,7 +424,7 @@ class PdfServiceRendererTests(unittest.TestCase):
             sections=[
                 ReportSection(
                     title="Раздел",
-                    paragraphs=["## Подзаголовок: Абзац после двоеточия"],
+                    paragraphs=[f"{SUBSECTION_CONTRACT_PREFIX}Подзаголовок: Абзац после двоеточия"],
                 )
             ],
             disclaimer="",
@@ -483,8 +483,8 @@ class PdfServiceRendererTests(unittest.TestCase):
                 ReportSection(
                     title="Раздел",
                     paragraphs=[
-                        "Фокус: ",
-                        "## Приоритет: Действие на неделю",
+                        f"{SUBSECTION_CONTRACT_PREFIX}Фокус: ",
+                        f"{SUBSECTION_CONTRACT_PREFIX}Приоритет: Действие на неделю",
                         "",
                         "Итог: Следующий шаг без провалов",
                     ],
@@ -530,26 +530,28 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertEqual(title_no_sep, "")
         self.assertEqual(body_no_sep, "без двоеточия")
 
-    def test_extract_subsection_title_splits_whitelisted_label(self) -> None:
+    def test_extract_subsection_title_does_not_split_colon_without_contract_by_default(self) -> None:
         renderer = PdfThemeRenderer()
 
         title, body = renderer._extract_subsection_title("Фокус: уверенно держишь фокус")
 
-        self.assertEqual(title, "Фокус")
-        self.assertEqual(body, "уверенно держишь фокус")
+        self.assertEqual(title, "")
+        self.assertEqual(body, "Фокус: уверенно держишь фокус")
 
-    def test_extract_subsection_title_splits_explicit_marker_label(self) -> None:
+    def test_extract_subsection_title_splits_contract_label(self) -> None:
         renderer = PdfThemeRenderer()
 
-        title, body = renderer._extract_subsection_title("## Сильная сторона: уверенно держишь фокус")
+        title, body = renderer._extract_subsection_title(
+            f"{SUBSECTION_CONTRACT_PREFIX}Сильная сторона: уверенно держишь фокус"
+        )
 
         self.assertEqual(title, "Сильная сторона")
         self.assertEqual(body, "уверенно держишь фокус")
 
-    def test_extract_subsection_title_splits_explicit_marker_without_body(self) -> None:
+    def test_extract_subsection_title_splits_contract_without_body(self) -> None:
         renderer = PdfThemeRenderer()
 
-        title, body = renderer._extract_subsection_title("## Следующий шаг")
+        title, body = renderer._extract_subsection_title(f"{SUBSECTION_CONTRACT_PREFIX}Следующий шаг")
 
         self.assertEqual(title, "Следующий шаг")
         self.assertEqual(body, "")
@@ -597,10 +599,11 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertEqual(title, "")
         self.assertEqual(body, paragraph)
 
-    def test_extract_subsection_title_product_rule_why_it_matters(self) -> None:
+    def test_extract_subsection_title_product_rule_why_it_matters_fallback_flag(self) -> None:
         renderer = PdfThemeRenderer()
 
-        title, body = renderer._extract_subsection_title("Почему это важно: так ты удерживаешь вектор")
+        with mock.patch.object(settings, "pdf_subsection_fallback_heuristic_enabled", True):
+            title, body = renderer._extract_subsection_title("Почему это важно: так ты удерживаешь вектор")
 
         self.assertEqual(title, "Почему это важно")
         self.assertEqual(body, "так ты удерживаешь вектор")

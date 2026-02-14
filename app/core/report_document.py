@@ -9,6 +9,9 @@ from app.db.models import Tariff
 from app.core.tariff_labels import tariff_display_title
 
 
+SUBSECTION_CONTRACT_PREFIX = "[[subsection]] "
+
+
 @dataclass(slots=True)
 class ReportAccentBlock:
     title: str
@@ -118,7 +121,9 @@ class ReportDocumentBuilder:
             allow_key_findings = True
 
             for raw_line in non_empty[1:]:
-                is_title = self._is_title(raw_line)
+                stripped_raw = (raw_line or "").strip()
+                is_explicit_subsection_line = bool(current.title) and stripped_raw.startswith("##")
+                is_title = self._is_title(raw_line) and not is_explicit_subsection_line
                 if (
                     is_title
                     and current.title
@@ -142,7 +147,8 @@ class ReportDocumentBuilder:
                 if raw_line.lower().startswith("дисклеймер"):
                     continue
                 allow_key_findings = False
-                current.paragraphs.append(self._sanitize_line(raw_line))
+                sanitized_paragraph = self._sanitize_line(raw_line)
+                current.paragraphs.append(self._apply_subsection_contract(raw_line, sanitized_paragraph))
 
             if current.paragraphs or current.bullets or current.accent_blocks:
                 sections.append(current)
@@ -325,6 +331,17 @@ class ReportDocumentBuilder:
             tail = text[lowered.index("сервис не является") :]
             return " ".join(tail.splitlines())[:500]
         return self._DEFAULT_DISCLAIMER
+
+    def _apply_subsection_contract(self, raw_line: str, sanitized_line: str) -> str:
+        stripped = (raw_line or "").strip()
+        if not stripped.startswith("##"):
+            return sanitized_line
+
+        subsection_payload = self._sanitize_line(stripped.lstrip("#").strip())
+        if not subsection_payload:
+            return sanitized_line
+
+        return f"{SUBSECTION_CONTRACT_PREFIX}{subsection_payload}"
 
     def _decoration_depth(self, tariff: str) -> int:
         return {"T0": 0, "T1": 1, "T2": 2, "T3": 3}.get(tariff, 1)
