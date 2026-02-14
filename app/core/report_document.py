@@ -96,6 +96,10 @@ class ReportDocumentBuilder:
     _VERB_LIKE_WORD_RE = re.compile(
         r"(?i)(ться|тись|ешь|ете|ем|им|ут|ют|ешься|ется|ются|ится|ится|ал|ала|али|ило|или|ать|ять|ить|еть|уть|лся|лась|лись)$"
     )
+    _TIMELINE_LINE_RE = re.compile(
+        r"(?i)^\s*(?:недел(?:я|и|ю|е|ь)|месяц(?:а|ев)?|(?:1\s*[–-]\s*3|4\s*[–-]\s*6|7\s*[–-]\s*9|10\s*[–-]\s*12))\b"
+    )
+    _TIMELINE_HEADER_RE = re.compile(r"(?i)\(по\s+неделям\):$|\(помесячно\):$")
 
     def build(
         self,
@@ -194,6 +198,7 @@ class ReportDocumentBuilder:
     def _merge_multiline_paragraphs(self, lines: list[str]) -> list[str]:
         merged: list[str] = []
         paragraph_parts: list[str] = []
+        preserve_next_timeline_line = False
 
         def flush_paragraph() -> None:
             if paragraph_parts:
@@ -207,7 +212,18 @@ class ReportDocumentBuilder:
                 merged.append("")
                 continue
 
+            if preserve_next_timeline_line:
+                flush_paragraph()
+                merged.append(current)
+                preserve_next_timeline_line = False
+                continue
+
             next_line = (lines[index + 1] if index + 1 < len(lines) else "").strip()
+
+            if self._is_timeline_line(current):
+                flush_paragraph()
+                merged.append(current)
+                continue
 
             if (
                 self._is_explicit_title_marker(current)
@@ -217,6 +233,7 @@ class ReportDocumentBuilder:
             ):
                 flush_paragraph()
                 merged.append(current)
+                preserve_next_timeline_line = self._is_timeline_header(current)
                 continue
 
             if paragraph_parts and self._ends_with_sentence_break(paragraph_parts[-1]):
@@ -226,6 +243,12 @@ class ReportDocumentBuilder:
 
         flush_paragraph()
         return merged
+
+    def _is_timeline_line(self, line: str) -> bool:
+        return bool(self._TIMELINE_LINE_RE.match((line or "").strip()))
+
+    def _is_timeline_header(self, line: str) -> bool:
+        return bool(self._TIMELINE_HEADER_RE.search((line or "").strip()))
 
 
 

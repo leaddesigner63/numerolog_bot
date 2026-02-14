@@ -18,6 +18,27 @@ SECTION_WITH_PARAGRAPH_FIXTURE = """Персональный аналитиче�
 """
 
 
+TIMELINE_PLAN_LINES_FIXTURE = [
+    "План действий:",
+    "1 месяц (по неделям):",
+    "Неделя 1: замедлиться и убрать перегруз.",
+    "Неделя 2: закрепить комфортный ритм.",
+    "1 год (помесячно):",
+    "1–3: стабилизировать рабочий режим.",
+    "4–6: усилить концентрацию.",
+    "7–9: расширить круг задач.",
+    "10–12: закрепить устойчивый результат.",
+]
+
+TIMELINE_RANGE_HYPHEN_LINES_FIXTURE = [
+    "1 год (помесячно):",
+    "1-3: стабилизировать рабочий режим.",
+    "4-6: усилить концентрацию.",
+    "7-9: расширить круг задач.",
+    "10-12: закрепить устойчивый результат.",
+]
+
+
 @pytest.mark.parametrize(
     ("source", "expected_paragraph"),
     [
@@ -73,3 +94,51 @@ def test_build_splits_explicit_section_title_and_paragraph() -> None:
         "Сохраняй один приоритет на день и возвращайся к нему после пауз.",
     ]
     assert target_section.bullets == []
+
+
+def test_merge_multiline_paragraphs_keeps_timeline_plan_lines_separate() -> None:
+    builder = ReportDocumentBuilder()
+    merged = builder._merge_multiline_paragraphs(TIMELINE_PLAN_LINES_FIXTURE)
+
+    assert merged == TIMELINE_PLAN_LINES_FIXTURE
+
+
+def test_merge_multiline_paragraphs_still_merges_regular_narrative() -> None:
+    builder = ReportDocumentBuilder()
+    lines = [
+        "Иногда ритм сбивается,",
+        "и это нормально",
+        "когда нагрузка растёт.",
+    ]
+
+    merged = builder._merge_multiline_paragraphs(lines)
+
+    assert merged == ["Иногда ритм сбивается, и это нормально когда нагрузка растёт."]
+
+
+
+def test_merge_multiline_paragraphs_keeps_timeline_ranges_with_hyphen_separate() -> None:
+    builder = ReportDocumentBuilder()
+    merged = builder._merge_multiline_paragraphs(TIMELINE_RANGE_HYPHEN_LINES_FIXTURE)
+
+    assert merged == TIMELINE_RANGE_HYPHEN_LINES_FIXTURE
+
+
+def test_merge_multiline_paragraphs_preserves_timeline_line_after_blank_line() -> None:
+    builder = ReportDocumentBuilder()
+    lines = [
+        "1 месяц (по неделям):",
+        "",
+        "Неделя 1: снизить темп и перераспределить нагрузку.",
+        "Иногда полезно делать маленькие шаги,",
+        "чтобы возвращать контроль.",
+    ]
+
+    merged = builder._merge_multiline_paragraphs(lines)
+
+    assert merged == [
+        "1 месяц (по неделям):",
+        "",
+        "Неделя 1: снизить темп и перераспределить нагрузку.",
+        "Иногда полезно делать маленькие шаги, чтобы возвращать контроль.",
+    ]
