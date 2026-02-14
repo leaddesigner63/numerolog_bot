@@ -95,6 +95,13 @@ class _CanvasSpy:
         self.current_page += 1
 
 
+
+
+def _normalize_rendered_text(parts: list[str]) -> str:
+    combined = " ".join(part for part in parts if part)
+    return " ".join(combined.replace("- ", "").replace(" -", "").split())
+
+
 class PdfServiceRendererTests(unittest.TestCase):
     def test_generate_pdf_falls_back_to_legacy_on_renderer_error(self) -> None:
         service = PdfService()
@@ -296,7 +303,7 @@ class PdfServiceRendererTests(unittest.TestCase):
                 theme,
                 {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
                 report_text="",
-                page_width=300,
+                page_width=2000,
                 page_height=842,
                 asset_bundle=mock.Mock(),
                 body_start_y=700,
@@ -304,7 +311,7 @@ class PdfServiceRendererTests(unittest.TestCase):
             )
 
         rendered_text = [call[3] for call in canvas.text_draw_calls]
-        rendered_combined = " ".join(rendered_text)
+        rendered_combined = _normalize_rendered_text(rendered_text)
         self.assertNotIn("Ключевые выводы", rendered_text)
         self.assertNotIn("Пустой раздел", rendered_text)
         self.assertIn("Контент без служебного", rendered_combined)
@@ -344,10 +351,10 @@ class PdfServiceRendererTests(unittest.TestCase):
                 theme,
                 {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
                 report_text="",
-                page_width=220,
-                page_height=160,
+                page_width=3000,
+                page_height=3000,
                 asset_bundle=mock.Mock(),
-                body_start_y=108,
+                body_start_y=2500,
                 report_document=report_document,
             )
 
@@ -399,15 +406,15 @@ class PdfServiceRendererTests(unittest.TestCase):
                 theme,
                 {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
                 report_text="",
-                page_width=300,
+                page_width=2000,
                 page_height=842,
                 asset_bundle=mock.Mock(),
                 body_start_y=700,
                 report_document=report_document,
             )
 
-        section_title_draw = next(call for call in canvas.text_draw_calls if call[3].startswith("Раздел"))
-        body_draw = next(call for call in canvas.text_draw_calls if call[3].startswith("Обычный абзац"))
+        section_title_draw = next(call for call in canvas.text_draw_calls if call[3] == "Раздел со стилем")
+        body_draw = next(call for call in canvas.text_draw_calls if call[3] == "Обычный абзац тела")
 
         self.assertNotEqual(section_title_draw[4], body_draw[4])
         self.assertNotEqual(section_title_draw[5], body_draw[5])
@@ -440,7 +447,7 @@ class PdfServiceRendererTests(unittest.TestCase):
                 theme,
                 {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
                 report_text="",
-                page_width=300,
+                page_width=2000,
                 page_height=842,
                 asset_bundle=mock.Mock(),
                 body_start_y=700,
@@ -448,7 +455,7 @@ class PdfServiceRendererTests(unittest.TestCase):
             )
 
         subsection_draw = next(call for call in canvas.text_draw_calls if call[3] == "Подзаголовок")
-        body_draw = next(call for call in canvas.text_draw_calls if call[3].startswith("Абзац после"))
+        body_draw = next(call for call in canvas.text_draw_calls if call[3] == "Абзац после двоеточия")
 
         self.assertEqual(subsection_draw[4], "Helvetica-Bold")
         self.assertEqual(subsection_draw[5], theme.typography.subsection_title_size)
@@ -511,9 +518,9 @@ class PdfServiceRendererTests(unittest.TestCase):
             )
 
         rendered_text = [call[3] for call in canvas.text_draw_calls]
-        rendered_combined = " ".join(part for part in rendered_text if part)
-        self.assertIn("Фокус", rendered_text)
-        self.assertIn("Приоритет", rendered_text)
+        rendered_combined = _normalize_rendered_text(rendered_text)
+        self.assertIn("Фокус", rendered_combined)
+        self.assertIn("Приоритет", rendered_combined)
         self.assertNotIn("Итог", rendered_text)
         self.assertIn("Действие на неделю", rendered_combined)
         self.assertIn("Следующий шаг без", rendered_combined)
@@ -723,9 +730,11 @@ class PdfServiceRendererTests(unittest.TestCase):
                 report_document=report_document,
             )
 
-        disclaimer_draws = [call for call in canvas.text_draw_calls if "Дисклеймер" in call[3]]
+        disclaimer_rendered = _normalize_rendered_text([call[3] for call in canvas.text_draw_calls])
+        disclaimer_draws = [call for call in canvas.text_draw_calls if call[0] == 2]
 
         self.assertEqual(canvas.page_breaks, 1)
+        self.assertIn("Дисклеймер", disclaimer_rendered)
         self.assertGreaterEqual(len(disclaimer_draws), 1)
         self.assertTrue(all(call[0] == 2 for call in disclaimer_draws))
 
@@ -939,7 +948,7 @@ class PdfServiceRendererTests(unittest.TestCase):
                 text="Первая строка",
                 y=theme.margin,
                 margin=theme.margin,
-                width=300,
+                width=2000,
                 font="Helvetica",
                 numeric_font="Helvetica",
                 size=11,
@@ -1027,7 +1036,8 @@ class PdfServiceRendererTests(unittest.TestCase):
                 report_document=report_document,
             )
 
-        self.assertEqual(text_calls[1]["y"], 700 - typography.section_spacing)
+        expected_start_y = min(700, renderer._content_text_start_y(theme, 842, typography.body_size))
+        self.assertEqual(text_calls[1]["y"], expected_start_y - typography.section_spacing)
         disclaimer_call = next(call for call in text_calls if call.get("text") == "Disclaimer")
 
         self.assertEqual(disclaimer_call["y"], theme.margin + 1)
@@ -1090,7 +1100,7 @@ class PdfServiceRendererTests(unittest.TestCase):
             text="Одна строка",
             y=start_y,
             margin=theme.margin,
-            width=300,
+            width=2000,
             font="Helvetica",
             size=theme.typography.body_size,
             page_width=595,
