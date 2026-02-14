@@ -242,9 +242,10 @@ class PdfServiceRendererTests(unittest.TestCase):
             report_document=mock.Mock(title=long_title, subtitle="Тариф: T1"),
         )
 
-        self.assertEqual(len(canvas.draw_calls), 1)
-        self.assertEqual(canvas.draw_calls[0][2], "Тариф: T1")
-        self.assertGreater(body_start_y, 770)
+        self.assertEqual(len(canvas.draw_calls), 2)
+        self.assertEqual(canvas.draw_calls[0][2], "Тариф: T1 [T1]")
+        self.assertEqual(canvas.draw_calls[1][2], "Тариф: T1")
+        self.assertGreater(body_start_y, 740)
 
 
     def test_draw_header_uses_tariff_display_title_without_report_id_suffix(self) -> None:
@@ -266,7 +267,8 @@ class PdfServiceRendererTests(unittest.TestCase):
         rendered_text = " ".join(text for _, _, text in canvas.draw_calls)
         self.assertIn("Где твои деньги?", rendered_text)
         self.assertNotIn("Report #42", rendered_text)
-        self.assertNotIn("Тариф: T2", rendered_text)
+        self.assertIn("Тариф:", rendered_text)
+        self.assertIn("[T2]", rendered_text)
 
 
 
