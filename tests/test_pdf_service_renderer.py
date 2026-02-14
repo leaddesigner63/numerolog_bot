@@ -6,12 +6,31 @@ from unittest import mock
 from app.core.config import settings
 from app.core.pdf_service import PdfService, PdfThemeRenderer
 from app.core.pdf_themes import resolve_pdf_theme
+from app.core.report_document import ReportAccentBlock, ReportDocument, ReportSection
+
+
+class _CanvasTextSpy:
+    def __init__(self, x: float, y: float) -> None:
+        self.x = x
+        self.y = y
+        self.text = ""
+
+    def setFont(self, *_args, **_kwargs) -> None:  # noqa: N802
+        return None
+
+    def setCharSpace(self, *_args, **_kwargs) -> None:  # noqa: N802
+        return None
+
+    def textLine(self, text: str) -> None:  # noqa: N802
+        self.text = text
 
 
 class _CanvasSpy:
     def __init__(self) -> None:
         self.draw_calls: list[tuple[float, float, str]] = []
         self.page_breaks = 0
+        self.current_page = 1
+        self.text_draw_calls: list[tuple[int, float, float, str]] = []
 
     def saveState(self) -> None:  # noqa: N802
         return None
@@ -22,14 +41,36 @@ class _CanvasSpy:
     def setFillColor(self, *_args, **_kwargs) -> None:  # noqa: N802
         return None
 
+    def setFillColorRGB(self, *_args, **_kwargs) -> None:  # noqa: N802
+        return None
+
+    def setFillAlpha(self, *_args, **_kwargs) -> None:  # noqa: N802
+        return None
+
+    def setStrokeColor(self, *_args, **_kwargs) -> None:  # noqa: N802
+        return None
+
+    def setLineWidth(self, *_args, **_kwargs) -> None:  # noqa: N802
+        return None
+
+    def roundRect(self, *_args, **_kwargs) -> None:  # noqa: N802
+        return None
+
     def setFont(self, *_args, **_kwargs) -> None:  # noqa: N802
         return None
+
+    def beginText(self, x: float, y: float) -> _CanvasTextSpy:  # noqa: N802
+        return _CanvasTextSpy(x, y)
+
+    def drawText(self, text_object: _CanvasTextSpy) -> None:  # noqa: N802
+        self.text_draw_calls.append((self.current_page, text_object.x, text_object.y, text_object.text))
 
     def drawString(self, x: float, y: float, text: str) -> None:  # noqa: N802
         self.draw_calls.append((x, y, text))
 
     def showPage(self) -> None:  # noqa: N802
         self.page_breaks += 1
+        self.current_page += 1
 
 
 class PdfServiceRendererTests(unittest.TestCase):
@@ -183,6 +224,68 @@ class PdfServiceRendererTests(unittest.TestCase):
         rendered_title_lines = [text for _, _, text in canvas.draw_calls[:-1]]
         self.assertEqual("".join(rendered_title_lines).replace(" ", "").replace("-", ""), long_title.replace(" ", ""))
         self.assertLess(body_start_y, 760)
+
+
+    def test_draw_body_moves_section_and_accent_titles_with_first_content_line(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        canvas = _CanvasSpy()
+
+        report_document = ReportDocument(
+            title="Отчёт",
+            subtitle="Тариф: T1",
+            key_findings=["Короткий вывод"],
+            sections=[
+                ReportSection(
+                    title="Раздел переноса",
+                    paragraphs=["Первый абзац раздела, который должен идти сразу за заголовком."],
+                    accent_blocks=[
+                        ReportAccentBlock(
+                            title="Важный акцент",
+                            points=["Первый пункт акцента следует на той же странице."],
+                        )
+                    ],
+                )
+            ],
+            disclaimer="Дисклеймер",
+        )
+
+        with mock.patch.object(renderer, "_draw_background", return_value=None), mock.patch.object(
+            renderer,
+            "_draw_decorative_layers",
+            return_value=None,
+        ):
+            renderer._draw_body(
+                canvas,
+                theme,
+                {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                report_text="",
+                page_width=220,
+                page_height=160,
+                asset_bundle=mock.Mock(),
+                body_start_y=108,
+                report_document=report_document,
+            )
+
+        title_page = next(page for page, _x, _y, text in canvas.text_draw_calls if text.startswith("Раздел"))
+        paragraph_page = next(
+            page
+            for page, _x, _y, text in canvas.text_draw_calls
+            if text.startswith("Первый абзац")
+        )
+        accent_title_page = next(
+            page
+            for page, _x, _y, text in canvas.text_draw_calls
+            if text.startswith("Акцент: Важный")
+        )
+        accent_point_page = next(
+            page
+            for page, _x, _y, text in canvas.text_draw_calls
+            if text.startswith("– Первый")
+        )
+
+        self.assertEqual(title_page, paragraph_page)
+        self.assertEqual(accent_title_page, accent_point_page)
 
 
     def test_draw_decorative_layers_keeps_only_graphics_without_text_symbols(self) -> None:
