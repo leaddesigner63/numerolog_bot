@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from app.db.models import Tariff
-from app.core.tariff_labels import tariff_display_title
+from app.core.tariff_labels import tariff_report_title
 
 
 SUBSECTION_CONTRACT_PREFIX = "[[subsection]] "
@@ -114,7 +114,7 @@ class ReportDocumentBuilder:
 
             normalized_title = self._sanitize_line(non_empty[0])
             title = normalized_title[:140] if len(normalized_title) > 6 else self._DEFAULT_TITLE
-            subtitle = tariff_display_title(tariff_value, fallback=tariff_value)
+            subtitle = tariff_report_title(tariff_value, fallback=tariff_value)
 
             key_findings: list[str] = []
             sections: list[ReportSection] = []

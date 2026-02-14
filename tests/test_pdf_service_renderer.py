@@ -247,7 +247,7 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertGreater(body_start_y, 740)
 
 
-    def test_draw_header_uses_tariff_display_title_without_report_id_suffix(self) -> None:
+    def test_draw_header_uses_tariff_label_prefix_without_report_id_suffix(self) -> None:
         renderer = PdfThemeRenderer()
         theme = resolve_pdf_theme("T1")
         canvas = _CanvasSpy()
@@ -265,7 +265,7 @@ class PdfServiceRendererTests(unittest.TestCase):
 
         rendered_text = " ".join(text for _, _, text in canvas.draw_calls)
         normalized_rendered_text = " ".join(rendered_text.split())
-        self.assertIn("Где твои деньги?", normalized_rendered_text)
+        self.assertIn("Тариф: Где твои деньги?", normalized_rendered_text)
         self.assertNotIn("Report #42", rendered_text)
         self.assertNotIn("[T2]", rendered_text)
 

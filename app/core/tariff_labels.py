@@ -28,3 +28,10 @@ def tariff_display_title(tariff: str | None, fallback: str = "") -> str:
     if not tariff:
         return fallback
     return TARIFF_DISPLAY_TITLES.get(str(tariff), str(tariff))
+
+
+def tariff_report_title(tariff: str | None, fallback: str = "") -> str:
+    title = tariff_display_title(tariff, fallback=fallback)
+    if not title:
+        return fallback
+    return f"Тариф: {title}"
