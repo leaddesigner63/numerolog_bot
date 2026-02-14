@@ -148,6 +148,41 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertEqual("".join(rendered_title_lines).replace(" ", ""), long_title.replace(" ", ""))
         self.assertLess(body_start_y, 760)
 
+
+    def test_draw_decorative_layers_keeps_only_graphics_without_text_symbols(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        asset_bundle = mock.Mock(
+            overlay_main=Path("/tmp/overlay.png"),
+            overlay_fallback=Path("/tmp/overlay-fallback.png"),
+            icon_main=Path("/tmp/icon.png"),
+            icon_fallback=Path("/tmp/icon-fallback.png"),
+        )
+
+        draw_calls: list[str] = []
+        circles: list[tuple[float, float, float]] = []
+
+        canvas = mock.Mock()
+        canvas.drawString.side_effect = lambda _x, _y, text: draw_calls.append(text)
+        canvas.circle.side_effect = lambda x, y, r, **_kwargs: circles.append((x, y, r))
+
+        with mock.patch.object(renderer, "_try_draw_image_layer", return_value=True) as draw_layer:
+            renderer._draw_decorative_layers(
+                canvas,
+                theme,
+                page_width=595,
+                page_height=842,
+                randomizer=mock.Mock(
+                    uniform=mock.Mock(return_value=42.0),
+                    randint=mock.Mock(return_value=7),
+                ),
+                asset_bundle=asset_bundle,
+            )
+
+        self.assertEqual(draw_layer.call_count, 2)
+        self.assertEqual(len(circles), theme.splash_count)
+        self.assertEqual(draw_calls, [])
+
     def test_draw_cover_page_returns_false_when_cover_background_is_missing(self) -> None:
         renderer = PdfThemeRenderer()
         theme = resolve_pdf_theme("T1")

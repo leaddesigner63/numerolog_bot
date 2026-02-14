@@ -576,17 +576,8 @@ class PdfThemeRenderer:
             pdf.circle(x, y, r, stroke=0, fill=1)
         pdf.restoreState()
 
-        pdf.saveState()
-        pdf.setFillColor(theme.palette[2], alpha=0.22)
-        for _ in range(theme.stars_count):
-            x = randomizer.uniform(20, page_width - 20)
-            y = randomizer.uniform(20, page_height - 20)
-            pdf.drawString(x, y, "✦")
-        for _ in range(theme.number_symbols_count):
-            x = randomizer.uniform(20, page_width - 20)
-            y = randomizer.uniform(20, page_height - 20)
-            pdf.drawString(x, y, str(randomizer.randint(1, 9)))
-        pdf.restoreState()
+        # Text decorative layers (stars and random digits) intentionally removed
+        # to keep the background calmer while preserving image and splash circles.
 
     def _draw_header(
         self,

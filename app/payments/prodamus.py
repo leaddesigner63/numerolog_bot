@@ -140,10 +140,22 @@ class ProdamusProvider(PaymentProvider):
 
         signature_data = _find_signature(headers, payload)
         if not secret:
-            if not (allow_unsigned and _allow_unsigned_payload(payload=payload, headers=headers, settings=self._settings)):
-                logger.warning("prodamus_webhook_missing_secret", extra={"event_code": ProdamusMissingSecretError.event_code})
+            if allow_unsigned and _allow_unsigned_payload(payload=payload, headers=headers, settings=self._settings):
+                logger.warning(
+                    "prodamus_webhook_unsigned_fallback_accepted",
+                    extra={"event_code": "prodamus_webhook_unsigned_fallback_accepted"},
+                )
+            elif getattr(self._settings, "prodamus_form_url", None):
+                logger.warning(
+                    "prodamus_webhook_missing_secret",
+                    extra={"event_code": ProdamusMissingSecretError.event_code},
+                )
                 raise ProdamusMissingSecretError("Prodamus webhook secret is not configured")
-            logger.warning("prodamus_webhook_unsigned_fallback_accepted", extra={"event_code": "prodamus_webhook_unsigned_fallback_accepted"})
+            else:
+                logger.warning(
+                    "prodamus_webhook_missing_secret_accepted",
+                    extra={"event_code": "prodamus_webhook_missing_secret_accepted"},
+                )
         else:
             if signature_data:
                 if not _matches_signature(
@@ -153,14 +165,14 @@ class ProdamusProvider(PaymentProvider):
                     raw_body=raw_body,
                 ):
                     logger.warning("prodamus_webhook_signature_mismatch", extra={"event_code": ProdamusSignatureMismatchError.event_code})
-                    raise ProdamusSignatureMismatchError("Prodamus signature mismatch")
+                    raise ProdamusSignatureMismatchError("Invalid Prodamus signature")
             elif _matches_payload_secret(payload, secret):
                 pass
             elif allow_unsigned and _allow_unsigned_payload(payload=payload, headers=headers, settings=self._settings):
                 logger.warning("prodamus_webhook_unsigned_fallback_accepted", extra={"event_code": "prodamus_webhook_unsigned_fallback_accepted"})
             else:
                 logger.warning("prodamus_webhook_missing_signature", extra={"event_code": ProdamusMissingSignatureError.event_code})
-                raise ProdamusMissingSignatureError("Prodamus signature is missing")
+                raise ProdamusMissingSignatureError("Missing Prodamus signature")
 
         webhook = _extract_webhook(payload)
         return WebhookResult(
