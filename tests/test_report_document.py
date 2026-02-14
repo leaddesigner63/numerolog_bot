@@ -108,6 +108,25 @@ class ReportDocumentBuilderTests(unittest.TestCase):
             ],
         )
 
+
+    def test_build_uses_neutral_default_section_title(self) -> None:
+        builder = ReportDocumentBuilder()
+        doc = builder.build(
+            """Персональный аналитический отчёт
+
+Это первый абзац без именованных разделов.
+- И буллет в том же блоке.
+""",
+            tariff="T1",
+            meta={"id": "301"},
+        )
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        self.assertTrue(doc.sections)
+        self.assertEqual(doc.sections[0].title, "")
+        self.assertNotEqual(doc.sections[0].title, "Основные разделы")
+
     def test_filters_diagnostic_sections_and_bullets_without_breaking_render(self) -> None:
         builder = ReportDocumentBuilder()
         source = """Персональный аналитический отчёт

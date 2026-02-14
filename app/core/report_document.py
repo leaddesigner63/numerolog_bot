@@ -90,7 +90,7 @@ class ReportDocumentBuilder:
 
             key_findings: list[str] = []
             sections: list[ReportSection] = []
-            current = ReportSection(title="Основные разделы")
+            current = ReportSection(title="")
             allow_key_findings = True
 
             for raw_line in non_empty[1:]:

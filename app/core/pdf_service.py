@@ -663,38 +663,42 @@ class PdfThemeRenderer:
         bullet_hanging_indent = theme.typography.bullet_hanging_indent
         effective_width = max_width - 8 * report_document.decoration_depth
 
-        y = self._draw_section_title(
-            pdf,
-            text="Ключевые выводы",
-            y=y,
-            margin=margin,
-            width=effective_width,
-            page_width=page_width,
-            page_height=page_height,
-            theme=theme,
-            asset_bundle=asset_bundle,
-            font_map=font_map,
-        )
-        for finding in report_document.key_findings:
-            y = self._draw_bullet_item(
+        if report_document.key_findings:
+            y = self._draw_section_title(
                 pdf,
-                marker="•",
-                text=finding,
+                text="Ключевые выводы",
                 y=y,
                 margin=margin,
                 width=effective_width,
-                bullet_indent=bullet_indent,
-                bullet_hanging_indent=bullet_hanging_indent,
-                font=font_map["body"],
-                size=body_size,
                 page_width=page_width,
                 page_height=page_height,
                 theme=theme,
                 asset_bundle=asset_bundle,
+                font_map=font_map,
             )
-            y -= paragraph_gap
+            for finding in report_document.key_findings:
+                y = self._draw_bullet_item(
+                    pdf,
+                    marker="•",
+                    text=finding,
+                    y=y,
+                    margin=margin,
+                    width=effective_width,
+                    bullet_indent=bullet_indent,
+                    bullet_hanging_indent=bullet_hanging_indent,
+                    font=font_map["body"],
+                    size=body_size,
+                    page_width=page_width,
+                    page_height=page_height,
+                    theme=theme,
+                    asset_bundle=asset_bundle,
+                )
+                y -= paragraph_gap
 
         for section in report_document.sections:
+            if not self._has_renderable_section_content(section):
+                continue
+
             preview_text = ""
             preview_width = effective_width - paragraph_gap
             if section.paragraphs:
@@ -702,16 +706,26 @@ class PdfThemeRenderer:
             elif section.bullets:
                 preview_text = f"• {section.bullets[0]}"
                 preview_width = effective_width - bullet_indent
+            elif section.accent_blocks:
+                first_accent = section.accent_blocks[0]
+                preview_text = first_accent.points[0] if first_accent.points else first_accent.title
 
-            required_section_height = section_gap + self._minimum_block_height(
-                title=section.title,
-                title_font=self._section_title_font(font_map, theme),
-                title_size=theme.typography.section_title_size,
-                title_width=effective_width,
-                content=preview_text,
-                content_font=font_map["body"],
-                content_size=body_size,
-                content_width=preview_width,
+            section_title = (section.title or "").strip()
+            title_height = 0.0
+            if section_title:
+                title_height = self._text_block_height(
+                    text=section_title,
+                    font=self._section_title_font(font_map, theme),
+                    size=theme.typography.section_title_size,
+                    width=effective_width,
+                    theme=theme,
+                )
+
+            required_section_height = section_gap + title_height + self._text_block_height(
+                text=preview_text,
+                font=font_map["body"],
+                size=body_size,
+                width=preview_width,
                 theme=theme,
             )
             y = self._start_new_page_if_needed(
@@ -723,22 +737,23 @@ class PdfThemeRenderer:
                 theme=theme,
                 asset_bundle=asset_bundle,
                 content_font_size=body_size,
-                seed_text=section.title,
+                seed_text=section_title or preview_text,
             )
 
             y -= section_gap
-            y = self._draw_section_title(
-                pdf,
-                text=section.title,
-                y=y,
-                margin=margin,
-                width=effective_width,
-                page_width=page_width,
-                page_height=page_height,
-                theme=theme,
-                asset_bundle=asset_bundle,
-                font_map=font_map,
-            )
+            if section_title:
+                y = self._draw_section_title(
+                    pdf,
+                    text=section_title,
+                    y=y,
+                    margin=margin,
+                    width=effective_width,
+                    page_width=page_width,
+                    page_height=page_height,
+                    theme=theme,
+                    asset_bundle=asset_bundle,
+                    font_map=font_map,
+                )
             for paragraph in section.paragraphs:
                 y = self._draw_text_block(
                     pdf,
@@ -843,6 +858,17 @@ class PdfThemeRenderer:
             text_alpha=theme.typography.disclaimer_alpha,
             text_color_rgb=(0.99, 0.98, 0.96),
         )
+
+
+    def _has_renderable_section_content(self, section: Any) -> bool:
+        if getattr(section, "paragraphs", None):
+            return True
+        if getattr(section, "bullets", None):
+            return True
+        for accent in getattr(section, "accent_blocks", []):
+            if (getattr(accent, "title", "") or "").strip() or getattr(accent, "points", None):
+                return True
+        return False
 
     def _draw_bullet_item(
         self,
