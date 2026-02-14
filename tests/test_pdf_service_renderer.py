@@ -270,6 +270,46 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertNotIn("Тариф: T2", rendered_text)
 
 
+
+    def test_draw_body_skips_empty_sections_and_empty_key_findings_block(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        canvas = _CanvasSpy()
+        report_document = ReportDocument(
+            title="Отчёт",
+            subtitle="Тариф: T1",
+            key_findings=[],
+            sections=[
+                ReportSection(title="Пустой раздел"),
+                ReportSection(title="", paragraphs=["Контент без служебного заголовка."]),
+            ],
+            disclaimer="Дисклеймер",
+        )
+
+        with mock.patch.object(renderer, "_draw_content_surface", return_value=None), mock.patch.object(
+            renderer,
+            "_draw_background",
+            return_value=None,
+        ), mock.patch.object(renderer, "_draw_decorative_layers", return_value=None):
+            renderer._draw_body(
+                canvas,
+                theme,
+                {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                report_text="",
+                page_width=300,
+                page_height=842,
+                asset_bundle=mock.Mock(),
+                body_start_y=700,
+                report_document=report_document,
+            )
+
+        rendered_text = [call[3] for call in canvas.text_draw_calls]
+        rendered_combined = " ".join(rendered_text)
+        self.assertNotIn("Ключевые выводы", rendered_text)
+        self.assertNotIn("Пустой раздел", rendered_text)
+        self.assertIn("Контент без служебного", rendered_combined)
+        self.assertIn("заголовка.", rendered_combined)
+
     def test_draw_body_moves_section_and_accent_titles_with_first_content_line(self) -> None:
         renderer = PdfThemeRenderer()
         theme = resolve_pdf_theme("T1")
