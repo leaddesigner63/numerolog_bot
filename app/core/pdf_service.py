@@ -39,6 +39,13 @@ _ZERO_WIDTH_CHARS = {
     "\ufeff",  # ZERO WIDTH NO-BREAK SPACE
 }
 
+_COVER_TITLE_BY_TARIFF = {
+    "T0": "Твоё новое начало",
+    "T1": "В чём твоя сила?",
+    "T2": "Где твои деньги?",
+    "T3": "Твой путь к себе!",
+}
+
 
 def _register_font() -> dict[str, str]:
     global _FONT_FAMILY
@@ -453,34 +460,27 @@ class PdfThemeRenderer:
         if not cover_icon.exists():
             cover_icon = asset_bundle.icon_main
 
+        icon_size = 110
+        icon_x = (page_width - icon_size) / 2
+
         self._try_draw_image_layer(
             pdf,
             layer_type="cover_icon",
             primary=cover_icon,
             fallback=asset_bundle.icon_main,
-            x=(page_width - 80) / 2,
+            x=icon_x,
             y=page_height - 220,
-            width=80,
-            height=80,
+            width=icon_size,
+            height=icon_size,
         )
 
         margin = theme.margin
         title_size = min(theme.typography.title_size + 4, 28)
-        title = (report_document.title if report_document else "") or "Персональный аналитический отчёт"
-        subtitle = (report_document.subtitle if report_document else "") or f"Тариф: {tariff or 'N/A'}"
-        report_id = str(meta.get("id") or "")
-        if report_id:
-            subtitle = f"{subtitle} · Report #{report_id}"
+        tariff_key = str(tariff or "")
+        title = _COVER_TITLE_BY_TARIFF.get(tariff_key, "Персональный отчёт")
 
         max_width = page_width - (margin * 2)
         title_lines = self._split_text_into_visual_lines(title, font_map["title"], title_size, max_width)
-        subtitle_size = theme.typography.subtitle_size
-        subtitle_lines = self._split_text_into_visual_lines(
-            subtitle,
-            font_map["subtitle"],
-            subtitle_size,
-            max_width,
-        )
 
         y = page_height - 280
         pdf.saveState()
@@ -490,13 +490,6 @@ class PdfThemeRenderer:
             text_width = pdfmetrics.stringWidth(line, font_map["title"], title_size)
             pdf.drawString((page_width - text_width) / 2, y, line)
             y -= int(title_size * theme.typography.line_height_ratio)
-
-        y -= 8
-        pdf.setFont(font_map["subtitle"], subtitle_size)
-        for line in subtitle_lines:
-            text_width = pdfmetrics.stringWidth(line, font_map["subtitle"], subtitle_size)
-            pdf.drawString((page_width - text_width) / 2, y, line)
-            y -= int(subtitle_size * theme.typography.line_height_ratio)
         pdf.restoreState()
 
         pdf.showPage()
