@@ -230,6 +230,34 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         self.assertTrue(any(section.title == "Где твой ресурс?" for section in doc.sections))
         self.assertTrue(any(section.title == "С чего начать!" for section in doc.sections))
 
+    def test_short_standalone_subheadings_without_colon_become_section_titles(self) -> None:
+        builder = ReportDocumentBuilder()
+        source = """Персональный аналитический отчёт
+
+Вектор роста
+Сузь фокус до одной цели и отслеживай прогресс ежедневно.
+
+Точка опоры
+Верни стабильный ритм сна и отдыха.
+"""
+
+        doc = builder.build(source, tariff="T1", meta={"id": "205"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        growth_section = next((section for section in doc.sections if section.title == "Вектор роста"), None)
+        support_section = next((section for section in doc.sections if section.title == "Точка опоры"), None)
+        self.assertIsNotNone(growth_section)
+        self.assertIsNotNone(support_section)
+        assert growth_section is not None
+        assert support_section is not None
+
+        all_paragraphs = [paragraph for section in doc.sections for paragraph in section.paragraphs]
+        self.assertNotIn("Вектор роста", all_paragraphs)
+        self.assertNotIn("Точка опоры", all_paragraphs)
+        self.assertEqual(growth_section.paragraphs, ["Сузь фокус до одной цели и отслеживай прогресс ежедневно."])
+        self.assertEqual(support_section.paragraphs, ["Верни стабильный ритм сна и отдыха."])
+
     def test_does_not_treat_long_or_warning_sentences_as_titles(self) -> None:
         builder = ReportDocumentBuilder()
         source = """Персональный аналитический отчёт

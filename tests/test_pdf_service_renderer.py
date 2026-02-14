@@ -456,6 +456,69 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertEqual(body_draw[4], "Helvetica")
         self.assertEqual(body_draw[5], theme.typography.body_size)
 
+    def test_render_builds_pdf_with_subsection_typography_level(self) -> None:
+        renderer = PdfThemeRenderer()
+        source = """Персональный аналитический отчёт
+
+Вектор роста:
+Собери один измеримый шаг на ближайшие 7 дней.
+
+Следующий фокус:
+Сохраняй ритм и фиксируй результат в конце дня.
+"""
+
+        payload = renderer.render(source, tariff="T2", meta={"id": "501"})
+
+        self.assertTrue(payload.startswith(b"%PDF"))
+
+    def test_draw_body_handles_multiple_consecutive_subsection_titles_and_blank_lines(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        canvas = _CanvasSpy()
+        report_document = ReportDocument(
+            title="Отчёт",
+            subtitle="Тариф: T1",
+            key_findings=[],
+            sections=[
+                ReportSection(
+                    title="Раздел",
+                    paragraphs=[
+                        "Фокус: ",
+                        "Приоритет: Действие на неделю",
+                        "",
+                        "Итог: Следующий шаг без провалов",
+                    ],
+                )
+            ],
+            disclaimer="",
+        )
+
+        with mock.patch.object(renderer, "_draw_content_surface", return_value=None), mock.patch.object(
+            renderer,
+            "_draw_background",
+            return_value=None,
+        ), mock.patch.object(renderer, "_draw_decorative_layers", return_value=None):
+            renderer._draw_body(
+                canvas,
+                theme,
+                {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                report_text="",
+                page_width=300,
+                page_height=842,
+                asset_bundle=mock.Mock(),
+                body_start_y=700,
+                report_document=report_document,
+            )
+
+        rendered_text = [call[3] for call in canvas.text_draw_calls]
+        rendered_combined = " ".join(part for part in rendered_text if part)
+        self.assertIn("Фокус", rendered_text)
+        self.assertIn("Приоритет", rendered_text)
+        self.assertIn("Итог", rendered_text)
+        self.assertIn("Действие на неделю", rendered_combined)
+        self.assertIn("Следующий шаг без", rendered_combined)
+        self.assertIn("провалов", rendered_combined)
+
     def test_extract_subsection_title_keeps_raw_user_format(self) -> None:
         renderer = PdfThemeRenderer()
 
