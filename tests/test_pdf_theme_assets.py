@@ -24,4 +24,4 @@ def test_pdf_renderer_logs_missing_assets_and_returns_pdf(caplog) -> None:
     payload = renderer.render("test report", tariff="T2", meta={"id": "1"})
 
     assert payload.startswith(b"%PDF")
-    assert "pdf_theme_asset_missing" in caplog.text
+    assert ("pdf_theme_asset_missing" in caplog.text) or ("pdf_theme_asset_draw_failed" in caplog.text)

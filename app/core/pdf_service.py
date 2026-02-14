@@ -645,6 +645,7 @@ class PdfThemeRenderer:
         max_width = page_width - margin * 2
         y = body_start_y
         self._draw_content_surface(pdf, theme, page_width, page_height)
+        y = min(y, self._content_text_start_y(theme, page_height, body_size))
 
         if not report_document:
             y = self._draw_raw_text_block(
@@ -807,7 +808,7 @@ class PdfThemeRenderer:
                 self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
                 self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
                 self._draw_content_surface(pdf, theme, page_width, page_height)
-                y = page_height - theme.margin
+                y = self._content_text_start_y(theme, page_height, size)
             line_font = numeric_font if any(ch.isdigit() for ch in paragraph) else font
             pdf.setFillColorRGB(0.95, 0.94, 0.90, alpha=0.98)
             pdf.setFont(line_font, size)
@@ -933,7 +934,7 @@ class PdfThemeRenderer:
                 self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
                 self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
                 self._draw_content_surface(pdf, theme, page_width, page_height)
-                y = page_height - theme.margin
+                y = self._content_text_start_y(theme, page_height, size)
             line_font = font
             if font != _FONT_FALLBACK_NAME and any(ch.isdigit() for ch in line):
                 line_font = font
@@ -951,8 +952,7 @@ class PdfThemeRenderer:
         page_height: float,
     ) -> None:
         panel_margin = theme.margin - 8
-        panel_top_gap = 52
-        panel_height = page_height - (panel_margin * 2) - panel_top_gap
+        panel_height = self._content_panel_top(theme, page_height) - panel_margin
 
         pdf.saveState()
         pdf.setFillColorRGB(0.06, 0.08, 0.11)
@@ -1011,3 +1011,12 @@ class PdfThemeRenderer:
                     },
                 )
         return False
+    def _content_panel_top(self, theme: PdfTheme, page_height: float) -> float:
+        panel_margin = theme.margin - 8
+        panel_top_gap = 52
+        panel_height = page_height - (panel_margin * 2) - panel_top_gap
+        return panel_margin + max(panel_height, 120)
+
+    def _content_text_start_y(self, theme: PdfTheme, page_height: float, font_size: int) -> float:
+        panel_top = self._content_panel_top(theme, page_height)
+        return panel_top - max(int(font_size * 1.25), 14)
