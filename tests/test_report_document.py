@@ -154,6 +154,21 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         payload = renderer.render(source, tariff="T1", meta={"id": "100"}, report_document=doc)
         self.assertTrue(payload.startswith(b"%PDF"))
 
+    def test_filters_standalone_service_line_from_key_findings(self) -> None:
+        builder = ReportDocumentBuilder()
+        source = """Твой путь к себе!
+
+- Проверка данных
+- Главный вывод для пользователя.
+"""
+
+        doc = builder.build(source, tariff="T3", meta={"id": "301"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        self.assertTrue(all("проверка данных" not in point.lower() for point in doc.key_findings))
+        self.assertIn("Главный вывод для пользователя.", doc.key_findings)
+
     def test_removes_pdf_promo_phrases_from_findings_and_sections(self) -> None:
         builder = ReportDocumentBuilder()
         source = """Персональный аналитический отчёт
