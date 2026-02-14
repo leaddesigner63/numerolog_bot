@@ -686,12 +686,15 @@ class PdfThemeRenderer:
             asset_bundle=asset_bundle,
         )
         for finding in report_document.key_findings:
-            y = self._draw_text_block(
+            y = self._draw_bullet_item(
                 pdf,
-                text=f"• {finding}",
+                marker="•",
+                text=finding,
                 y=y,
-                margin=margin + 8,
-                width=effective_width - 8,
+                margin=margin,
+                width=effective_width,
+                bullet_indent=bullet_indent,
+                bullet_hanging_indent=bullet_hanging_indent,
                 font=font_map["body"],
                 size=body_size,
                 page_width=page_width,
@@ -762,12 +765,15 @@ class PdfThemeRenderer:
                     asset_bundle=asset_bundle,
                 )
             for bullet in section.bullets:
-                y = self._draw_text_block(
+                y = self._draw_bullet_item(
                     pdf,
-                    text=f"• {bullet}",
+                    marker="•",
+                    text=bullet,
                     y=y,
-                    margin=margin + bullet_indent,
-                    width=effective_width - bullet_indent,
+                    margin=margin,
+                    width=effective_width,
+                    bullet_indent=bullet_indent,
+                    bullet_hanging_indent=bullet_hanging_indent,
                     font=font_map["body"],
                     size=body_size,
                     page_width=page_width,
@@ -813,12 +819,15 @@ class PdfThemeRenderer:
                     asset_bundle=asset_bundle,
                 )
                 for point in accent.points:
-                    y = self._draw_text_block(
+                    y = self._draw_bullet_item(
                         pdf,
-                        text=f"– {point}",
+                        marker="–",
+                        text=point,
                         y=y,
-                        margin=margin + bullet_hanging_indent,
-                        width=effective_width - bullet_hanging_indent,
+                        margin=margin,
+                        width=effective_width,
+                        bullet_indent=bullet_hanging_indent,
+                        bullet_hanging_indent=bullet_hanging_indent,
                         font=font_map["body"],
                         size=body_size,
                         page_width=page_width,
@@ -841,6 +850,52 @@ class PdfThemeRenderer:
             theme=theme,
             asset_bundle=asset_bundle,
         )
+
+    def _draw_bullet_item(
+        self,
+        pdf: canvas.Canvas,
+        *,
+        marker: str,
+        text: str,
+        y: float,
+        margin: float,
+        width: float,
+        bullet_indent: float,
+        bullet_hanging_indent: float,
+        font: str,
+        size: int,
+        page_width: float,
+        page_height: float,
+        theme: PdfTheme,
+        asset_bundle: PdfThemeAssetBundle,
+    ) -> float:
+        line_height = int(size * theme.typography.line_height_ratio)
+        first_line_width = max(width - bullet_indent, 1)
+        hanging_width = max(width - bullet_hanging_indent, 1)
+        lines = self._split_text_into_visual_lines(text or "", font, size, first_line_width)
+        first_line = lines[0] if lines else ""
+        continuation_lines: list[str] = []
+        for line in lines[1:]:
+            continuation_lines.extend(self._split_text_into_visual_lines(line, font, size, hanging_width))
+
+        all_lines = [first_line, *continuation_lines]
+        for line_index, line in enumerate(all_lines):
+            if y <= theme.margin:
+                pdf.showPage()
+                page_randomizer = random.Random(line)
+                self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+                self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+                self._draw_content_surface(pdf, theme, page_width, page_height)
+                y = self._content_text_start_y(theme, page_height, size)
+            pdf.setFillColorRGB(0.95, 0.94, 0.90, alpha=0.98)
+            pdf.setFont(font, size)
+            if line_index == 0:
+                pdf.drawString(margin, y, marker)
+                pdf.drawString(margin + bullet_indent, y, line)
+            else:
+                pdf.drawString(margin + bullet_hanging_indent, y, line)
+            y -= line_height
+        return y - theme.typography.paragraph_spacing
 
     def _draw_raw_text_block(
         self,
