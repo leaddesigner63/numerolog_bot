@@ -49,6 +49,21 @@ class ReportDocumentBuilder:
     _BR_TAG_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
     _HTML_TAG_RE = re.compile(r"</?[A-Za-z][^>\n]*>")
     _DANGLING_HTML_TAG_RE = re.compile(r"</?[A-Za-z][A-Za-z0-9:_-]*")
+    _SERVICE_SECTION_TITLES = {
+        "проверка данных",
+        "техническая проверка",
+        "валидация",
+        "валидация данных",
+        "диагностика",
+        "диагностика парсинга",
+    }
+    _SERVICE_BULLET_PATTERNS = (
+        re.compile(r"\bне распознан[аоы]?\b", re.IGNORECASE),
+        re.compile(r"\bне полностью заполнен[аоы]?\b", re.IGNORECASE),
+        re.compile(r"\bошибк[аи]\s+парсинг[а-я]*\b", re.IGNORECASE),
+        re.compile(r"\bне удалось распознать\b", re.IGNORECASE),
+        re.compile(r"\bданные отсутствуют\b", re.IGNORECASE),
+    )
 
     def build(
         self,
@@ -94,6 +109,8 @@ class ReportDocumentBuilder:
 
             if current.paragraphs or current.bullets or current.accent_blocks:
                 sections.append(current)
+
+            sections, key_findings = self._filter_service_content(sections, key_findings)
 
             if not key_findings:
                 key_findings = [
@@ -204,6 +221,38 @@ class ReportDocumentBuilder:
                 ],
             )
         )
+
+    def _filter_service_content(
+        self,
+        sections: list[ReportSection],
+        key_findings: list[str],
+    ) -> tuple[list[ReportSection], list[str]]:
+        filtered_sections: list[ReportSection] = []
+        for section in sections:
+            if self._is_service_section_title(section.title):
+                continue
+            bullets = [bullet for bullet in section.bullets if not self._is_service_bullet(bullet)]
+            paragraphs = [paragraph for paragraph in section.paragraphs if not self._is_service_bullet(paragraph)]
+            if bullets or paragraphs or section.accent_blocks:
+                filtered_sections.append(
+                    ReportSection(
+                        title=section.title,
+                        bullets=bullets,
+                        paragraphs=paragraphs,
+                        accent_blocks=section.accent_blocks,
+                    )
+                )
+
+        filtered_findings = [point for point in key_findings if not self._is_service_bullet(point)]
+        return filtered_sections, filtered_findings
+
+    def _is_service_section_title(self, title: str) -> bool:
+        normalized = " ".join((title or "").lower().replace("ё", "е").split()).rstrip(":")
+        return normalized in self._SERVICE_SECTION_TITLES
+
+    def _is_service_bullet(self, text: str) -> bool:
+        normalized = " ".join((text or "").lower().replace("ё", "е").split())
+        return any(pattern.search(normalized) for pattern in self._SERVICE_BULLET_PATTERNS)
 
 
 report_document_builder = ReportDocumentBuilder()
