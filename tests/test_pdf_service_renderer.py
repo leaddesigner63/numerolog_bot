@@ -222,7 +222,7 @@ class PdfServiceRendererTests(unittest.TestCase):
 
         self.assertEqual(lines, ["Первая строка", "", "Третья строка"])
 
-    def test_draw_header_wraps_long_title_without_dropping_text(self) -> None:
+    def test_draw_header_draws_only_subtitle_when_report_document_passed(self) -> None:
         renderer = PdfThemeRenderer()
         theme = resolve_pdf_theme("T1")
         canvas = _CanvasSpy()
@@ -242,10 +242,9 @@ class PdfServiceRendererTests(unittest.TestCase):
             report_document=mock.Mock(title=long_title, subtitle="Тариф: T1"),
         )
 
-        self.assertGreaterEqual(len(canvas.draw_calls), 3)
-        rendered_title_lines = [text for _, _, text in canvas.draw_calls[:-1]]
-        self.assertEqual("".join(rendered_title_lines).replace(" ", "").replace("-", ""), long_title.replace(" ", ""))
-        self.assertLess(body_start_y, 760)
+        self.assertEqual(len(canvas.draw_calls), 1)
+        self.assertEqual(canvas.draw_calls[0][2], "Тариф: T1")
+        self.assertGreater(body_start_y, 770)
 
 
     def test_draw_header_uses_tariff_display_title_without_report_id_suffix(self) -> None:
@@ -753,15 +752,15 @@ class PdfServiceRendererTests(unittest.TestCase):
                 report_document=report_document,
             )
 
-        self.assertEqual(text_calls[1]["y"], 700 - typography.paragraph_spacing - typography.section_spacing)
-        self.assertEqual(text_calls[4]["y"], text_calls[3]["y"] - typography.section_spacing * 2)
-        self.assertEqual(text_calls[2]["margin"], theme.margin + typography.paragraph_spacing)
-        self.assertEqual(text_calls[2]["width"], 595 - theme.margin * 2 - typography.paragraph_spacing)
+        self.assertEqual(text_calls[1]["y"], 700 - typography.section_spacing)
+        self.assertEqual(text_calls[3]["y"], text_calls[2]["y"] - typography.section_spacing * 2)
+        self.assertEqual(text_calls[1]["margin"], theme.margin + typography.paragraph_spacing)
+        self.assertEqual(text_calls[1]["width"], 595 - theme.margin * 2 - typography.paragraph_spacing)
         self.assertEqual(bullet_calls[0]["margin"], theme.margin)
         self.assertEqual(bullet_calls[0]["width"], 595 - theme.margin * 2)
         self.assertEqual(bullet_calls[0]["bullet_indent"], typography.bullet_indent)
         self.assertEqual(bullet_calls[1]["bullet_hanging_indent"], typography.bullet_hanging_indent)
-        self.assertEqual(bullet_calls[2]["bullet_indent"], typography.bullet_hanging_indent)
+        self.assertEqual(bullet_calls[1]["bullet_indent"], typography.bullet_hanging_indent)
 
     def test_draw_bullet_item_draws_marker_and_wrapped_lines_with_expected_offsets(self) -> None:
         renderer = PdfThemeRenderer()
