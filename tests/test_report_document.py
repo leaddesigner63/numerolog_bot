@@ -23,7 +23,7 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         builder = ReportDocumentBuilder()
         self.assertIsNone(builder.build("\n\n", tariff="T1"))
 
-    def test_build_uses_tariff_display_title_without_report_id(self) -> None:
+    def test_build_uses_tariff_label_prefix_without_report_id(self) -> None:
         builder = ReportDocumentBuilder()
         doc = builder.build(
             """Персональный аналитический отчёт
@@ -36,7 +36,7 @@ class ReportDocumentBuilderTests(unittest.TestCase):
 
         self.assertIsNotNone(doc)
         assert doc is not None
-        self.assertEqual(doc.subtitle, "Где твои деньги?")
+        self.assertEqual(doc.subtitle, "Тариф: Где твои деньги?")
         self.assertNotIn("Report #", doc.subtitle)
         self.assertNotIn("Тариф: T2", doc.subtitle)
 

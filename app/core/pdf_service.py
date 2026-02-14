@@ -16,7 +16,7 @@ from reportlab.pdfgen import canvas
 
 from app.core.config import settings
 from app.core.report_document import SUBSECTION_CONTRACT_PREFIX, ReportDocument, report_document_builder
-from app.core.tariff_labels import TARIFF_DISPLAY_TITLES, tariff_display_title
+from app.core.tariff_labels import TARIFF_DISPLAY_TITLES, tariff_report_title
 from app.core.pdf_theme_config import PdfThemeAssetBundle, resolve_pdf_asset_bundle
 from app.core.pdf_themes import PdfTheme, resolve_pdf_theme
 
@@ -604,7 +604,7 @@ class PdfThemeRenderer:
 
         report_tariff = getattr(report_document, "tariff", "") if report_document else ""
         resolved_tariff = report_tariff if isinstance(report_tariff, str) and report_tariff else str(tariff or "")
-        subtitle = (report_document.subtitle if report_document else "") or tariff_display_title(resolved_tariff, fallback="Тариф не указан")
+        subtitle = (report_document.subtitle if report_document else "") or tariff_report_title(resolved_tariff, fallback="Тариф не указан")
         subtitle_lines = self._split_text_into_visual_lines(
             subtitle,
             font_map["subtitle"],
