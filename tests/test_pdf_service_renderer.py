@@ -28,6 +28,7 @@ class _CanvasTextSpy:
 class _CanvasSpy:
     def __init__(self) -> None:
         self.draw_calls: list[tuple[float, float, str]] = []
+        self.draw_calls_with_page: list[tuple[int, float, float, str]] = []
         self.page_breaks = 0
         self.current_page = 1
         self.text_draw_calls: list[tuple[int, float, float, str]] = []
@@ -67,6 +68,7 @@ class _CanvasSpy:
 
     def drawString(self, x: float, y: float, text: str) -> None:  # noqa: N802
         self.draw_calls.append((x, y, text))
+        self.draw_calls_with_page.append((self.current_page, x, y, text))
 
     def showPage(self) -> None:  # noqa: N802
         self.page_breaks += 1
@@ -280,8 +282,8 @@ class PdfServiceRendererTests(unittest.TestCase):
         )
         accent_point_page = next(
             page
-            for page, _x, _y, text in canvas.text_draw_calls
-            if text.startswith("– Первый")
+            for page, _x, _y, text in canvas.draw_calls_with_page
+            if text.startswith("Первый пункт")
         )
 
         self.assertEqual(title_page, paragraph_page)
@@ -557,17 +559,22 @@ class PdfServiceRendererTests(unittest.TestCase):
             disclaimer="Disclaimer",
         )
 
-        calls: list[dict[str, float | str]] = []
+        text_calls: list[dict[str, float | str]] = []
+        bullet_calls: list[dict[str, float | str]] = []
 
         def fake_draw_text_block(_pdf, **kwargs):
-            calls.append(kwargs)
+            text_calls.append(kwargs)
+            return kwargs["y"]
+
+        def fake_draw_bullet_item(_pdf, **kwargs):
+            bullet_calls.append(kwargs)
             return kwargs["y"]
 
         with mock.patch.object(renderer, "_draw_content_surface"), mock.patch.object(
             renderer,
             "_draw_text_block",
             side_effect=fake_draw_text_block,
-        ):
+        ), mock.patch.object(renderer, "_draw_bullet_item", side_effect=fake_draw_bullet_item):
             renderer._draw_body(
                 pdf,
                 theme,
@@ -580,14 +587,53 @@ class PdfServiceRendererTests(unittest.TestCase):
                 report_document=report_document,
             )
 
-        self.assertEqual(calls[2]["y"], 700 - typography.paragraph_spacing - typography.section_spacing)
-        self.assertEqual(calls[7]["y"], calls[6]["y"] - typography.section_spacing)
-        self.assertEqual(calls[3]["margin"], theme.margin + typography.paragraph_spacing)
-        self.assertEqual(calls[3]["width"], 595 - theme.margin * 2 - typography.paragraph_spacing)
-        self.assertEqual(calls[4]["margin"], theme.margin + typography.bullet_indent)
-        self.assertEqual(calls[4]["width"], 595 - theme.margin * 2 - typography.bullet_indent)
-        self.assertEqual(calls[6]["margin"], theme.margin + typography.bullet_hanging_indent)
-        self.assertEqual(calls[6]["width"], 595 - theme.margin * 2 - typography.bullet_hanging_indent)
+        self.assertEqual(text_calls[1]["y"], 700 - typography.paragraph_spacing - typography.section_spacing)
+        self.assertEqual(text_calls[4]["y"], text_calls[3]["y"] - typography.section_spacing)
+        self.assertEqual(text_calls[2]["margin"], theme.margin + typography.paragraph_spacing)
+        self.assertEqual(text_calls[2]["width"], 595 - theme.margin * 2 - typography.paragraph_spacing)
+        self.assertEqual(bullet_calls[0]["margin"], theme.margin)
+        self.assertEqual(bullet_calls[0]["width"], 595 - theme.margin * 2)
+        self.assertEqual(bullet_calls[0]["bullet_indent"], typography.bullet_indent)
+        self.assertEqual(bullet_calls[1]["bullet_hanging_indent"], typography.bullet_hanging_indent)
+        self.assertEqual(bullet_calls[2]["bullet_indent"], typography.bullet_hanging_indent)
+
+    def test_draw_bullet_item_draws_marker_and_wrapped_lines_with_expected_offsets(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        canvas = _CanvasSpy()
+
+        with mock.patch.object(
+            renderer,
+            "_split_text_into_visual_lines",
+            side_effect=[["Первая строка", "Перенос"], ["Перенос"]],
+        ):
+            renderer._draw_bullet_item(
+                canvas,
+                marker="•",
+                text="Текст пункта",
+                y=500,
+                margin=theme.margin,
+                width=300,
+                bullet_indent=theme.typography.bullet_indent,
+                bullet_hanging_indent=theme.typography.bullet_hanging_indent,
+                font="Helvetica",
+                size=theme.typography.body_size,
+                page_width=595,
+                page_height=842,
+                theme=theme,
+                asset_bundle=mock.Mock(),
+            )
+
+        first_marker_x, _first_marker_y, marker_text = canvas.draw_calls[0]
+        first_text_x, _first_text_y, first_text = canvas.draw_calls[1]
+        wrapped_text_x, _wrapped_text_y, wrapped_text = canvas.draw_calls[2]
+
+        self.assertEqual(marker_text, "•")
+        self.assertEqual(first_text, "Первая строка")
+        self.assertEqual(wrapped_text, "Перенос")
+        self.assertEqual(first_marker_x, theme.margin)
+        self.assertEqual(first_text_x, theme.margin + theme.typography.bullet_indent)
+        self.assertEqual(wrapped_text_x, theme.margin + theme.typography.bullet_hanging_indent)
 
     def test_draw_text_block_uses_theme_paragraph_spacing_for_return_value(self) -> None:
         renderer = PdfThemeRenderer()
