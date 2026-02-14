@@ -100,6 +100,47 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         self.assertEqual(section.paragraphs[0], f"{SUBSECTION_CONTRACT_PREFIX}Фокус: держи темп")
         self.assertEqual(section.paragraphs[1], "Обычный абзац.")
 
+    def test_build_preserves_timeline_lines_with_mixed_dashes(self) -> None:
+        builder = ReportDocumentBuilder()
+        source = """Персональный аналитический отчёт
+
+План действий:
+1 месяц (по неделям):
+Неделя 1: навести порядок в режиме.
+
+1 год (помесячно):
+1-3: стабилизировать рабочий режим.
+4–6: усилить концентрацию.
+7-9: расширить круг задач.
+10–12: закрепить устойчивый результат.
+
+Следующий шаг,
+который поможет удерживать темп.
+"""
+
+        doc = builder.build(source, tariff="T1", meta={"id": "timeline-integration"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        week_section = next((section for section in doc.sections if section.title == "1 месяц (по неделям)"), None)
+        self.assertIsNotNone(week_section)
+        assert week_section is not None
+        self.assertEqual(week_section.paragraphs, ["Неделя 1: навести порядок в режиме."])
+
+        month_section = next((section for section in doc.sections if section.title == "1 год (помесячно)"), None)
+        self.assertIsNotNone(month_section)
+        assert month_section is not None
+        self.assertEqual(
+            month_section.paragraphs,
+            [
+                "1-3: стабилизировать рабочий режим.",
+                "4–6: усилить концентрацию.",
+                "7-9: расширить круг задач.",
+                "10–12: закрепить устойчивый результат.",
+                "Следующий шаг, который поможет удерживать темп.",
+            ],
+        )
+
     def test_t3_fallback_plan_subsections_are_converted_to_contract_prefix(self) -> None:
         builder = ReportDocumentBuilder()
         fallback_text = ReportService()._build_fallback_report({"selected_tariff": "T3"})
