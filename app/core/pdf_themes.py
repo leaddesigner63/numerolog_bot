@@ -11,17 +11,22 @@ class PdfTypography:
     title_size: int
     subtitle_size: int
     section_title_size: int
+    subsection_title_size: int
     body_size: int
     line_height_ratio: float
     section_title_line_height_ratio: float
+    subsection_title_line_height_ratio: float
     letter_spacing_title: float
     letter_spacing_body: float
     title_color_rgb: tuple[float, float, float]
     subtitle_color_rgb: tuple[float, float, float]
     section_title_color_rgb: tuple[float, float, float]
+    subsection_title_color_rgb: tuple[float, float, float]
     body_color_rgb: tuple[float, float, float]
     section_title_font_role: str
     paragraph_spacing: int
+    subsection_spacing_before: int
+    subsection_spacing_after: int
     section_spacing: int
     bullet_indent: int
     bullet_hanging_indent: int
@@ -56,17 +61,22 @@ _DEFAULT_THEME = PdfTheme(
         title_size=17,
         subtitle_size=15,
         section_title_size=19,
+        subsection_title_size=14,
         body_size=11,
         line_height_ratio=1.45,
         section_title_line_height_ratio=1.4,
+        subsection_title_line_height_ratio=1.3,
         letter_spacing_title=0.2,
         letter_spacing_body=0.0,
         title_color_rgb=(0.99, 0.98, 0.96),
         subtitle_color_rgb=(1.0, 0.84, 0.66),
         section_title_color_rgb=(1.0, 0.86, 0.62),
+        subsection_title_color_rgb=(0.98, 0.89, 0.70),
         body_color_rgb=(0.95, 0.94, 0.90),
         section_title_font_role="subtitle",
         paragraph_spacing=4,
+        subsection_spacing_before=7,
+        subsection_spacing_after=4,
         section_spacing=15,
         bullet_indent=10,
         bullet_hanging_indent=18,
@@ -90,17 +100,22 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             title_size=16,
             subtitle_size=14,
             section_title_size=18,
+            subsection_title_size=13,
             body_size=10,
             line_height_ratio=1.4,
             section_title_line_height_ratio=1.35,
+            subsection_title_line_height_ratio=1.28,
             letter_spacing_title=0.0,
             letter_spacing_body=0.0,
             title_color_rgb=(0.99, 0.98, 0.96),
             subtitle_color_rgb=(0.74, 0.88, 1.0),
             section_title_color_rgb=(0.72, 0.90, 1.0),
+            subsection_title_color_rgb=(0.78, 0.93, 1.0),
             body_color_rgb=(0.95, 0.94, 0.90),
             section_title_font_role="subtitle",
             paragraph_spacing=3,
+            subsection_spacing_before=6,
+            subsection_spacing_after=3,
             section_spacing=14,
             bullet_indent=8,
             bullet_hanging_indent=14,
@@ -122,17 +137,22 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             title_size=18,
             subtitle_size=16,
             section_title_size=20,
+            subsection_title_size=15,
             body_size=11,
             line_height_ratio=1.45,
             section_title_line_height_ratio=1.35,
+            subsection_title_line_height_ratio=1.3,
             letter_spacing_title=0.15,
             letter_spacing_body=0.0,
             title_color_rgb=(0.99, 0.98, 0.96),
             subtitle_color_rgb=(0.90, 0.82, 1.0),
             section_title_color_rgb=(0.92, 0.82, 1.0),
+            subsection_title_color_rgb=(0.94, 0.86, 1.0),
             body_color_rgb=(0.95, 0.94, 0.90),
             section_title_font_role="subtitle",
             paragraph_spacing=4,
+            subsection_spacing_before=7,
+            subsection_spacing_after=4,
             section_spacing=16,
             bullet_indent=10,
             bullet_hanging_indent=18,
@@ -154,17 +174,22 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             title_size=19,
             subtitle_size=17,
             section_title_size=21,
+            subsection_title_size=16,
             body_size=11,
             line_height_ratio=1.5,
             section_title_line_height_ratio=1.4,
+            subsection_title_line_height_ratio=1.33,
             letter_spacing_title=0.2,
             letter_spacing_body=0.05,
             title_color_rgb=(0.99, 0.98, 0.96),
             subtitle_color_rgb=(1.0, 0.86, 0.70),
             section_title_color_rgb=(1.0, 0.86, 0.62),
+            subsection_title_color_rgb=(1.0, 0.89, 0.72),
             body_color_rgb=(0.95, 0.94, 0.90),
             section_title_font_role="subtitle",
             paragraph_spacing=5,
+            subsection_spacing_before=8,
+            subsection_spacing_after=5,
             section_spacing=18,
             bullet_indent=11,
             bullet_hanging_indent=20,
@@ -186,17 +211,22 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             title_size=20,
             subtitle_size=18,
             section_title_size=22,
+            subsection_title_size=17,
             body_size=12,
             line_height_ratio=1.55,
             section_title_line_height_ratio=1.45,
+            subsection_title_line_height_ratio=1.35,
             letter_spacing_title=0.3,
             letter_spacing_body=0.1,
             title_color_rgb=(0.99, 0.98, 0.96),
             subtitle_color_rgb=(1.0, 0.82, 0.45),
             section_title_color_rgb=(1.0, 0.82, 0.48),
+            subsection_title_color_rgb=(1.0, 0.88, 0.62),
             body_color_rgb=(0.95, 0.94, 0.90),
             section_title_font_role="subtitle",
             paragraph_spacing=6,
+            subsection_spacing_before=9,
+            subsection_spacing_after=5,
             section_spacing=20,
             bullet_indent=12,
             bullet_hanging_indent=22,
