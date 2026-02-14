@@ -10,9 +10,21 @@ TARIFF_BUTTON_TITLES: Final[dict[str, str]] = {
     "T3": "Твой путь к себе!",
 }
 
+TARIFF_DISPLAY_TITLES: Final[dict[str, str]] = {
+    "T0": "Твоё новое начало",
+    "T1": "В чём твоя сила?",
+    "T2": "Где твои деньги?",
+    "T3": "Твой путь к себе!",
+}
+
 
 def tariff_button_title(tariff: str | None, fallback: str = "") -> str:
     if not tariff:
         return fallback
     return TARIFF_BUTTON_TITLES.get(str(tariff), str(tariff))
 
+
+def tariff_display_title(tariff: str | None, fallback: str = "") -> str:
+    if not tariff:
+        return fallback
+    return TARIFF_DISPLAY_TITLES.get(str(tariff), str(tariff))

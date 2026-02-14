@@ -16,6 +16,7 @@ from reportlab.pdfgen import canvas
 
 from app.core.config import settings
 from app.core.report_document import ReportDocument, report_document_builder
+from app.core.tariff_labels import TARIFF_DISPLAY_TITLES, tariff_display_title
 from app.core.pdf_theme_config import PdfThemeAssetBundle, resolve_pdf_asset_bundle
 from app.core.pdf_themes import PdfTheme, resolve_pdf_theme
 
@@ -41,14 +42,6 @@ _ZERO_WIDTH_CHARS = {
 
 _SOFT_HYPHEN = "\u00ad"
 _CYRILLIC_VOWELS = set("аеёиоуыэюяАЕЁИОУЫЭЮЯ")
-
-_COVER_TITLE_BY_TARIFF = {
-    "T0": "Твоё новое начало",
-    "T1": "В чём твоя сила?",
-    "T2": "Где твои деньги?",
-    "T3": "Твой путь к себе!",
-}
-
 
 def _register_font() -> dict[str, str]:
     global _FONT_FAMILY
@@ -480,7 +473,7 @@ class PdfThemeRenderer:
         margin = theme.margin
         title_size = min(theme.typography.title_size + 4, 28)
         tariff_key = str(tariff or "")
-        title = _COVER_TITLE_BY_TARIFF.get(tariff_key, "Персональный отчёт")
+        title = TARIFF_DISPLAY_TITLES.get(tariff_key, "Персональный отчёт")
 
         max_width = page_width - (margin * 2)
         title_lines = self._split_text_into_visual_lines(title, font_map["title"], title_size, max_width)
@@ -612,10 +605,7 @@ class PdfThemeRenderer:
 
         y -= max(int(title_line_height * 0.2), 4)
 
-        subtitle = (report_document.subtitle if report_document else "") or f"Тариф: {tariff or 'N/A'}"
-        report_id = str(meta.get("id") or "")
-        if report_id:
-            subtitle = f"{subtitle} · Report #{report_id}"
+        subtitle = (report_document.subtitle if report_document else "") or tariff_display_title(str(tariff or ""), fallback="Тариф не указан")
         subtitle_lines = self._split_text_into_visual_lines(
             subtitle,
             font_map["subtitle"],

@@ -228,6 +228,28 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertLess(body_start_y, 760)
 
 
+    def test_draw_header_uses_tariff_display_title_without_report_id_suffix(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        canvas = _CanvasSpy()
+
+        renderer._draw_header(
+            canvas,
+            theme,
+            {"title": "Helvetica", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+            meta={"id": "42"},
+            tariff="T2",
+            page_width=240,
+            page_height=842,
+            report_document=None,
+        )
+
+        rendered_text = " ".join(text for _, _, text in canvas.draw_calls)
+        self.assertIn("Где твои деньги?", rendered_text)
+        self.assertNotIn("Report #42", rendered_text)
+        self.assertNotIn("Тариф: T2", rendered_text)
+
+
     def test_draw_body_moves_section_and_accent_titles_with_first_content_line(self) -> None:
         renderer = PdfThemeRenderer()
         theme = resolve_pdf_theme("T1")
