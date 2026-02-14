@@ -19,10 +19,10 @@ def test_tariff_pdf_typography_matches_requested_values() -> None:
     for _tariff, theme in PDF_THEME_BY_TARIFF.items():
         typography = theme.typography
 
-        assert typography.section_title_size == 60
-        assert typography.subsection_title_size == 60
-        assert typography.body_size == 50
-        assert typography.disclaimer_size == 30
+        assert typography.section_title_size == 19
+        assert typography.subsection_title_size == 15
+        assert typography.body_size == 12
+        assert typography.disclaimer_size == 9
 
         assert typography.section_title_color_rgb == (0.949, 0.816, 0.541)
         assert typography.subsection_title_color_rgb == (0.949, 0.816, 0.541)
