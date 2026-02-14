@@ -572,6 +572,31 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertEqual(title, "")
         self.assertEqual(body, paragraph)
 
+    def test_extract_subsection_title_does_not_split_user_colon_patterns(self) -> None:
+        renderer = PdfThemeRenderer()
+
+        user_paragraphs = [
+            "Когда чувствуешь, что начинаешь уходить в себя или работу: остановись и спроси ...",
+            "Когда ощущаешь, что напряжение растет: замедлись и сделай паузу",
+            "Если замчаешь, что мысли бегут по кругу: запиши их и выдели главное",
+        ]
+
+        for paragraph in user_paragraphs:
+            with self.subTest(paragraph=paragraph):
+                title, body = renderer._extract_subsection_title(paragraph)
+
+                self.assertEqual(title, "")
+                self.assertEqual(body, paragraph)
+
+    def test_extract_subsection_title_does_not_split_whitelist_like_label(self) -> None:
+        renderer = PdfThemeRenderer()
+
+        paragraph = "Фокус сегодня: один шаг, который приблизит тебя к цели"
+        title, body = renderer._extract_subsection_title(paragraph)
+
+        self.assertEqual(title, "")
+        self.assertEqual(body, paragraph)
+
     def test_extract_subsection_title_product_rule_why_it_matters(self) -> None:
         renderer = PdfThemeRenderer()
 
