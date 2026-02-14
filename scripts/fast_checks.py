@@ -391,6 +391,38 @@ def _check_report_job_generation(database_url: str) -> None:
         assert job.status == ReportJobStatus.COMPLETED
 
 
+def _check_pdf_assets_naming() -> None:
+    pdf_root = Path("app/assets/pdf")
+    expected = {
+        "backgrounds": [
+            *(f"t{i}_bg_main.webp" for i in range(4)),
+            *(f"t{i}_bg_cover.webp" for i in range(4)),
+            "shared_bg_fallback.webp",
+        ],
+        "overlays": [
+            *(f"t{i}_overlay_main.png" for i in range(4)),
+            "shared_overlay_fallback.png",
+        ],
+        "icons": [
+            *(f"t{i}_icon_main.png" for i in range(4)),
+            *(f"t{i}_icon_cover.png" for i in range(4)),
+            "shared_icon_fallback.png",
+        ],
+    }
+
+    for directory, expected_files in expected.items():
+        current_dir = pdf_root / directory
+        assert current_dir.exists(), f"directory does not exist: {current_dir}"
+
+        current_files = {p.name for p in current_dir.iterdir() if p.is_file()}
+        missing = [name for name in expected_files if name not in current_files]
+        assert not missing, f"missing files in {current_dir}: {missing}"
+
+        for file_name in expected_files:
+            full_path = current_dir / file_name
+            assert full_path.stat().st_size > 0, f"empty asset file: {full_path}"
+
+
 def main() -> None:
     with TemporaryDirectory() as temp_dir:
         base = Path(temp_dir)
@@ -407,6 +439,7 @@ def main() -> None:
         _check_webhook_validation()
         _check_pdf_redownload(database_url, storage_root)
         _check_report_job_generation(database_url)
+        _check_pdf_assets_naming()
 
     print("OK: fast checks passed")
 
