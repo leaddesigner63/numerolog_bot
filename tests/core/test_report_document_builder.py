@@ -245,3 +245,59 @@ def test_merge_multiline_paragraphs_preserves_multiple_blank_lines_between_t3_pe
     merged = builder._merge_multiline_paragraphs(lines)
 
     assert merged == lines
+
+
+def test_build_combines_week_headers_with_weekly_detail_bullets() -> None:
+    source = """Персональный аналитический отчёт
+
+План действий:
+Неделя 2
+Взгляд на свои ресурсы
+Неделя 3
+Разговоры по душам
+- фокус недели: личность/опора/ритм/самоценность/привычки.
+- старт недели: сделай утреннюю прогулку.
+- критерий успеха недели: больше спокойствия.
+- фокус недели: отношения/границы/коммуникация.
+- старт недели: запланируй тёплый разговор.
+- критерий успеха недели: ясность в контакте.
+"""
+    builder = ReportDocumentBuilder()
+
+    doc = builder.build(source, tariff="T3", meta={"id": "fixture-weekly-combine"})
+
+    assert doc is not None
+    plan_section = next((section for section in doc.sections if section.title == "План действий"), None)
+    assert plan_section is not None
+    assert plan_section.paragraphs == [
+        "Неделя 2 — Взгляд на свои ресурсы: фокус недели: личность/опора/ритм/самоценность/привычки.; "
+        "старт недели: сделай утреннюю прогулку.; критерий успеха недели: больше спокойствия.",
+        "Неделя 3 — Разговоры по душам: фокус недели: отношения/границы/коммуникация.; "
+        "старт недели: запланируй тёплый разговор.; критерий успеха недели: ясность в контакте.",
+    ]
+    assert plan_section.bullets == []
+
+
+def test_build_keeps_original_structure_when_weekly_bullet_chunks_do_not_match_weeks() -> None:
+    source = """Персональный аналитический отчёт
+
+План действий:
+Неделя 2
+Взгляд на свои ресурсы
+Неделя 3
+Разговоры по душам
+- фокус недели: личность/опора/ритм.
+- старт недели: сделай утреннюю прогулку.
+"""
+    builder = ReportDocumentBuilder()
+
+    doc = builder.build(source, tariff="T3", meta={"id": "fixture-weekly-no-combine"})
+
+    assert doc is not None
+    plan_section = next((section for section in doc.sections if section.title == "План действий"), None)
+    assert plan_section is not None
+    assert plan_section.paragraphs == ["Неделя 2", "Взгляд на свои ресурсы", "Неделя 3", "Разговоры по душам"]
+    assert plan_section.bullets == [
+        "фокус недели: личность/опора/ритм.",
+        "старт недели: сделай утреннюю прогулку.",
+    ]
