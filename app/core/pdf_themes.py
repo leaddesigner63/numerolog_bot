@@ -39,6 +39,9 @@ class PdfTypography:
     section_spacing: int
     bullet_indent: int
     bullet_hanging_indent: int
+    timeline_marker_size: int
+    timeline_period_spacing: int
+    timeline_item_spacing: int
     disclaimer_size: int
     disclaimer_line_height_ratio: float
     disclaimer_alpha: float
@@ -89,6 +92,9 @@ _DEFAULT_THEME = PdfTheme(
         section_spacing=15,
         bullet_indent=10,
         bullet_hanging_indent=18,
+        timeline_marker_size=13,
+        timeline_period_spacing=10,
+        timeline_item_spacing=2,
         disclaimer_size=_NORMALIZED_DISCLAIMER_SIZE,
         disclaimer_line_height_ratio=1.35,
         disclaimer_alpha=1.0,
@@ -128,6 +134,9 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             section_spacing=18,
             bullet_indent=8,
             bullet_hanging_indent=14,
+            timeline_marker_size=12,
+            timeline_period_spacing=10,
+            timeline_item_spacing=2,
             disclaimer_size=_NORMALIZED_DISCLAIMER_SIZE,
             disclaimer_line_height_ratio=1.3,
             disclaimer_alpha=1.0,
@@ -165,6 +174,9 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             section_spacing=20,
             bullet_indent=10,
             bullet_hanging_indent=18,
+            timeline_marker_size=13,
+            timeline_period_spacing=11,
+            timeline_item_spacing=2,
             disclaimer_size=_NORMALIZED_DISCLAIMER_SIZE,
             disclaimer_line_height_ratio=1.35,
             disclaimer_alpha=1.0,
@@ -202,6 +214,9 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             section_spacing=22,
             bullet_indent=11,
             bullet_hanging_indent=20,
+            timeline_marker_size=13,
+            timeline_period_spacing=12,
+            timeline_item_spacing=3,
             disclaimer_size=_NORMALIZED_DISCLAIMER_SIZE,
             disclaimer_line_height_ratio=1.35,
             disclaimer_alpha=1.0,
@@ -239,6 +254,9 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             section_spacing=24,
             bullet_indent=12,
             bullet_hanging_indent=22,
+            timeline_marker_size=14,
+            timeline_period_spacing=12,
+            timeline_item_spacing=3,
             disclaimer_size=_NORMALIZED_DISCLAIMER_SIZE,
             disclaimer_line_height_ratio=1.35,
             disclaimer_alpha=1.0,
