@@ -11,6 +11,7 @@ from app.core.pdf_themes import resolve_pdf_theme
 class _CanvasSpy:
     def __init__(self) -> None:
         self.draw_calls: list[tuple[float, float, str]] = []
+        self.page_breaks = 0
 
     def saveState(self) -> None:  # noqa: N802
         return None
@@ -26,6 +27,9 @@ class _CanvasSpy:
 
     def drawString(self, x: float, y: float, text: str) -> None:  # noqa: N802
         self.draw_calls.append((x, y, text))
+
+    def showPage(self) -> None:  # noqa: N802
+        self.page_breaks += 1
 
 
 class PdfServiceRendererTests(unittest.TestCase):
@@ -211,7 +215,86 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertEqual(draw_layer.call_count, 2)
         self.assertEqual(draw_layer.call_args_list[0].kwargs["primary"], cover_background)
         self.assertEqual(draw_layer.call_args_list[1].kwargs["primary"], cover_icon)
+        self.assertEqual(draw_layer.call_args_list[1].kwargs["x"], (595 - 110) / 2)
+        self.assertEqual(draw_layer.call_args_list[1].kwargs["width"], 110)
+        self.assertEqual(draw_layer.call_args_list[1].kwargs["height"], 110)
         pdf.showPage.assert_called_once()
+
+    def test_draw_cover_page_uses_tariff_title_without_subtitle_or_report_id(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        pdf = _CanvasSpy()
+        font_map = {"title": "Helvetica", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            background_main = root / "t1_bg_main.webp"
+            cover_background = root / "t1_bg_cover.webp"
+            icon_main = root / "t1_icon_main.png"
+            background_main.write_bytes(b"bg-main")
+            cover_background.write_bytes(b"bg-cover")
+            icon_main.write_bytes(b"icon-main")
+            asset_bundle = mock.Mock(
+                background_main=background_main,
+                icon_main=icon_main,
+            )
+
+            with mock.patch.object(renderer, "_try_draw_image_layer", return_value=True):
+                result = renderer._draw_cover_page(
+                    pdf,
+                    theme,
+                    font_map,
+                    meta={"id": "777"},
+                    tariff="T1",
+                    page_width=595,
+                    page_height=842,
+                    asset_bundle=asset_bundle,
+                    report_document=mock.Mock(title="Старый тайтл", subtitle="Старый сабтайтл"),
+                )
+
+        self.assertTrue(result)
+        rendered_text = " ".join(text for _, _, text in pdf.draw_calls)
+        self.assertIn("В чём твоя сила?", rendered_text)
+        self.assertNotIn("Report #777", rendered_text)
+        self.assertNotIn("Старый сабтайтл", rendered_text)
+        self.assertEqual(pdf.page_breaks, 1)
+
+
+    def test_draw_cover_page_uses_fallback_title_for_unknown_tariff(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        pdf = _CanvasSpy()
+        font_map = {"title": "Helvetica", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            root = Path(tmp_dir)
+            background_main = root / "t1_bg_main.webp"
+            cover_background = root / "t1_bg_cover.webp"
+            icon_main = root / "t1_icon_main.png"
+            background_main.write_bytes(b"bg-main")
+            cover_background.write_bytes(b"bg-cover")
+            icon_main.write_bytes(b"icon-main")
+            asset_bundle = mock.Mock(
+                background_main=background_main,
+                icon_main=icon_main,
+            )
+
+            with mock.patch.object(renderer, "_try_draw_image_layer", return_value=True):
+                result = renderer._draw_cover_page(
+                    pdf,
+                    theme,
+                    font_map,
+                    meta={},
+                    tariff="CUSTOM",
+                    page_width=595,
+                    page_height=842,
+                    asset_bundle=asset_bundle,
+                )
+
+        self.assertTrue(result)
+        rendered_text = " ".join(text for _, _, text in pdf.draw_calls)
+        self.assertIn("Персональный отчёт", rendered_text)
+        self.assertEqual(pdf.page_breaks, 1)
 
 
 if __name__ == "__main__":
