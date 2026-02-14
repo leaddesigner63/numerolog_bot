@@ -39,6 +39,9 @@ _ZERO_WIDTH_CHARS = {
     "\ufeff",  # ZERO WIDTH NO-BREAK SPACE
 }
 
+_SOFT_HYPHEN = "\u00ad"
+_CYRILLIC_VOWELS = set("аеёиоуыэюяАЕЁИОУЫЭЮЯ")
+
 _COVER_TITLE_BY_TARIFF = {
     "T0": "Твоё новое начало",
     "T1": "В чём твоя сила?",
@@ -883,18 +886,146 @@ class PdfThemeRenderer:
         size: int,
         width: float,
     ) -> list[str]:
+        if token == "":
+            return [""]
+
+        core = token.rstrip()
+        trailing_whitespace = token[len(core) :]
+        if not core:
+            return [token]
+
+        clean_token, soft_hyphen_points = self._extract_soft_hyphen_points(core)
+        heuristic_points = self._build_heuristic_hyphen_points(clean_token)
+
         parts: list[str] = []
-        current = ""
-        for char in token:
-            candidate = f"{current}{char}"
-            if current and pdfmetrics.stringWidth(candidate, font, size) > width:
-                parts.append(current)
-                current = char
-                continue
-            current = candidate
-        if current:
-            parts.append(current)
+        start = 0
+        while start < len(clean_token):
+            remainder = clean_token[start:]
+            if pdfmetrics.stringWidth(remainder, font, size) <= width:
+                parts.append(remainder)
+                break
+
+            split_pos = self._choose_break_position(
+                text=clean_token,
+                start=start,
+                preferred_points=soft_hyphen_points,
+                fallback_points=heuristic_points,
+                font=font,
+                size=size,
+                width=width,
+            )
+
+            if split_pos <= start:
+                split_pos = self._split_by_chars_as_last_resort(clean_token, start, font, size, width)
+                if split_pos <= start:
+                    split_pos = min(start + 1, len(clean_token))
+
+            parts.append(f"{clean_token[start:split_pos]}-")
+            start = split_pos
+
+        if trailing_whitespace and parts:
+            parts[-1] = f"{parts[-1]}{trailing_whitespace}"
+
         return parts or [""]
+
+    def _extract_soft_hyphen_points(self, token: str) -> tuple[str, set[int]]:
+        visible_chars: list[str] = []
+        break_points: set[int] = set()
+        visible_length = 0
+        for char in token:
+            if char == _SOFT_HYPHEN:
+                if visible_length > 0:
+                    break_points.add(visible_length)
+                continue
+            visible_chars.append(char)
+            visible_length += 1
+        return "".join(visible_chars), break_points
+
+    def _build_heuristic_hyphen_points(self, token: str) -> set[int]:
+        break_points: set[int] = set()
+        for index in range(2, len(token) - 1):
+            prev_char = token[index - 1]
+            next_char = token[index]
+
+            if prev_char.isalpha() and next_char.isalpha():
+                if self._contains_cyrillic(prev_char) or self._contains_cyrillic(next_char):
+                    if prev_char in _CYRILLIC_VOWELS and next_char in _CYRILLIC_VOWELS:
+                        continue
+                    if next_char.lower() in {"ь", "ъ", "й"}:
+                        continue
+                    break_points.add(index)
+                    continue
+
+            if (prev_char.isalpha() and next_char.isdigit()) or (prev_char.isdigit() and next_char.isalpha()):
+                break_points.add(index)
+
+        return break_points
+
+    def _choose_break_position(
+        self,
+        *,
+        text: str,
+        start: int,
+        preferred_points: set[int],
+        fallback_points: set[int],
+        font: str,
+        size: int,
+        width: float,
+    ) -> int:
+        min_tail = 3
+        preferred = self._pick_fitting_point(text, start, preferred_points, font, size, width, min_tail)
+        if preferred > start:
+            return preferred
+
+        fallback = self._pick_fitting_point(text, start, fallback_points, font, size, width, min_tail)
+        if fallback > start:
+            return fallback
+
+        return 0
+
+    def _pick_fitting_point(
+        self,
+        text: str,
+        start: int,
+        points: set[int],
+        font: str,
+        size: int,
+        width: float,
+        min_tail: int,
+    ) -> int:
+        valid_points = [point for point in points if start < point < len(text) and len(text) - point >= min_tail]
+        for point in sorted(valid_points, reverse=True):
+            candidate = f"{text[start:point]}-"
+            if pdfmetrics.stringWidth(candidate, font, size) <= width:
+                return point
+        return 0
+
+    def _split_by_chars_as_last_resort(
+        self,
+        text: str,
+        start: int,
+        font: str,
+        size: int,
+        width: float,
+    ) -> int:
+        max_split = len(text) - 1
+        min_tail = 3
+        for point in range(max_split, start, -1):
+            if len(text) - point < min_tail:
+                continue
+            candidate = f"{text[start:point]}-"
+            if pdfmetrics.stringWidth(candidate, font, size) <= width:
+                return point
+
+        for point in range(max_split, start, -1):
+            candidate = f"{text[start:point]}-"
+            if pdfmetrics.stringWidth(candidate, font, size) <= width:
+                return point
+
+        return 0
+
+    def _contains_cyrillic(self, char: str) -> bool:
+        return "\u0400" <= char <= "\u04ff"
 
     def _prepare_text_for_pdf(self, text: str) -> str:
         if not text:

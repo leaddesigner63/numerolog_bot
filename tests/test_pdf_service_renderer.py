@@ -94,8 +94,44 @@ class PdfServiceRendererTests(unittest.TestCase):
         )
 
         self.assertGreater(len(lines), 1)
-        self.assertEqual("".join(lines), source)
+        self.assertEqual("".join(lines).replace("-", ""), source)
 
+
+
+    def test_split_line_by_width_uses_soft_hyphen_priority_for_cyrillic(self) -> None:
+        renderer = PdfThemeRenderer()
+        source = "сверх\u00adдлинноеслово"
+
+        lines = renderer._split_line_by_width(
+            source,
+            font="Helvetica",
+            size=11,
+            width=35,
+        )
+
+        self.assertGreater(len(lines), 1)
+        self.assertTrue(lines[0].endswith("-"))
+        self.assertNotIn("\u00ad", "".join(lines))
+        restored = "".join(lines).replace("-", "")
+        self.assertEqual(restored, source.replace("\u00ad", ""))
+
+    def test_split_line_by_width_hyphenates_mixed_token_without_short_tail(self) -> None:
+        renderer = PdfThemeRenderer()
+        source = "слово123слово"
+
+        lines = renderer._split_line_by_width(
+            source,
+            font="Helvetica",
+            size=11,
+            width=32,
+        )
+
+        self.assertGreater(len(lines), 1)
+        for line in lines[:-1]:
+            self.assertTrue(line.endswith("-"))
+        self.assertGreaterEqual(len(lines[-1]), 3)
+        restored = "".join(lines).replace("-", "")
+        self.assertEqual(restored, source)
 
     def test_split_text_into_visual_lines_strips_control_and_zero_width_chars(self) -> None:
         renderer = PdfThemeRenderer()
@@ -145,7 +181,7 @@ class PdfServiceRendererTests(unittest.TestCase):
 
         self.assertGreaterEqual(len(canvas.draw_calls), 3)
         rendered_title_lines = [text for _, _, text in canvas.draw_calls[:-1]]
-        self.assertEqual("".join(rendered_title_lines).replace(" ", ""), long_title.replace(" ", ""))
+        self.assertEqual("".join(rendered_title_lines).replace(" ", "").replace("-", ""), long_title.replace(" ", ""))
         self.assertLess(body_start_y, 760)
 
 
