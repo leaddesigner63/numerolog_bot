@@ -46,6 +46,10 @@ git reset --hard "$GIT_REF"
 
 # Не удаляем важные локальные файлы (например, .env и каталоги с данными).
 # Паттерны собираем в массив, чтобы shell не раскрывал маски до передачи в git clean.
+
+# Явные паттерны для S15/S15_* сохраняем в таком виде для прозрачности деплоя:
+# -e app/assets/screen_images/S15
+# -e app/assets/screen_images/S15_*
 clean_excludes=(
   ".env"
   ".env.*"
@@ -56,6 +60,8 @@ clean_excludes=(
   "storage"
   "uploads"
   "logs"
+  "app/assets/screen_images/S15"
+  "app/assets/screen_images/S15_*"
   "app/assets/screen_images/S15*"
   "app/assets/screen_images/s15*"
 )

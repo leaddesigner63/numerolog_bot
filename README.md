@@ -277,6 +277,14 @@ tmux attach -t numerolog_bot
 bash scripts/test.sh
 ```
 
+Для локального прогона pytest без ручной настройки импорта (`app.*`) можно запускать:
+
+```bash
+pytest -q
+```
+
+(`pythonpath = .` зафиксирован в `pytest.ini`).
+
 Сценарии включают:
 - T0 cooldown,
 - оплата → генерация,
