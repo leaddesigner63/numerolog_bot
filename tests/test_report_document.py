@@ -3,6 +3,8 @@ import unittest
 from app.core.pdf_service import PdfThemeRenderer
 from app.core.report_document import SUBSECTION_CONTRACT_PREFIX, ReportDocumentBuilder
 
+from app.core.report_service import ReportService
+
 
 class ReportDocumentBuilderTests(unittest.TestCase):
     def test_build_structured_document_for_t3(self) -> None:
@@ -97,6 +99,26 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         assert section is not None
         self.assertEqual(section.paragraphs[0], f"{SUBSECTION_CONTRACT_PREFIX}Фокус: держи темп")
         self.assertEqual(section.paragraphs[1], "Обычный абзац.")
+
+    def test_t3_fallback_plan_subsections_are_converted_to_contract_prefix(self) -> None:
+        builder = ReportDocumentBuilder()
+        fallback_text = ReportService()._build_fallback_report({"selected_tariff": "T3"})
+
+        doc = builder.build(fallback_text, tariff="T3", meta={"id": "777"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        plan_section = next((section for section in doc.sections if section.title == "План действий"), None)
+        self.assertIsNotNone(plan_section)
+        assert plan_section is not None
+        self.assertEqual(
+            plan_section.paragraphs,
+            [
+                f"{SUBSECTION_CONTRACT_PREFIX}1 месяц (по неделям)",
+                f"{SUBSECTION_CONTRACT_PREFIX}1 год (по месяцам)",
+                f"{SUBSECTION_CONTRACT_PREFIX}Энергия и отношения",
+            ],
+        )
 
     def test_keeps_bullets_inside_named_section_after_paragraphs(self) -> None:
         builder = ReportDocumentBuilder()
