@@ -809,7 +809,7 @@ class PdfThemeRenderer:
                 self._draw_content_surface(pdf, theme, page_width, page_height)
                 y = page_height - theme.margin
             line_font = numeric_font if any(ch.isdigit() for ch in paragraph) else font
-            pdf.setFillColor(theme.palette[2], alpha=0.96)
+            pdf.setFillColorRGB(0.95, 0.94, 0.90, alpha=0.98)
             pdf.setFont(line_font, size)
             pdf.drawString(margin, y, paragraph)
             y -= line_height
@@ -937,7 +937,7 @@ class PdfThemeRenderer:
             line_font = font
             if font != _FONT_FALLBACK_NAME and any(ch.isdigit() for ch in line):
                 line_font = font
-            pdf.setFillColor(theme.palette[2], alpha=0.96)
+            pdf.setFillColorRGB(0.95, 0.94, 0.90, alpha=0.98)
             pdf.setFont(line_font, size)
             pdf.drawString(margin, y, line)
             y -= line_height
