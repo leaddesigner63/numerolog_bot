@@ -76,6 +76,7 @@ class ReportDocumentBuilder:
         re.compile(r"^важно[.!?]*$", re.IGNORECASE),
         re.compile(r"^осторожно[.!?]*$", re.IGNORECASE),
     )
+    _TECHNICAL_SEPARATOR_RE = re.compile(r"^[-=_~]{3,}$")
 
     def build(
         self,
@@ -87,6 +88,7 @@ class ReportDocumentBuilder:
         try:
             tariff_value = self._resolve_tariff_value(tariff)
             lines = [line.strip() for line in (report_text or "").splitlines()]
+            lines = self._merge_multiline_paragraphs(lines)
             non_empty = [line for line in lines if line]
             if not non_empty:
                 return None
@@ -101,7 +103,15 @@ class ReportDocumentBuilder:
             allow_key_findings = True
 
             for raw_line in non_empty[1:]:
-                if self._is_title(raw_line):
+                is_title = self._is_title(raw_line)
+                if (
+                    is_title
+                    and current.title
+                    and not (current.paragraphs or current.bullets or current.accent_blocks)
+                    and not self._is_explicit_title_marker(raw_line)
+                ):
+                    is_title = False
+                if is_title:
                     if current.paragraphs or current.bullets or current.accent_blocks:
                         sections.append(current)
                     current = ReportSection(title=self._sanitize_line(raw_line.rstrip(":")))
@@ -152,6 +162,59 @@ class ReportDocumentBuilder:
             )
         except Exception:
             return None
+
+    def _merge_multiline_paragraphs(self, lines: list[str]) -> list[str]:
+        merged: list[str] = []
+        paragraph_parts: list[str] = []
+
+        def flush_paragraph() -> None:
+            if paragraph_parts:
+                merged.append(" ".join(paragraph_parts))
+                paragraph_parts.clear()
+
+        for index, line in enumerate(lines):
+            current = (line or "").strip()
+            if not current:
+                flush_paragraph()
+                merged.append("")
+                continue
+
+            next_line = (lines[index + 1] if index + 1 < len(lines) else "").strip()
+
+            if (
+                self._is_explicit_title_marker(current)
+                or self._extract_bullet(current) is not None
+                or self._is_technical_separator(current)
+                or (not paragraph_parts and self._is_probable_standalone_title(current, next_line))
+            ):
+                flush_paragraph()
+                merged.append(current)
+                continue
+
+            if paragraph_parts and self._ends_with_sentence_break(paragraph_parts[-1]):
+                flush_paragraph()
+
+            paragraph_parts.append(current)
+
+        flush_paragraph()
+        return merged
+
+
+
+    def _is_probable_standalone_title(self, current: str, next_line: str) -> bool:
+        return bool(next_line) and self._is_title(current) and self._ends_with_sentence_break(next_line)
+
+    def _ends_with_sentence_break(self, line: str) -> bool:
+        stripped = (line or "").rstrip()
+        return stripped.endswith((".", "!", "?", ":", ";"))
+
+    def _is_explicit_title_marker(self, line: str) -> bool:
+        stripped = (line or "").strip()
+        return bool(stripped) and (stripped.startswith("#") or stripped.endswith(":"))
+
+    def _is_technical_separator(self, line: str) -> bool:
+        normalized = "".join((line or "").split())
+        return bool(self._TECHNICAL_SEPARATOR_RE.match(normalized))
 
     def _resolve_tariff_value(self, tariff: Tariff | str | None) -> str:
         if isinstance(tariff, Tariff):
