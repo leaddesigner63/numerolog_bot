@@ -70,6 +70,12 @@ class ReportDocumentBuilder:
         "доступен раз в месяц",
         "это превью",
     )
+    _WARNING_LINE_PATTERNS = (
+        re.compile(r"^внимание[.!?]*$", re.IGNORECASE),
+        re.compile(r"^предупреждение[.!?]*$", re.IGNORECASE),
+        re.compile(r"^важно[.!?]*$", re.IGNORECASE),
+        re.compile(r"^осторожно[.!?]*$", re.IGNORECASE),
+    )
 
     def build(
         self,
@@ -154,8 +160,38 @@ class ReportDocumentBuilder:
         return raw if raw in {"T0", "T1", "T2", "T3"} else "T1"
 
     def _is_title(self, line: str) -> bool:
-        line = line.strip()
-        return line.endswith(":") or line.startswith("##")
+        raw = line.strip()
+        if not raw:
+            return False
+        if self._extract_bullet(raw) is not None:
+            return False
+
+        sanitized = self._sanitize_line(raw)
+        if not sanitized:
+            return False
+        if self._is_warning_line(sanitized):
+            return False
+
+        if raw.startswith("##") or raw.endswith(":"):
+            return True
+
+        words_count = len(sanitized.split())
+        if words_count < 2 or words_count > 6:
+            return False
+
+        punctuation_count = len(re.findall(r"[.!?:;,]", sanitized))
+        if punctuation_count > 1 or "," in sanitized or ";" in sanitized:
+            return False
+        if sanitized.endswith("."):
+            return False
+        if sanitized.endswith(("?", "!")):
+            return punctuation_count == 1
+
+        return punctuation_count == 0
+
+    def _is_warning_line(self, line: str) -> bool:
+        normalized = " ".join((line or "").lower().split())
+        return any(pattern.match(normalized) for pattern in self._WARNING_LINE_PATTERNS)
 
     def _extract_bullet(self, line: str) -> str | None:
         stripped = line.strip()
