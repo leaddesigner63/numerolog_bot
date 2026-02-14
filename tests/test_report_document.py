@@ -195,6 +195,63 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         self.assertTrue(any("конкретный рабочий вывод" in bullet.lower() for section in doc.sections for bullet in section.bullets))
         self.assertTrue(all(section.bullets or section.paragraphs or section.accent_blocks for section in doc.sections))
 
+    def test_short_standalone_line_becomes_section_title(self) -> None:
+        builder = ReportDocumentBuilder()
+        source = """Персональный аналитический отчёт
+
+Вектор роста
+Сейчас полезно сохранить фокус на одной ключевой цели.
+"""
+
+        doc = builder.build(source, tariff="T1", meta={"id": "202"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        section = next((item for item in doc.sections if item.title == "Вектор роста"), None)
+        self.assertIsNotNone(section)
+        assert section is not None
+        self.assertEqual(section.paragraphs, ["Сейчас полезно сохранить фокус на одной ключевой цели."])
+
+    def test_question_and_exclamation_subheadings_go_to_section_title(self) -> None:
+        builder = ReportDocumentBuilder()
+        source = """Персональный аналитический отчёт
+
+Где твой ресурс?
+Опирайся на рутину сна и короткие прогулки.
+
+С чего начать!
+Выбери один шаг и повторяй его неделю.
+"""
+
+        doc = builder.build(source, tariff="T1", meta={"id": "203"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        self.assertTrue(any(section.title == "Где твой ресурс?" for section in doc.sections))
+        self.assertTrue(any(section.title == "С чего начать!" for section in doc.sections))
+
+    def test_does_not_treat_long_or_warning_sentences_as_titles(self) -> None:
+        builder = ReportDocumentBuilder()
+        source = """Персональный аналитический отчёт
+
+Внимание!
+Это предложение слишком длинное, чтобы считаться заголовком даже с восклицанием!
+Короткая фраза, но с запятой.
+"""
+
+        doc = builder.build(source, tariff="T1", meta={"id": "204"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        self.assertTrue(doc.sections)
+        self.assertEqual(doc.sections[0].title, "")
+        self.assertIn("Внимание!", doc.sections[0].paragraphs)
+        self.assertIn(
+            "Это предложение слишком длинное, чтобы считаться заголовком даже с восклицанием!",
+            doc.sections[0].paragraphs,
+        )
+        self.assertIn("Короткая фраза, но с запятой.", doc.sections[0].paragraphs)
+
 
 
 if __name__ == "__main__":
