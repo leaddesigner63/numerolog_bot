@@ -702,6 +702,37 @@ class PdfThemeRenderer:
             y -= paragraph_gap
 
         for section in report_document.sections:
+            preview_text = ""
+            preview_width = effective_width - paragraph_gap
+            if section.paragraphs:
+                preview_text = section.paragraphs[0]
+            elif section.bullets:
+                preview_text = f"• {section.bullets[0]}"
+                preview_width = effective_width - bullet_indent
+
+            required_section_height = section_gap + self._minimum_block_height(
+                title=section.title,
+                title_font=font_map["subtitle"],
+                title_size=body_size + 1,
+                title_width=effective_width,
+                content=preview_text,
+                content_font=font_map["body"],
+                content_size=body_size,
+                content_width=preview_width,
+                theme=theme,
+            )
+            y = self._start_new_page_if_needed(
+                pdf,
+                y=y,
+                required_height=required_section_height,
+                page_width=page_width,
+                page_height=page_height,
+                theme=theme,
+                asset_bundle=asset_bundle,
+                content_font_size=body_size,
+                seed_text=section.title,
+            )
+
             y -= section_gap
             y = self._draw_text_block(
                 pdf,
@@ -745,6 +776,29 @@ class PdfThemeRenderer:
                     asset_bundle=asset_bundle,
                 )
             for accent in section.accent_blocks:
+                accent_point = accent.points[0] if accent.points else ""
+                required_accent_height = self._minimum_block_height(
+                    title=f"Акцент: {accent.title}",
+                    title_font=font_map["subtitle"],
+                    title_size=body_size,
+                    title_width=effective_width - 12,
+                    content=f"– {accent_point}" if accent_point else "",
+                    content_font=font_map["body"],
+                    content_size=body_size,
+                    content_width=effective_width - bullet_hanging_indent,
+                    theme=theme,
+                )
+                y = self._start_new_page_if_needed(
+                    pdf,
+                    y=y,
+                    required_height=required_accent_height,
+                    page_width=page_width,
+                    page_height=page_height,
+                    theme=theme,
+                    asset_bundle=asset_bundle,
+                    content_font_size=body_size,
+                    seed_text=accent.title,
+                )
                 y = self._draw_text_block(
                     pdf,
                     text=f"Акцент: {accent.title}",
@@ -819,6 +873,62 @@ class PdfThemeRenderer:
             pdf.drawString(margin, y, paragraph)
             y -= line_height
         return y - max(int(line_height * 0.25), 2)
+
+    def _minimum_block_height(
+        self,
+        *,
+        title: str,
+        title_font: str,
+        title_size: int,
+        title_width: float,
+        content: str,
+        content_font: str,
+        content_size: int,
+        content_width: float,
+        theme: PdfTheme,
+    ) -> float:
+        title_height = self._text_block_height(
+            text=title,
+            font=title_font,
+            size=title_size,
+            width=title_width,
+            theme=theme,
+        )
+        content_height = self._text_block_height(
+            text=content,
+            font=content_font,
+            size=content_size,
+            width=content_width,
+            theme=theme,
+        )
+        return title_height + content_height
+
+    def _text_block_height(self, *, text: str, font: str, size: int, width: float, theme: PdfTheme) -> float:
+        line_height = int(size * theme.typography.line_height_ratio)
+        line_count = len(self._split_text_into_visual_lines(text or "", font, size, width))
+        return line_count * line_height + theme.typography.paragraph_spacing
+
+    def _start_new_page_if_needed(
+        self,
+        pdf: canvas.Canvas,
+        *,
+        y: float,
+        required_height: float,
+        page_width: float,
+        page_height: float,
+        theme: PdfTheme,
+        asset_bundle: PdfThemeAssetBundle,
+        content_font_size: int,
+        seed_text: str,
+    ) -> float:
+        if y - required_height > theme.margin:
+            return y
+        pdf.showPage()
+        page_randomizer = random.Random(seed_text)
+        self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+        self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+        self._draw_content_surface(pdf, theme, page_width, page_height)
+        return self._content_text_start_y(theme, page_height, content_font_size)
 
     def _split_text_into_visual_lines(
         self,
