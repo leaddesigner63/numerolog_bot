@@ -58,6 +58,7 @@ class ReportDocumentBuilder:
         "диагностика парсинга",
     }
     _SERVICE_BULLET_PATTERNS = (
+        re.compile(r"^проверка\s+данных[\s.!?]*$", re.IGNORECASE),
         re.compile(r"\bне распознан[аоы]?\b", re.IGNORECASE),
         re.compile(r"\bне полностью заполнен[аоы]?\b", re.IGNORECASE),
         re.compile(r"\bошибк[аи]\s+парсинг[а-я]*\b", re.IGNORECASE),
