@@ -825,16 +825,68 @@ class PdfThemeRenderer:
                         asset_bundle=asset_bundle,
                     )
 
-        y -= section_gap
+        self._draw_disclaimer_at_last_page_bottom(
+            pdf,
+            y=y,
+            report_document=report_document,
+            page_width=page_width,
+            page_height=page_height,
+            theme=theme,
+            font_map=font_map,
+            asset_bundle=asset_bundle,
+            margin=margin,
+            effective_width=effective_width,
+            paragraph_gap=paragraph_gap,
+            section_gap=section_gap,
+        )
+
+    def _draw_disclaimer_at_last_page_bottom(
+        self,
+        pdf: canvas.Canvas,
+        *,
+        y: float,
+        report_document: ReportDocument,
+        page_width: float,
+        page_height: float,
+        theme: PdfTheme,
+        font_map: dict[str, str],
+        asset_bundle: PdfThemeAssetBundle,
+        margin: float,
+        effective_width: float,
+        paragraph_gap: float,
+        section_gap: float,
+    ) -> None:
+        disclaimer_text = (report_document.disclaimer or "").strip()
+        if not disclaimer_text:
+            return
+
         disclaimer_width = max(effective_width - paragraph_gap * 2, 1)
+        disclaimer_size = max(theme.typography.disclaimer_size, 8)
+        disclaimer_line_height = int(disclaimer_size * theme.typography.disclaimer_line_height_ratio)
+        disclaimer_lines = self._split_text_into_visual_lines(
+            disclaimer_text,
+            font_map["body"],
+            disclaimer_size,
+            disclaimer_width,
+        )
+        disclaimer_lines_count = max(len(disclaimer_lines), 1)
+        disclaimer_first_line_y = theme.margin + 1 + disclaimer_line_height * (disclaimer_lines_count - 1)
+
+        if y - section_gap <= disclaimer_first_line_y:
+            pdf.showPage()
+            page_randomizer = random.Random(disclaimer_text)
+            self._draw_background(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+            self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
+            self._draw_content_surface(pdf, theme, page_width, page_height)
+
         self._draw_text_block(
             pdf,
-            text=report_document.disclaimer,
-            y=y - section_gap,
+            text=disclaimer_text,
+            y=disclaimer_first_line_y,
             margin=margin + paragraph_gap,
             width=disclaimer_width,
             font=font_map["body"],
-            size=max(theme.typography.disclaimer_size, 8),
+            size=disclaimer_size,
             page_width=page_width,
             page_height=page_height,
             theme=theme,
