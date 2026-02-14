@@ -588,22 +588,11 @@ class PdfThemeRenderer:
     ) -> float:
         margin = theme.margin
         max_width = page_width - margin * 2
-        title_size = theme.typography.title_size
         subtitle_size = theme.typography.subtitle_size
-        title_line_height = int(title_size * theme.typography.line_height_ratio)
         subtitle_line_height = int(subtitle_size * theme.typography.line_height_ratio)
 
         pdf.saveState()
-        pdf.setFillColorRGB(*theme.typography.title_color_rgb)
-        title = (report_document.title if report_document else "") or "Персональный аналитический отчёт"
-        title_lines = self._split_text_into_visual_lines(title, font_map["title"], title_size, max_width)
         y = page_height - margin
-        pdf.setFont(font_map["title"], title_size)
-        for line in title_lines:
-            pdf.drawString(margin, y, line)
-            y -= title_line_height
-
-        y -= max(int(title_line_height * 0.2), 4)
 
         subtitle = (report_document.subtitle if report_document else "") or tariff_display_title(str(tariff or ""), fallback="Тариф не указан")
         subtitle_lines = self._split_text_into_visual_lines(
@@ -662,38 +651,6 @@ class PdfThemeRenderer:
         bullet_indent = theme.typography.bullet_indent
         bullet_hanging_indent = theme.typography.bullet_hanging_indent
         effective_width = max_width - 8 * report_document.decoration_depth
-
-        if report_document.key_findings:
-            y = self._draw_section_title(
-                pdf,
-                text="Ключевые выводы",
-                y=y,
-                margin=margin,
-                width=effective_width,
-                page_width=page_width,
-                page_height=page_height,
-                theme=theme,
-                asset_bundle=asset_bundle,
-                font_map=font_map,
-            )
-            for finding in report_document.key_findings:
-                y = self._draw_bullet_item(
-                    pdf,
-                    marker="•",
-                    text=finding,
-                    y=y,
-                    margin=margin,
-                    width=effective_width,
-                    bullet_indent=bullet_indent,
-                    bullet_hanging_indent=bullet_hanging_indent,
-                    font=font_map["body"],
-                    size=body_size,
-                    page_width=page_width,
-                    page_height=page_height,
-                    theme=theme,
-                    asset_bundle=asset_bundle,
-                )
-                y -= paragraph_gap
 
         for section in report_document.sections:
             if not self._has_renderable_section_content(section):
