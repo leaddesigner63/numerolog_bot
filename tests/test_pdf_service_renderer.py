@@ -650,6 +650,86 @@ class PdfServiceRendererTests(unittest.TestCase):
             theme.typography.disclaimer_line_height_ratio,
         )
 
+    def test_draw_body_places_disclaimer_on_last_page_bottom(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        canvas = _CanvasSpy()
+        report_document = ReportDocument(
+            title="Отчёт",
+            subtitle="Тариф: T1",
+            key_findings=["Вывод"],
+            sections=[],
+            disclaimer="Дисклеймер внизу последней страницы.",
+        )
+
+        with mock.patch.object(renderer, "_draw_content_surface", return_value=None), mock.patch.object(
+            renderer,
+            "_draw_text_block",
+            wraps=renderer._draw_text_block,
+        ) as draw_text_block_spy:
+            renderer._draw_body(
+                canvas,
+                theme,
+                {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                report_text="",
+                page_width=300,
+                page_height=842,
+                asset_bundle=mock.Mock(),
+                body_start_y=700,
+                report_document=report_document,
+            )
+
+        disclaimer_call = next(
+            call
+            for call in draw_text_block_spy.call_args_list
+            if call.kwargs.get("text") == report_document.disclaimer
+        )
+        line_height = int(max(theme.typography.disclaimer_size, 8) * theme.typography.disclaimer_line_height_ratio)
+        disclaimer_lines = renderer._split_text_into_visual_lines(
+            report_document.disclaimer,
+            "Helvetica",
+            max(theme.typography.disclaimer_size, 8),
+            disclaimer_call.kwargs["width"],
+        )
+        expected_y = theme.margin + 1 + line_height * (max(len(disclaimer_lines), 1) - 1)
+
+        self.assertEqual(disclaimer_call.kwargs["y"], expected_y)
+        self.assertEqual(line_height, int(disclaimer_call.kwargs["size"] * disclaimer_call.kwargs["line_height_ratio"]))
+
+    def test_draw_body_moves_disclaimer_to_new_last_page_when_no_space(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        canvas = _CanvasSpy()
+        report_document = ReportDocument(
+            title="Отчёт",
+            subtitle="Тариф: T1",
+            key_findings=["Вывод"],
+            sections=[],
+            disclaimer="Дисклеймер для отдельной страницы.",
+        )
+
+        with mock.patch.object(renderer, "_draw_content_surface", return_value=None), mock.patch.object(
+            renderer, "_draw_background", return_value=None
+        ), mock.patch.object(renderer, "_draw_decorative_layers", return_value=None):
+            renderer._draw_body(
+                canvas,
+                theme,
+                {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                report_text="",
+                page_width=300,
+                page_height=842,
+                asset_bundle=mock.Mock(),
+                body_start_y=theme.margin + 1,
+                report_document=report_document,
+            )
+
+        disclaimer_draws = [call for call in canvas.text_draw_calls if "Дисклеймер" in call[3]]
+
+        self.assertEqual(canvas.page_breaks, 1)
+        self.assertGreaterEqual(len(disclaimer_draws), 1)
+        self.assertTrue(all(call[0] == 2 for call in disclaimer_draws))
+
+
     def test_draw_decorative_layers_keeps_only_graphics_without_text_symbols(self) -> None:
         renderer = PdfThemeRenderer()
         theme = resolve_pdf_theme("T1")
@@ -948,7 +1028,9 @@ class PdfServiceRendererTests(unittest.TestCase):
             )
 
         self.assertEqual(text_calls[1]["y"], 700 - typography.section_spacing)
-        self.assertEqual(text_calls[3]["y"], text_calls[2]["y"] - typography.section_spacing * 2)
+        disclaimer_call = next(call for call in text_calls if call.get("text") == "Disclaimer")
+
+        self.assertEqual(disclaimer_call["y"], theme.margin + 1)
         self.assertEqual(text_calls[1]["margin"], theme.margin + typography.paragraph_spacing)
         self.assertEqual(text_calls[1]["width"], 595 - theme.margin * 2 - typography.paragraph_spacing)
         self.assertEqual(bullet_calls[0]["margin"], theme.margin)
