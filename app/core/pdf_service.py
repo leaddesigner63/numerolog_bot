@@ -955,10 +955,10 @@ class PdfThemeRenderer:
         panel_height = page_height - (panel_margin * 2) - panel_top_gap
 
         pdf.saveState()
-        pdf.setFillColorRGB(1, 1, 1)
-        pdf.setFillAlpha(0.08)
-        pdf.setStrokeColor(theme.palette[2], alpha=0.35)
-        pdf.setLineWidth(0.8)
+        pdf.setFillColorRGB(0.06, 0.08, 0.11)
+        pdf.setFillAlpha(0.82)
+        pdf.setStrokeColor(theme.palette[2], alpha=0.16)
+        pdf.setLineWidth(1.0)
         pdf.roundRect(
             panel_margin,
             panel_margin,

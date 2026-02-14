@@ -332,5 +332,72 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertEqual(pdf.page_breaks, 1)
 
 
+    def test_draw_content_surface_uses_dark_fill_and_soft_stroke(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        pdf = mock.Mock()
+
+        renderer._draw_content_surface(pdf, theme, page_width=595, page_height=842)
+
+        pdf.setFillColorRGB.assert_called_once_with(0.06, 0.08, 0.11)
+        pdf.setFillAlpha.assert_called_once_with(0.82)
+        pdf.setStrokeColor.assert_called_once_with(theme.palette[2], alpha=0.16)
+        pdf.setLineWidth.assert_called_once_with(1.0)
+
+    def test_draw_raw_text_block_redraws_content_surface_after_page_break(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        pdf = mock.Mock()
+
+        with mock.patch.object(renderer, "_draw_background"), mock.patch.object(renderer, "_draw_decorative_layers"), mock.patch.object(
+            renderer,
+            "_draw_content_surface",
+        ) as draw_content_surface:
+            renderer._draw_raw_text_block(
+                pdf,
+                text="Первая строка",
+                y=theme.margin,
+                margin=theme.margin,
+                width=300,
+                font="Helvetica",
+                numeric_font="Helvetica",
+                size=11,
+                page_width=595,
+                page_height=842,
+                theme=theme,
+                asset_bundle=mock.Mock(),
+            )
+
+        pdf.showPage.assert_called_once()
+        draw_content_surface.assert_called_once_with(pdf, theme, 595, 842)
+
+    def test_draw_text_block_redraws_content_surface_after_page_break(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        pdf = mock.Mock()
+
+        with mock.patch.object(renderer, "_draw_background"), mock.patch.object(renderer, "_draw_decorative_layers"), mock.patch.object(
+            renderer,
+            "_draw_content_surface",
+        ) as draw_content_surface:
+            renderer._draw_text_block(
+                pdf,
+                text="Первая строка",
+                y=theme.margin,
+                margin=theme.margin,
+                width=300,
+                font="Helvetica",
+                size=11,
+                page_width=595,
+                page_height=842,
+                theme=theme,
+                asset_bundle=mock.Mock(),
+            )
+
+        pdf.showPage.assert_called_once()
+        draw_content_surface.assert_called_once_with(pdf, theme, 595, 842)
+
+
+
 if __name__ == "__main__":
     unittest.main()
