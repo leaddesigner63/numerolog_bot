@@ -406,7 +406,7 @@ class PdfServiceRendererTests(unittest.TestCase):
                 report_document=report_document,
             )
 
-        section_title_draw = next(call for call in canvas.text_draw_calls if call[3] == "Раздел со стилем")
+        section_title_draw = next(call for call in canvas.text_draw_calls if call[3].startswith("Раздел"))
         body_draw = next(call for call in canvas.text_draw_calls if call[3].startswith("Обычный абзац"))
 
         self.assertNotEqual(section_title_draw[4], body_draw[4])

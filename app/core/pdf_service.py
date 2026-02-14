@@ -1213,6 +1213,7 @@ class PdfThemeRenderer:
             theme=theme,
             asset_bundle=asset_bundle,
             line_height_ratio=theme.typography.section_title_line_height_ratio,
+            text_alpha=1.0,
             text_color_rgb=theme.typography.section_title_color_rgb,
         )
 
