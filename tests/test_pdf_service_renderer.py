@@ -424,7 +424,7 @@ class PdfServiceRendererTests(unittest.TestCase):
             sections=[
                 ReportSection(
                     title="Раздел",
-                    paragraphs=["Подзаголовок: Абзац после двоеточия"],
+                    paragraphs=["## Подзаголовок: Абзац после двоеточия"],
                 )
             ],
             disclaimer="",
@@ -484,7 +484,7 @@ class PdfServiceRendererTests(unittest.TestCase):
                     title="Раздел",
                     paragraphs=[
                         "Фокус: ",
-                        "Приоритет: Действие на неделю",
+                        "## Приоритет: Действие на неделю",
                         "",
                         "Итог: Следующий шаг без провалов",
                     ],
@@ -514,7 +514,7 @@ class PdfServiceRendererTests(unittest.TestCase):
         rendered_combined = " ".join(part for part in rendered_text if part)
         self.assertIn("Фокус", rendered_text)
         self.assertIn("Приоритет", rendered_text)
-        self.assertIn("Итог", rendered_text)
+        self.assertNotIn("Итог", rendered_text)
         self.assertIn("Действие на неделю", rendered_combined)
         self.assertIn("Следующий шаг без", rendered_combined)
         self.assertIn("провалов", rendered_combined)
@@ -523,20 +523,45 @@ class PdfServiceRendererTests(unittest.TestCase):
         renderer = PdfThemeRenderer()
 
         title, body = renderer._extract_subsection_title("A:   текст в любом формате ###")
-        self.assertEqual(title, "A")
-        self.assertEqual(body, "текст в любом формате ###")
+        self.assertEqual(title, "")
+        self.assertEqual(body, "A:   текст в любом формате ###")
 
         title_no_sep, body_no_sep = renderer._extract_subsection_title("без двоеточия")
         self.assertEqual(title_no_sep, "")
         self.assertEqual(body_no_sep, "без двоеточия")
 
-    def test_extract_subsection_title_splits_short_label(self) -> None:
+    def test_extract_subsection_title_splits_whitelisted_label(self) -> None:
         renderer = PdfThemeRenderer()
 
-        title, body = renderer._extract_subsection_title("Сильная сторона: уверенно держишь фокус")
+        title, body = renderer._extract_subsection_title("Фокус: уверенно держишь фокус")
+
+        self.assertEqual(title, "Фокус")
+        self.assertEqual(body, "уверенно держишь фокус")
+
+    def test_extract_subsection_title_splits_explicit_marker_label(self) -> None:
+        renderer = PdfThemeRenderer()
+
+        title, body = renderer._extract_subsection_title("## Сильная сторона: уверенно держишь фокус")
 
         self.assertEqual(title, "Сильная сторона")
         self.assertEqual(body, "уверенно держишь фокус")
+
+    def test_extract_subsection_title_splits_explicit_marker_without_body(self) -> None:
+        renderer = PdfThemeRenderer()
+
+        title, body = renderer._extract_subsection_title("## Следующий шаг")
+
+        self.assertEqual(title, "Следующий шаг")
+        self.assertEqual(body, "")
+
+    def test_extract_subsection_title_does_not_split_removed_legacy_marker(self) -> None:
+        renderer = PdfThemeRenderer()
+
+        paragraph = "@@subsection@@ Сильная сторона: уверенно держишь фокус"
+        title, body = renderer._extract_subsection_title(paragraph)
+
+        self.assertEqual(title, "")
+        self.assertEqual(body, paragraph)
 
     def test_extract_subsection_title_does_not_split_long_narrative(self) -> None:
         renderer = PdfThemeRenderer()
