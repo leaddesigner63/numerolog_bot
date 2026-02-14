@@ -290,6 +290,48 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertEqual(accent_title_page, accent_point_page)
 
 
+
+    def test_draw_body_uses_disclaimer_typography_overrides(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        canvas = _CanvasSpy()
+        report_document = ReportDocument(
+            title="Отчёт",
+            subtitle="Тариф: T1",
+            key_findings=["Вывод"],
+            sections=[],
+            disclaimer="Дисклеймер для проверки отдельной типографики.",
+        )
+
+        with mock.patch.object(renderer, "_draw_content_surface", return_value=None), mock.patch.object(
+            renderer,
+            "_draw_text_block",
+            wraps=renderer._draw_text_block,
+        ) as draw_text_block_spy:
+            renderer._draw_body(
+                canvas,
+                theme,
+                {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                report_text="",
+                page_width=300,
+                page_height=842,
+                asset_bundle=mock.Mock(),
+                body_start_y=700,
+                report_document=report_document,
+            )
+
+        disclaimer_call = next(
+            call
+            for call in draw_text_block_spy.call_args_list
+            if call.kwargs.get("text") == report_document.disclaimer
+        )
+
+        self.assertEqual(disclaimer_call.kwargs["size"], max(theme.typography.disclaimer_size, 8))
+        self.assertEqual(
+            disclaimer_call.kwargs["line_height_ratio"],
+            theme.typography.disclaimer_line_height_ratio,
+        )
+
     def test_draw_decorative_layers_keeps_only_graphics_without_text_symbols(self) -> None:
         renderer = PdfThemeRenderer()
         theme = resolve_pdf_theme("T1")
@@ -588,7 +630,7 @@ class PdfServiceRendererTests(unittest.TestCase):
             )
 
         self.assertEqual(text_calls[1]["y"], 700 - typography.paragraph_spacing - typography.section_spacing)
-        self.assertEqual(text_calls[4]["y"], text_calls[3]["y"] - typography.section_spacing)
+        self.assertEqual(text_calls[4]["y"], text_calls[3]["y"] - typography.section_spacing * 2)
         self.assertEqual(text_calls[2]["margin"], theme.margin + typography.paragraph_spacing)
         self.assertEqual(text_calls[2]["width"], 595 - theme.margin * 2 - typography.paragraph_spacing)
         self.assertEqual(bullet_calls[0]["margin"], theme.margin)

@@ -18,6 +18,9 @@ class PdfTypography:
     section_spacing: int
     bullet_indent: int
     bullet_hanging_indent: int
+    disclaimer_size: int
+    disclaimer_line_height_ratio: float
+    disclaimer_alpha: float
 
 
 @dataclass(frozen=True)
@@ -53,6 +56,9 @@ _DEFAULT_THEME = PdfTheme(
         section_spacing=15,
         bullet_indent=10,
         bullet_hanging_indent=18,
+        disclaimer_size=10,
+        disclaimer_line_height_ratio=1.35,
+        disclaimer_alpha=1.0,
     ),
 )
 
@@ -77,6 +83,9 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             section_spacing=14,
             bullet_indent=8,
             bullet_hanging_indent=14,
+            disclaimer_size=9,
+            disclaimer_line_height_ratio=1.3,
+            disclaimer_alpha=1.0,
         ),
     ),
     Tariff.T1: PdfTheme(
@@ -99,6 +108,9 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             section_spacing=16,
             bullet_indent=10,
             bullet_hanging_indent=18,
+            disclaimer_size=10,
+            disclaimer_line_height_ratio=1.35,
+            disclaimer_alpha=1.0,
         ),
     ),
     Tariff.T2: PdfTheme(
@@ -121,6 +133,9 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             section_spacing=18,
             bullet_indent=11,
             bullet_hanging_indent=20,
+            disclaimer_size=10,
+            disclaimer_line_height_ratio=1.35,
+            disclaimer_alpha=1.0,
         ),
     ),
     Tariff.T3: PdfTheme(
@@ -143,6 +158,9 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             section_spacing=20,
             bullet_indent=12,
             bullet_hanging_indent=22,
+            disclaimer_size=11,
+            disclaimer_line_height_ratio=1.35,
+            disclaimer_alpha=1.0,
         ),
     ),
 }

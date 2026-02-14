@@ -837,18 +837,22 @@ class PdfThemeRenderer:
                     )
 
         y -= section_gap
+        disclaimer_width = max(effective_width - paragraph_gap * 2, 1)
         self._draw_text_block(
             pdf,
             text=report_document.disclaimer,
-            y=y,
-            margin=margin,
-            width=effective_width,
+            y=y - section_gap,
+            margin=margin + paragraph_gap,
+            width=disclaimer_width,
             font=font_map["body"],
-            size=max(body_size - 1, 8),
+            size=max(theme.typography.disclaimer_size, 8),
             page_width=page_width,
             page_height=page_height,
             theme=theme,
             asset_bundle=asset_bundle,
+            line_height_ratio=theme.typography.disclaimer_line_height_ratio,
+            text_alpha=theme.typography.disclaimer_alpha,
+            text_color_rgb=(0.99, 0.98, 0.96),
         )
 
     def _draw_bullet_item(
@@ -1221,8 +1225,12 @@ class PdfThemeRenderer:
         page_height: float,
         theme: PdfTheme,
         asset_bundle: PdfThemeAssetBundle,
+        line_height_ratio: float | None = None,
+        text_alpha: float = 0.98,
+        text_color_rgb: tuple[float, float, float] = (0.95, 0.94, 0.90),
     ) -> float:
-        line_height = int(size * theme.typography.line_height_ratio)
+        effective_line_height_ratio = line_height_ratio or theme.typography.line_height_ratio
+        line_height = int(size * effective_line_height_ratio)
         letter_spacing = theme.typography.letter_spacing_body
         if size > theme.typography.body_size:
             letter_spacing = theme.typography.letter_spacing_title
@@ -1238,7 +1246,7 @@ class PdfThemeRenderer:
             line_font = font
             if font != _FONT_FALLBACK_NAME and any(ch.isdigit() for ch in line):
                 line_font = font
-            pdf.setFillColorRGB(0.95, 0.94, 0.90, alpha=0.98)
+            pdf.setFillColorRGB(*text_color_rgb, alpha=text_alpha)
             text_object = pdf.beginText(margin, y)
             text_object.setFont(line_font, size)
             text_object.setCharSpace(letter_spacing)
