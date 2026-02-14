@@ -1275,7 +1275,77 @@ class PdfThemeRenderer:
         if not separator:
             return "", text
 
-        return title.strip(), body.lstrip()
+        label = title.strip()
+        if not self._looks_like_subsection_label(label):
+            return "", text
+
+        return label, body.lstrip()
+
+    def _looks_like_subsection_label(self, label: str) -> bool:
+        if not label:
+            return False
+
+        # Явно фиксируем продуктовый кейс: вопросительное вступление
+        # «Почему это важно: ...» считается коротким label.
+        if label.casefold() == "почему это важно":
+            return True
+
+        if label[-1] in ".!?;,":
+            return False
+
+        words = [word for word in label.split() if word]
+        if not 1 <= len(words) <= 4:
+            return False
+
+        verb_like_tokens = {
+            "быть",
+            "есть",
+            "будет",
+            "будут",
+            "может",
+            "можешь",
+            "могу",
+            "делает",
+            "делаешь",
+            "делать",
+            "хочу",
+            "хочешь",
+            "хочет",
+            "нужно",
+        }
+        verb_like_suffixes = (
+            "ться",
+            "ить",
+            "ать",
+            "ять",
+            "еть",
+            "уть",
+            "ишь",
+            "ешь",
+            "ет",
+            "ют",
+            "ут",
+            "ем",
+            "им",
+            "ешься",
+            "ется",
+            "ются",
+            "утся",
+            "ал",
+            "ала",
+            "али",
+            "ил",
+            "ила",
+            "или",
+        )
+        for raw_word in words:
+            word = raw_word.strip("«»\"'()[]{}").casefold()
+            if not word:
+                continue
+            if word in verb_like_tokens or word.endswith(verb_like_suffixes):
+                return False
+
+        return True
 
 
     def _draw_text_block(

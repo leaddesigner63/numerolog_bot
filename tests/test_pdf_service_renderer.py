@@ -530,6 +530,31 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertEqual(title_no_sep, "")
         self.assertEqual(body_no_sep, "без двоеточия")
 
+    def test_extract_subsection_title_splits_short_label(self) -> None:
+        renderer = PdfThemeRenderer()
+
+        title, body = renderer._extract_subsection_title("Сильная сторона: уверенно держишь фокус")
+
+        self.assertEqual(title, "Сильная сторона")
+        self.assertEqual(body, "уверенно держишь фокус")
+
+    def test_extract_subsection_title_does_not_split_long_narrative(self) -> None:
+        renderer = PdfThemeRenderer()
+
+        paragraph = "Твоя способность видеть смысл и оставаться в контакте с собой: это уже ресурс, который работает на тебя"
+        title, body = renderer._extract_subsection_title(paragraph)
+
+        self.assertEqual(title, "")
+        self.assertEqual(body, paragraph)
+
+    def test_extract_subsection_title_product_rule_why_it_matters(self) -> None:
+        renderer = PdfThemeRenderer()
+
+        title, body = renderer._extract_subsection_title("Почему это важно: так ты удерживаешь вектор")
+
+        self.assertEqual(title, "Почему это важно")
+        self.assertEqual(body, "так ты удерживаешь вектор")
+
 
     def test_draw_body_uses_disclaimer_typography_overrides(self) -> None:
         renderer = PdfThemeRenderer()
