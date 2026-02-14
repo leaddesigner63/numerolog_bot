@@ -64,6 +64,11 @@ class ReportDocumentBuilder:
         re.compile(r"\bне удалось распознать\b", re.IGNORECASE),
         re.compile(r"\bданные отсутствуют\b", re.IGNORECASE),
     )
+    _PDF_PROMO_PHRASES = (
+        "бесплатный превью-отчёт",
+        "доступен раз в месяц",
+        "это превью",
+    )
 
     def build(
         self,
@@ -123,6 +128,14 @@ class ReportDocumentBuilder:
                 self._append_focus_block(sections)
             if tariff_value == "T3":
                 self._append_t3_cover(sections)
+
+            sections, key_findings = self._strip_pdf_promotions(sections, key_findings)
+            if not key_findings:
+                key_findings = [
+                    point
+                    for section in sections
+                    for point in section.bullets[:2]
+                ][:5]
 
             return ReportDocument(
                 title=title,
@@ -253,6 +266,38 @@ class ReportDocumentBuilder:
     def _is_service_bullet(self, text: str) -> bool:
         normalized = " ".join((text or "").lower().replace("ё", "е").split())
         return any(pattern.search(normalized) for pattern in self._SERVICE_BULLET_PATTERNS)
+
+    def _strip_pdf_promotions(
+        self,
+        sections: list[ReportSection],
+        key_findings: list[str],
+    ) -> tuple[list[ReportSection], list[str]]:
+        cleaned_sections: list[ReportSection] = []
+        for section in sections:
+            cleaned_bullets = self._strip_pdf_promotions_from_items(section.bullets)
+            cleaned_paragraphs = self._strip_pdf_promotions_from_items(section.paragraphs)
+            if cleaned_bullets or cleaned_paragraphs or section.accent_blocks:
+                cleaned_sections.append(
+                    ReportSection(
+                        title=section.title,
+                        bullets=cleaned_bullets,
+                        paragraphs=cleaned_paragraphs,
+                        accent_blocks=section.accent_blocks,
+                    )
+                )
+        cleaned_findings = self._strip_pdf_promotions_from_items(key_findings)
+        return cleaned_sections, cleaned_findings
+
+    def _strip_pdf_promotions_from_items(self, items: list[str]) -> list[str]:
+        cleaned_items: list[str] = []
+        for item in items:
+            cleaned = item or ""
+            for phrase in self._PDF_PROMO_PHRASES:
+                cleaned = re.sub(re.escape(phrase), " ", cleaned, flags=re.IGNORECASE)
+            cleaned = " ".join(cleaned.split()).strip(" -–—,:;")
+            if cleaned:
+                cleaned_items.append(cleaned)
+        return cleaned_items
 
 
 report_document_builder = ReportDocumentBuilder()
