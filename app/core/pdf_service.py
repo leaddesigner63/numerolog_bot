@@ -641,7 +641,6 @@ class PdfThemeRenderer:
     ) -> None:
         margin = theme.margin
         body_size = theme.typography.body_size
-        line_height = int(body_size * theme.typography.line_height_ratio)
         max_width = page_width - margin * 2
         y = body_start_y
         self._draw_content_surface(pdf, theme, page_width, page_height)
@@ -664,8 +663,10 @@ class PdfThemeRenderer:
             )
             return
 
-        section_gap = max(line_height, 14)
-        key_gap = max(int(line_height * 0.6), 8)
+        paragraph_gap = theme.typography.paragraph_spacing
+        section_gap = theme.typography.section_spacing
+        bullet_indent = theme.typography.bullet_indent
+        bullet_hanging_indent = theme.typography.bullet_hanging_indent
         effective_width = max_width - 8 * report_document.decoration_depth
 
         y = self._draw_text_block(
@@ -695,7 +696,7 @@ class PdfThemeRenderer:
                 theme=theme,
                 asset_bundle=asset_bundle,
             )
-            y -= key_gap // 2
+            y -= paragraph_gap
 
         for section in report_document.sections:
             y -= section_gap
@@ -717,8 +718,8 @@ class PdfThemeRenderer:
                     pdf,
                     text=paragraph,
                     y=y,
-                    margin=margin + 6,
-                    width=effective_width - 6,
+                    margin=margin + paragraph_gap,
+                    width=effective_width - paragraph_gap,
                     font=font_map["body"],
                     size=body_size,
                     page_width=page_width,
@@ -731,8 +732,8 @@ class PdfThemeRenderer:
                     pdf,
                     text=f"• {bullet}",
                     y=y,
-                    margin=margin + 10,
-                    width=effective_width - 10,
+                    margin=margin + bullet_indent,
+                    width=effective_width - bullet_indent,
                     font=font_map["body"],
                     size=body_size,
                     page_width=page_width,
@@ -759,8 +760,8 @@ class PdfThemeRenderer:
                         pdf,
                         text=f"– {point}",
                         y=y,
-                        margin=margin + 18,
-                        width=effective_width - 18,
+                        margin=margin + bullet_hanging_indent,
+                        width=effective_width - bullet_hanging_indent,
                         font=font_map["body"],
                         size=body_size,
                         page_width=page_width,
@@ -926,6 +927,9 @@ class PdfThemeRenderer:
         asset_bundle: PdfThemeAssetBundle,
     ) -> float:
         line_height = int(size * theme.typography.line_height_ratio)
+        letter_spacing = theme.typography.letter_spacing_body
+        if size > theme.typography.body_size:
+            letter_spacing = theme.typography.letter_spacing_title
         lines = self._split_text_into_visual_lines(text or "", font, size, width)
         for line in lines:
             if y <= theme.margin:
@@ -939,10 +943,13 @@ class PdfThemeRenderer:
             if font != _FONT_FALLBACK_NAME and any(ch.isdigit() for ch in line):
                 line_font = font
             pdf.setFillColorRGB(0.95, 0.94, 0.90, alpha=0.98)
-            pdf.setFont(line_font, size)
-            pdf.drawString(margin, y, line)
+            text_object = pdf.beginText(margin, y)
+            text_object.setFont(line_font, size)
+            text_object.setCharSpace(letter_spacing)
+            text_object.textLine(line)
+            pdf.drawText(text_object)
             y -= line_height
-        return y - max(int(line_height * 0.25), 2)
+        return y - theme.typography.paragraph_spacing
 
     def _draw_content_surface(
         self,

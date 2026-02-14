@@ -12,6 +12,12 @@ class PdfTypography:
     subtitle_size: int
     body_size: int
     line_height_ratio: float
+    letter_spacing_title: float
+    letter_spacing_body: float
+    paragraph_spacing: int
+    section_spacing: int
+    bullet_indent: int
+    bullet_hanging_indent: int
 
 
 @dataclass(frozen=True)
@@ -41,6 +47,12 @@ _DEFAULT_THEME = PdfTheme(
         subtitle_size=12,
         body_size=11,
         line_height_ratio=1.45,
+        letter_spacing_title=0.2,
+        letter_spacing_body=0.0,
+        paragraph_spacing=4,
+        section_spacing=15,
+        bullet_indent=10,
+        bullet_hanging_indent=18,
     ),
 )
 
@@ -59,6 +71,12 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             subtitle_size=11,
             body_size=10,
             line_height_ratio=1.4,
+            letter_spacing_title=0.0,
+            letter_spacing_body=0.0,
+            paragraph_spacing=3,
+            section_spacing=14,
+            bullet_indent=8,
+            bullet_hanging_indent=14,
         ),
     ),
     Tariff.T1: PdfTheme(
@@ -75,6 +93,12 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             subtitle_size=12,
             body_size=11,
             line_height_ratio=1.45,
+            letter_spacing_title=0.15,
+            letter_spacing_body=0.0,
+            paragraph_spacing=4,
+            section_spacing=16,
+            bullet_indent=10,
+            bullet_hanging_indent=18,
         ),
     ),
     Tariff.T2: PdfTheme(
@@ -91,6 +115,12 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             subtitle_size=13,
             body_size=11,
             line_height_ratio=1.5,
+            letter_spacing_title=0.2,
+            letter_spacing_body=0.05,
+            paragraph_spacing=5,
+            section_spacing=18,
+            bullet_indent=11,
+            bullet_hanging_indent=20,
         ),
     ),
     Tariff.T3: PdfTheme(
@@ -107,6 +137,12 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
             subtitle_size=14,
             body_size=12,
             line_height_ratio=1.55,
+            letter_spacing_title=0.3,
+            letter_spacing_body=0.1,
+            paragraph_spacing=6,
+            section_spacing=20,
+            bullet_indent=12,
+            bullet_hanging_indent=22,
         ),
     ),
 }

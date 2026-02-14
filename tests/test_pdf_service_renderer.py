@@ -399,5 +399,125 @@ class PdfServiceRendererTests(unittest.TestCase):
 
 
 
+    def test_draw_body_uses_theme_spacing_values_for_offsets(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        typography = theme.typography
+        pdf = mock.Mock()
+        report_document = mock.Mock(
+            decoration_depth=0,
+            key_findings=["k1"],
+            sections=[
+                mock.Mock(
+                    title="Section 1",
+                    paragraphs=["Paragraph 1"],
+                    bullets=["Bullet 1"],
+                    accent_blocks=[mock.Mock(title="Accent", points=["Point 1"])],
+                )
+            ],
+            disclaimer="Disclaimer",
+        )
+
+        calls: list[dict[str, float | str]] = []
+
+        def fake_draw_text_block(_pdf, **kwargs):
+            calls.append(kwargs)
+            return kwargs["y"]
+
+        with mock.patch.object(renderer, "_draw_content_surface"), mock.patch.object(
+            renderer,
+            "_draw_text_block",
+            side_effect=fake_draw_text_block,
+        ):
+            renderer._draw_body(
+                pdf,
+                theme,
+                {"subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                report_text="",
+                page_width=595,
+                page_height=842,
+                asset_bundle=mock.Mock(),
+                body_start_y=700,
+                report_document=report_document,
+            )
+
+        self.assertEqual(calls[2]["y"], 700 - typography.paragraph_spacing - typography.section_spacing)
+        self.assertEqual(calls[7]["y"], calls[6]["y"] - typography.section_spacing)
+        self.assertEqual(calls[3]["margin"], theme.margin + typography.paragraph_spacing)
+        self.assertEqual(calls[3]["width"], 595 - theme.margin * 2 - typography.paragraph_spacing)
+        self.assertEqual(calls[4]["margin"], theme.margin + typography.bullet_indent)
+        self.assertEqual(calls[4]["width"], 595 - theme.margin * 2 - typography.bullet_indent)
+        self.assertEqual(calls[6]["margin"], theme.margin + typography.bullet_hanging_indent)
+        self.assertEqual(calls[6]["width"], 595 - theme.margin * 2 - typography.bullet_hanging_indent)
+
+    def test_draw_text_block_uses_theme_paragraph_spacing_for_return_value(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        pdf = mock.Mock()
+        text_obj = mock.Mock()
+        pdf.beginText.return_value = text_obj
+
+        start_y = 600
+        result_y = renderer._draw_text_block(
+            pdf,
+            text="Одна строка",
+            y=start_y,
+            margin=theme.margin,
+            width=300,
+            font="Helvetica",
+            size=theme.typography.body_size,
+            page_width=595,
+            page_height=842,
+            theme=theme,
+            asset_bundle=mock.Mock(),
+        )
+
+        line_height = int(theme.typography.body_size * theme.typography.line_height_ratio)
+        expected_y = start_y - line_height - theme.typography.paragraph_spacing
+        self.assertEqual(result_y, expected_y)
+
+
+    def test_draw_text_block_uses_theme_letter_spacing(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+
+        body_pdf = mock.Mock()
+        body_text_obj = mock.Mock()
+        body_pdf.beginText.return_value = body_text_obj
+        renderer._draw_text_block(
+            body_pdf,
+            text="Body",
+            y=500,
+            margin=theme.margin,
+            width=300,
+            font="Helvetica",
+            size=theme.typography.body_size,
+            page_width=595,
+            page_height=842,
+            theme=theme,
+            asset_bundle=mock.Mock(),
+        )
+
+        title_pdf = mock.Mock()
+        title_text_obj = mock.Mock()
+        title_pdf.beginText.return_value = title_text_obj
+        renderer._draw_text_block(
+            title_pdf,
+            text="Title",
+            y=500,
+            margin=theme.margin,
+            width=300,
+            font="Helvetica-Bold",
+            size=theme.typography.body_size + 1,
+            page_width=595,
+            page_height=842,
+            theme=theme,
+            asset_bundle=mock.Mock(),
+        )
+
+        body_text_obj.setCharSpace.assert_called_with(theme.typography.letter_spacing_body)
+        title_text_obj.setCharSpace.assert_called_with(theme.typography.letter_spacing_title)
+
+
 if __name__ == "__main__":
     unittest.main()
