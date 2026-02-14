@@ -1049,6 +1049,119 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertEqual(bullet_calls[1]["bullet_hanging_indent"], typography.bullet_hanging_indent)
         self.assertEqual(bullet_calls[1]["bullet_indent"], typography.bullet_hanging_indent)
 
+    def test_draw_body_routes_timeline_subsections_to_timeline_block(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        pdf = mock.Mock()
+        report_document = mock.Mock(
+            decoration_depth=0,
+            sections=[
+                mock.Mock(
+                    title="План действий",
+                    paragraphs=[
+                        f"{SUBSECTION_CONTRACT_PREFIX}по неделям: Неделя 1: снизить темп.",
+                    ],
+                    bullets=[],
+                    accent_blocks=[],
+                )
+            ],
+            disclaimer="",
+        )
+
+        with mock.patch.object(renderer, "_draw_content_surface"), mock.patch.object(
+            renderer,
+            "_draw_timeline_block",
+            return_value=500,
+        ) as draw_timeline_block, mock.patch.object(renderer, "_draw_text_block") as draw_text_block:
+            renderer._draw_body(
+                pdf,
+                theme,
+                {"subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                report_text="",
+                page_width=595,
+                page_height=842,
+                asset_bundle=mock.Mock(),
+                body_start_y=700,
+                report_document=report_document,
+            )
+
+        draw_timeline_block.assert_called_once()
+        self.assertTrue(any(call.kwargs.get("text") == "План действий" for call in draw_text_block.mock_calls))
+
+    def test_draw_body_routes_timeline_markers_without_subsection_header(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        pdf = mock.Mock()
+        report_document = mock.Mock(
+            decoration_depth=0,
+            sections=[
+                mock.Mock(
+                    title="План",
+                    paragraphs=["Неделя 2: закрепить режим."],
+                    bullets=[],
+                    accent_blocks=[],
+                )
+            ],
+            disclaimer="",
+        )
+
+        with mock.patch.object(renderer, "_draw_content_surface"), mock.patch.object(
+            renderer,
+            "_draw_timeline_block",
+            return_value=500,
+        ) as draw_timeline_block:
+            renderer._draw_body(
+                pdf,
+                theme,
+                {"subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                report_text="",
+                page_width=595,
+                page_height=842,
+                asset_bundle=mock.Mock(),
+                body_start_y=700,
+                report_document=report_document,
+            )
+
+        self.assertEqual(draw_timeline_block.call_count, 1)
+
+    def test_draw_timeline_block_uses_page_break_guard(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        pdf = mock.Mock()
+
+        with mock.patch.object(renderer, "_start_new_page_if_needed", return_value=400) as page_guard, mock.patch.object(
+            renderer,
+            "_draw_text_block",
+            side_effect=[360, 320],
+        ) as draw_text_block:
+            result_y = renderer._draw_timeline_block(
+                pdf,
+                theme=theme,
+                font_map={"subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                paragraph_text="1-3: стабилизировать режим.",
+                marker="",
+                y=200,
+                margin=theme.margin,
+                paragraph_gap=theme.typography.paragraph_spacing,
+                effective_width=400,
+                page_width=595,
+                page_height=842,
+                asset_bundle=mock.Mock(),
+            )
+
+        page_guard.assert_called_once()
+        self.assertEqual(draw_text_block.call_count, 2)
+        self.assertEqual(result_y, 320 - theme.typography.timeline_item_spacing - theme.typography.timeline_period_spacing)
+
+    def test_timeline_detection_helpers(self) -> None:
+        renderer = PdfThemeRenderer()
+
+        self.assertTrue(renderer._is_timeline_header("по неделям"))
+        self.assertTrue(renderer._is_timeline_header("1 год (помесячно)"))
+        self.assertTrue(renderer._is_timeline_marker("Неделя 3: добавить прогулки"))
+        self.assertTrue(renderer._is_timeline_marker("1–3: стабилизировать режим"))
+        self.assertFalse(renderer._is_timeline_marker("Ресурс: дышать и отдыхать"))
+
     def test_draw_bullet_item_draws_marker_and_wrapped_lines_with_expected_offsets(self) -> None:
         renderer = PdfThemeRenderer()
         theme = resolve_pdf_theme("T1")

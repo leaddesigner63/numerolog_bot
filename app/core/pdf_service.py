@@ -50,6 +50,16 @@ _SUBSECTION_LABEL_WHITELIST_CASEFOLDED = {
     "шаг",
     "почему это важно",
 }
+_TIMELINE_SECTION_TITLES_CASEFOLDED = {
+    "по неделям",
+    "помесячно",
+}
+_TIMELINE_WEEK_MARKER_PATTERN = re.compile(r"^\s*неделя\s+\d+\s*:", re.IGNORECASE)
+_TIMELINE_MONTH_RANGE_MARKER_PATTERN = re.compile(r"^\s*\d+\s*[\-–—]\s*\d+\s*(?:месяц(?:а|ев|ы)?|мес\.)?\s*:", re.IGNORECASE)
+_TIMELINE_PERIOD_HEADER_PATTERN = re.compile(
+    r"^\s*(?:\d+\s*(?:месяц(?:а|ев|ы)?|год(?:а|у)?)(?:\s*\([^\)]*\))?|(?:по\s+неделям|помесячно))\s*:?\s*$",
+    re.IGNORECASE,
+)
 
 def _register_font() -> dict[str, str]:
     global _FONT_FAMILY
@@ -734,6 +744,22 @@ class PdfThemeRenderer:
             for paragraph in section.paragraphs:
                 subsection_title, paragraph_text = self._extract_subsection_title(paragraph)
                 if subsection_title:
+                    if self._is_timeline_header(subsection_title):
+                        y = self._draw_timeline_block(
+                            pdf,
+                            theme=theme,
+                            font_map=font_map,
+                            paragraph_text=paragraph_text,
+                            marker=subsection_title,
+                            y=y,
+                            margin=margin,
+                            paragraph_gap=paragraph_gap,
+                            effective_width=effective_width,
+                            page_width=page_width,
+                            page_height=page_height,
+                            asset_bundle=asset_bundle,
+                        )
+                        continue
                     y -= theme.typography.subsection_spacing_before
                     y = self._draw_subsection_title(
                         pdf,
@@ -749,6 +775,22 @@ class PdfThemeRenderer:
                     )
                     y -= theme.typography.subsection_spacing_after
                 if not paragraph_text:
+                    continue
+                if self._is_timeline_marker(paragraph_text):
+                    y = self._draw_timeline_block(
+                        pdf,
+                        theme=theme,
+                        font_map=font_map,
+                        paragraph_text=paragraph_text,
+                        marker="",
+                        y=y,
+                        margin=margin,
+                        paragraph_gap=paragraph_gap,
+                        effective_width=effective_width,
+                        page_width=page_width,
+                        page_height=page_height,
+                        asset_bundle=asset_bundle,
+                    )
                     continue
                 y = self._draw_text_block(
                     pdf,
@@ -904,6 +946,129 @@ class PdfThemeRenderer:
             line_height_ratio=theme.typography.disclaimer_line_height_ratio,
             text_alpha=theme.typography.disclaimer_alpha,
             text_color_rgb=theme.typography.body_color_rgb,
+        )
+
+    def _draw_timeline_block(
+        self,
+        pdf: canvas.Canvas,
+        *,
+        theme: PdfTheme,
+        font_map: dict[str, str],
+        paragraph_text: str,
+        marker: str,
+        y: float,
+        margin: float,
+        paragraph_gap: float,
+        effective_width: float,
+        page_width: float,
+        page_height: float,
+        asset_bundle: PdfThemeAssetBundle,
+    ) -> float:
+        marker_text = (marker or "").strip()
+        step_text = (paragraph_text or "").strip()
+
+        if not marker_text and self._is_timeline_marker(step_text):
+            extracted_marker, _separator, extracted_text = step_text.partition(":")
+            marker_text = extracted_marker.strip()
+            step_text = extracted_text.lstrip()
+
+        if not marker_text:
+            return y
+
+        marker_margin = margin + paragraph_gap
+        content_margin = marker_margin + theme.typography.bullet_indent
+        marker_width = max(effective_width - paragraph_gap, 1)
+        content_width = max(effective_width - paragraph_gap - theme.typography.bullet_indent, 1)
+
+        marker_size = max(theme.typography.timeline_marker_size, theme.typography.body_size)
+        marker_height = self._text_block_height(
+            text=marker_text,
+            font=self._section_title_font(font_map, theme),
+            size=marker_size,
+            width=marker_width,
+            theme=theme,
+        )
+        step_height = 0.0
+        if step_text:
+            step_height = self._text_block_height(
+                text=step_text,
+                font=font_map["body"],
+                size=theme.typography.body_size,
+                width=content_width,
+                theme=theme,
+            )
+
+        required_height = (
+            theme.typography.subsection_spacing_before
+            + marker_height
+            + theme.typography.subsection_spacing_after
+            + step_height
+            + theme.typography.timeline_period_spacing
+        )
+
+        y = self._start_new_page_if_needed(
+            pdf,
+            y=y,
+            required_height=required_height,
+            page_width=page_width,
+            page_height=page_height,
+            theme=theme,
+            asset_bundle=asset_bundle,
+            content_font_size=theme.typography.body_size,
+            seed_text=marker_text or step_text,
+        )
+
+        y -= theme.typography.subsection_spacing_before
+        y = self._draw_text_block(
+            pdf,
+            text=marker_text,
+            y=y,
+            margin=marker_margin,
+            width=marker_width,
+            font=self._section_title_font(font_map, theme),
+            size=marker_size,
+            page_width=page_width,
+            page_height=page_height,
+            theme=theme,
+            asset_bundle=asset_bundle,
+            line_height_ratio=theme.typography.subsection_title_line_height_ratio,
+            text_alpha=1.0,
+            text_color_rgb=theme.typography.subsection_title_color_rgb,
+        )
+        y -= theme.typography.subsection_spacing_after
+        if step_text:
+            y = self._draw_text_block(
+                pdf,
+                text=step_text,
+                y=y,
+                margin=content_margin,
+                width=content_width,
+                font=font_map["body"],
+                size=theme.typography.body_size,
+                page_width=page_width,
+                page_height=page_height,
+                theme=theme,
+                asset_bundle=asset_bundle,
+            )
+            y -= theme.typography.timeline_item_spacing
+
+        return y - theme.typography.timeline_period_spacing
+
+    def _is_timeline_header(self, title: str) -> bool:
+        normalized_title = (title or "").strip().casefold()
+        if not normalized_title:
+            return False
+        if normalized_title in _TIMELINE_SECTION_TITLES_CASEFOLDED:
+            return True
+        return bool(_TIMELINE_PERIOD_HEADER_PATTERN.match(normalized_title))
+
+    def _is_timeline_marker(self, text: str) -> bool:
+        value = (text or "").strip()
+        if not value:
+            return False
+        return bool(
+            _TIMELINE_WEEK_MARKER_PATTERN.match(value)
+            or _TIMELINE_MONTH_RANGE_MARKER_PATTERN.match(value)
         )
 
 
