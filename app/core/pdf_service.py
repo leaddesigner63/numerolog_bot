@@ -594,7 +594,7 @@ class PdfThemeRenderer:
         subtitle_line_height = int(subtitle_size * theme.typography.line_height_ratio)
 
         pdf.saveState()
-        pdf.setFillColor(theme.palette[2])
+        pdf.setFillColorRGB(*theme.typography.title_color_rgb)
         title = (report_document.title if report_document else "") or "Персональный аналитический отчёт"
         title_lines = self._split_text_into_visual_lines(title, font_map["title"], title_size, max_width)
         y = page_height - margin
@@ -612,6 +612,7 @@ class PdfThemeRenderer:
             subtitle_size,
             max_width,
         )
+        pdf.setFillColorRGB(*theme.typography.subtitle_color_rgb)
         pdf.setFont(font_map["subtitle"], subtitle_size)
         for line in subtitle_lines:
             pdf.drawString(margin, y, line)
@@ -662,18 +663,17 @@ class PdfThemeRenderer:
         bullet_hanging_indent = theme.typography.bullet_hanging_indent
         effective_width = max_width - 8 * report_document.decoration_depth
 
-        y = self._draw_text_block(
+        y = self._draw_section_title(
             pdf,
             text="Ключевые выводы",
             y=y,
             margin=margin,
             width=effective_width,
-            font=font_map["subtitle"],
-            size=body_size + 1,
             page_width=page_width,
             page_height=page_height,
             theme=theme,
             asset_bundle=asset_bundle,
+            font_map=font_map,
         )
         for finding in report_document.key_findings:
             y = self._draw_bullet_item(
@@ -705,8 +705,8 @@ class PdfThemeRenderer:
 
             required_section_height = section_gap + self._minimum_block_height(
                 title=section.title,
-                title_font=font_map["subtitle"],
-                title_size=body_size + 1,
+                title_font=self._section_title_font(font_map, theme),
+                title_size=theme.typography.section_title_size,
                 title_width=effective_width,
                 content=preview_text,
                 content_font=font_map["body"],
@@ -727,18 +727,17 @@ class PdfThemeRenderer:
             )
 
             y -= section_gap
-            y = self._draw_text_block(
+            y = self._draw_section_title(
                 pdf,
                 text=section.title,
                 y=y,
                 margin=margin,
                 width=effective_width,
-                font=font_map["subtitle"],
-                size=body_size + 1,
                 page_width=page_width,
                 page_height=page_height,
                 theme=theme,
                 asset_bundle=asset_bundle,
+                font_map=font_map,
             )
             for paragraph in section.paragraphs:
                 y = self._draw_text_block(
@@ -881,7 +880,7 @@ class PdfThemeRenderer:
                 self._draw_decorative_layers(pdf, theme, page_width, page_height, page_randomizer, asset_bundle)
                 self._draw_content_surface(pdf, theme, page_width, page_height)
                 y = self._content_text_start_y(theme, page_height, size)
-            pdf.setFillColorRGB(0.95, 0.94, 0.90, alpha=0.98)
+            pdf.setFillColorRGB(*theme.typography.body_color_rgb, alpha=0.98)
             pdf.setFont(font, size)
             if line_index == 0:
                 pdf.drawString(margin, y, marker)
@@ -917,7 +916,7 @@ class PdfThemeRenderer:
                 self._draw_content_surface(pdf, theme, page_width, page_height)
                 y = self._content_text_start_y(theme, page_height, size)
             line_font = numeric_font if any(ch.isdigit() for ch in paragraph) else font
-            pdf.setFillColorRGB(0.95, 0.94, 0.90, alpha=0.98)
+            pdf.setFillColorRGB(*theme.typography.body_color_rgb, alpha=0.98)
             pdf.setFont(line_font, size)
             pdf.drawString(margin, y, paragraph)
             y -= line_height
@@ -1201,6 +1200,37 @@ class PdfThemeRenderer:
             prepared_chars.append(char)
         return "".join(prepared_chars)
 
+
+    def _draw_section_title(
+        self,
+        pdf: canvas.Canvas,
+        *,
+        text: str,
+        y: float,
+        margin: float,
+        width: float,
+        page_width: float,
+        page_height: float,
+        theme: PdfTheme,
+        asset_bundle: PdfThemeAssetBundle,
+        font_map: dict[str, str],
+    ) -> float:
+        return self._draw_text_block(
+            pdf,
+            text=text,
+            y=y,
+            margin=margin,
+            width=width,
+            font=self._section_title_font(font_map, theme),
+            size=theme.typography.section_title_size,
+            page_width=page_width,
+            page_height=page_height,
+            theme=theme,
+            asset_bundle=asset_bundle,
+            line_height_ratio=theme.typography.section_title_line_height_ratio,
+            text_color_rgb=theme.typography.section_title_color_rgb,
+        )
+
     def _draw_text_block(
         self,
         pdf: canvas.Canvas,
@@ -1217,7 +1247,7 @@ class PdfThemeRenderer:
         asset_bundle: PdfThemeAssetBundle,
         line_height_ratio: float | None = None,
         text_alpha: float = 0.98,
-        text_color_rgb: tuple[float, float, float] = (0.95, 0.94, 0.90),
+        text_color_rgb: tuple[float, float, float] | None = None,
     ) -> float:
         effective_line_height_ratio = line_height_ratio or theme.typography.line_height_ratio
         line_height = int(size * effective_line_height_ratio)
@@ -1236,7 +1266,8 @@ class PdfThemeRenderer:
             line_font = font
             if font != _FONT_FALLBACK_NAME and any(ch.isdigit() for ch in line):
                 line_font = font
-            pdf.setFillColorRGB(*text_color_rgb, alpha=text_alpha)
+            color_rgb = text_color_rgb or theme.typography.body_color_rgb
+            pdf.setFillColorRGB(*color_rgb, alpha=text_alpha)
             text_object = pdf.beginText(margin, y)
             text_object.setFont(line_font, size)
             text_object.setCharSpace(letter_spacing)
@@ -1244,6 +1275,12 @@ class PdfThemeRenderer:
             pdf.drawText(text_object)
             y -= line_height
         return y - theme.typography.paragraph_spacing
+
+    def _section_title_font(self, font_map: dict[str, str], theme: PdfTheme) -> str:
+        preferred_role = theme.typography.section_title_font_role
+        if preferred_role in font_map:
+            return font_map[preferred_role]
+        return font_map.get("subtitle") or font_map.get("title") or font_map.get("body") or _FONT_FALLBACK_NAME
 
     def _draw_content_surface(
         self,

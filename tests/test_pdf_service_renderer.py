@@ -14,12 +14,16 @@ class _CanvasTextSpy:
         self.x = x
         self.y = y
         self.text = ""
+        self.font_name = ""
+        self.font_size = 0
+        self.char_space = 0.0
 
-    def setFont(self, *_args, **_kwargs) -> None:  # noqa: N802
-        return None
+    def setFont(self, font_name: str, font_size: int, *_args, **_kwargs) -> None:  # noqa: N802
+        self.font_name = font_name
+        self.font_size = font_size
 
-    def setCharSpace(self, *_args, **_kwargs) -> None:  # noqa: N802
-        return None
+    def setCharSpace(self, char_space: float, *_args, **_kwargs) -> None:  # noqa: N802
+        self.char_space = char_space
 
     def textLine(self, text: str) -> None:  # noqa: N802
         self.text = text
@@ -31,7 +35,8 @@ class _CanvasSpy:
         self.draw_calls_with_page: list[tuple[int, float, float, str]] = []
         self.page_breaks = 0
         self.current_page = 1
-        self.text_draw_calls: list[tuple[int, float, float, str]] = []
+        self.text_draw_calls: list[tuple[int, float, float, str, str, int, tuple[float, ...]]] = []
+        self.current_fill_color: tuple[float, ...] = ()
 
     def saveState(self) -> None:  # noqa: N802
         return None
@@ -42,7 +47,12 @@ class _CanvasSpy:
     def setFillColor(self, *_args, **_kwargs) -> None:  # noqa: N802
         return None
 
-    def setFillColorRGB(self, *_args, **_kwargs) -> None:  # noqa: N802
+    def setFillColorRGB(self, *args, **kwargs) -> None:  # noqa: N802
+        alpha = kwargs.get("alpha")
+        if alpha is None:
+            self.current_fill_color = tuple(args)
+            return None
+        self.current_fill_color = (*args, alpha)
         return None
 
     def setFillAlpha(self, *_args, **_kwargs) -> None:  # noqa: N802
@@ -64,7 +74,17 @@ class _CanvasSpy:
         return _CanvasTextSpy(x, y)
 
     def drawText(self, text_object: _CanvasTextSpy) -> None:  # noqa: N802
-        self.text_draw_calls.append((self.current_page, text_object.x, text_object.y, text_object.text))
+        self.text_draw_calls.append(
+            (
+                self.current_page,
+                text_object.x,
+                text_object.y,
+                text_object.text,
+                text_object.font_name,
+                text_object.font_size,
+                self.current_fill_color,
+            )
+        )
 
     def drawString(self, x: float, y: float, text: str) -> None:  # noqa: N802
         self.draw_calls.append((x, y, text))
@@ -291,15 +311,15 @@ class PdfServiceRendererTests(unittest.TestCase):
                 report_document=report_document,
             )
 
-        title_page = next(page for page, _x, _y, text in canvas.text_draw_calls if text.startswith("Раздел"))
+        title_page = next(page for page, _x, _y, text, *_rest in canvas.text_draw_calls if text.startswith("Раздел"))
         paragraph_page = next(
             page
-            for page, _x, _y, text in canvas.text_draw_calls
+            for page, _x, _y, text, *_rest in canvas.text_draw_calls
             if text.startswith("Первый абзац")
         )
         accent_title_page = next(
             page
-            for page, _x, _y, text in canvas.text_draw_calls
+            for page, _x, _y, text, *_rest in canvas.text_draw_calls
             if text.startswith("Акцент: Важный")
         )
         accent_point_page = next(
@@ -310,6 +330,48 @@ class PdfServiceRendererTests(unittest.TestCase):
 
         self.assertEqual(title_page, paragraph_page)
         self.assertEqual(accent_title_page, accent_point_page)
+
+
+    def test_draw_body_applies_distinct_section_title_style(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        canvas = _CanvasSpy()
+        report_document = ReportDocument(
+            title="Отчёт",
+            subtitle="Тариф: T1",
+            key_findings=["Короткий вывод"],
+            sections=[
+                ReportSection(
+                    title="Раздел со стилем",
+                    paragraphs=["Обычный абзац тела"],
+                )
+            ],
+            disclaimer="Дисклеймер",
+        )
+
+        with mock.patch.object(renderer, "_draw_content_surface", return_value=None), mock.patch.object(
+            renderer,
+            "_draw_background",
+            return_value=None,
+        ), mock.patch.object(renderer, "_draw_decorative_layers", return_value=None):
+            renderer._draw_body(
+                canvas,
+                theme,
+                {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                report_text="",
+                page_width=300,
+                page_height=842,
+                asset_bundle=mock.Mock(),
+                body_start_y=700,
+                report_document=report_document,
+            )
+
+        section_title_draw = next(call for call in canvas.text_draw_calls if call[3] == "Раздел со стилем")
+        body_draw = next(call for call in canvas.text_draw_calls if call[3].startswith("Обычный абзац"))
+
+        self.assertNotEqual(section_title_draw[4], body_draw[4])
+        self.assertNotEqual(section_title_draw[5], body_draw[5])
+        self.assertNotEqual(section_title_draw[6], body_draw[6])
 
 
 
