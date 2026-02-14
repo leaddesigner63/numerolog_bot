@@ -73,6 +73,7 @@ class ReportDocumentBuilder:
         "доступен раз в месяц",
         "это превью",
     )
+    _SUBTITLE_ARTIFACT_TRIGGER = "персональный маршрут"
     _WARNING_LINE_PATTERNS = (
         re.compile(r"^внимание[.!?]*$", re.IGNORECASE),
         re.compile(r"^предупреждение[.!?]*$", re.IGNORECASE),
@@ -165,6 +166,12 @@ class ReportDocumentBuilder:
             if tariff_value in {"T2", "T3"}:
                 self._append_focus_block(sections)
             sections, key_findings = self._strip_pdf_promotions(sections, key_findings)
+            sections, key_findings = self._strip_subtitle_artifacts(
+                sections,
+                key_findings,
+                subtitle=subtitle,
+                title=title,
+            )
             if not key_findings:
                 key_findings = [
                     point
@@ -425,6 +432,52 @@ class ReportDocumentBuilder:
             if cleaned:
                 cleaned_items.append(cleaned)
         return cleaned_items
+
+    def _strip_subtitle_artifacts(
+        self,
+        sections: list[ReportSection],
+        key_findings: list[str],
+        *,
+        subtitle: str,
+        title: str,
+    ) -> tuple[list[ReportSection], list[str]]:
+        def should_drop(line: str) -> bool:
+            normalized = self._normalize_artifact_line(line)
+            if not normalized or self._SUBTITLE_ARTIFACT_TRIGGER not in normalized:
+                return False
+            return any(
+                token and token in normalized
+                for token in (
+                    self._normalize_artifact_line(subtitle),
+                    self._normalize_artifact_line(title),
+                )
+            )
+
+        cleaned_sections: list[ReportSection] = []
+        for section in sections:
+            cleaned_bullets = [bullet for bullet in section.bullets if not should_drop(bullet)]
+            cleaned_paragraphs = [paragraph for paragraph in section.paragraphs if not should_drop(paragraph)]
+            cleaned_title = "" if should_drop(section.title) else section.title
+            if cleaned_title or cleaned_bullets or cleaned_paragraphs or section.accent_blocks:
+                cleaned_sections.append(
+                    ReportSection(
+                        title=cleaned_title,
+                        bullets=cleaned_bullets,
+                        paragraphs=cleaned_paragraphs,
+                        accent_blocks=section.accent_blocks,
+                    )
+                )
+
+        cleaned_findings = [point for point in key_findings if not should_drop(point)]
+        return cleaned_sections, cleaned_findings
+
+    def _normalize_artifact_line(self, line: str) -> str:
+        lowered = self._sanitize_line(line).lower()
+        if not lowered:
+            return ""
+        compact = re.sub(r"[«»\"'`]+", "", lowered)
+        compact = re.sub(r"\s*[—-]\s*", " ", compact)
+        return re.sub(r"\s+", " ", compact).strip()
 
 
 report_document_builder = ReportDocumentBuilder()
