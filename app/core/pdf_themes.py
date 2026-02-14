@@ -10,10 +10,17 @@ from app.db.models import Tariff
 class PdfTypography:
     title_size: int
     subtitle_size: int
+    section_title_size: int
     body_size: int
     line_height_ratio: float
+    section_title_line_height_ratio: float
     letter_spacing_title: float
     letter_spacing_body: float
+    title_color_rgb: tuple[float, float, float]
+    subtitle_color_rgb: tuple[float, float, float]
+    section_title_color_rgb: tuple[float, float, float]
+    body_color_rgb: tuple[float, float, float]
+    section_title_font_role: str
     paragraph_spacing: int
     section_spacing: int
     bullet_indent: int
@@ -48,10 +55,17 @@ _DEFAULT_THEME = PdfTheme(
     typography=PdfTypography(
         title_size=17,
         subtitle_size=12,
+        section_title_size=12,
         body_size=11,
         line_height_ratio=1.45,
+        section_title_line_height_ratio=1.4,
         letter_spacing_title=0.2,
         letter_spacing_body=0.0,
+        title_color_rgb=(0.99, 0.98, 0.96),
+        subtitle_color_rgb=(0.95, 0.84, 0.99),
+        section_title_color_rgb=(0.95, 0.84, 0.99),
+        body_color_rgb=(0.95, 0.94, 0.90),
+        section_title_font_role="subtitle",
         paragraph_spacing=4,
         section_spacing=15,
         bullet_indent=10,
@@ -75,10 +89,17 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
         typography=PdfTypography(
             title_size=16,
             subtitle_size=11,
+            section_title_size=11,
             body_size=10,
             line_height_ratio=1.4,
+            section_title_line_height_ratio=1.35,
             letter_spacing_title=0.0,
             letter_spacing_body=0.0,
+            title_color_rgb=(0.99, 0.98, 0.96),
+            subtitle_color_rgb=(0.92, 0.84, 0.99),
+            section_title_color_rgb=(0.92, 0.84, 0.99),
+            body_color_rgb=(0.95, 0.94, 0.90),
+            section_title_font_role="subtitle",
             paragraph_spacing=3,
             section_spacing=14,
             bullet_indent=8,
@@ -100,10 +121,17 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
         typography=PdfTypography(
             title_size=18,
             subtitle_size=12,
+            section_title_size=13,
             body_size=11,
             line_height_ratio=1.45,
+            section_title_line_height_ratio=1.35,
             letter_spacing_title=0.15,
             letter_spacing_body=0.0,
+            title_color_rgb=(0.99, 0.98, 0.96),
+            subtitle_color_rgb=(0.95, 0.86, 0.99),
+            section_title_color_rgb=(0.95, 0.86, 0.99),
+            body_color_rgb=(0.95, 0.94, 0.90),
+            section_title_font_role="subtitle",
             paragraph_spacing=4,
             section_spacing=16,
             bullet_indent=10,
@@ -125,10 +153,17 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
         typography=PdfTypography(
             title_size=19,
             subtitle_size=13,
+            section_title_size=14,
             body_size=11,
             line_height_ratio=1.5,
+            section_title_line_height_ratio=1.4,
             letter_spacing_title=0.2,
             letter_spacing_body=0.05,
+            title_color_rgb=(0.99, 0.98, 0.96),
+            subtitle_color_rgb=(0.98, 0.88, 0.97),
+            section_title_color_rgb=(0.98, 0.88, 0.97),
+            body_color_rgb=(0.95, 0.94, 0.90),
+            section_title_font_role="subtitle",
             paragraph_spacing=5,
             section_spacing=18,
             bullet_indent=11,
@@ -150,10 +185,17 @@ PDF_THEME_BY_TARIFF: dict[Tariff, PdfTheme] = {
         typography=PdfTypography(
             title_size=20,
             subtitle_size=14,
+            section_title_size=15,
             body_size=12,
             line_height_ratio=1.55,
+            section_title_line_height_ratio=1.45,
             letter_spacing_title=0.3,
             letter_spacing_body=0.1,
+            title_color_rgb=(0.99, 0.98, 0.96),
+            subtitle_color_rgb=(1.0, 0.9, 0.86),
+            section_title_color_rgb=(1.0, 0.9, 0.86),
+            body_color_rgb=(0.95, 0.94, 0.90),
+            section_title_font_role="subtitle",
             paragraph_spacing=6,
             section_spacing=20,
             bullet_indent=12,
