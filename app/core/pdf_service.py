@@ -42,6 +42,14 @@ _ZERO_WIDTH_CHARS = {
 
 _SOFT_HYPHEN = "\u00ad"
 _CYRILLIC_VOWELS = set("аеёиоуыэюяАЕЁИОУЫЭЮЯ")
+_SUBSECTION_PREFIX_MARKERS = ("##",)
+_SUBSECTION_LABEL_WHITELIST_CASEFOLDED = {
+    "фокус",
+    "риск",
+    "ресурс",
+    "шаг",
+    "почему это важно",
+}
 
 def _register_font() -> dict[str, str]:
     global _FONT_FAMILY
@@ -1271,6 +1279,24 @@ class PdfThemeRenderer:
         if not text:
             return "", ""
 
+        marker_prefix = next(
+            (marker for marker in _SUBSECTION_PREFIX_MARKERS if text.startswith(marker)),
+            None,
+        )
+        if marker_prefix is not None:
+            marked_text = text[len(marker_prefix) :].lstrip()
+            if not marked_text:
+                return "", text
+
+            marked_label, separator, marked_body = marked_text.partition(":")
+            label = marked_label.strip()
+            if not label:
+                return "", text
+
+            if separator:
+                return label, marked_body.lstrip()
+            return label, ""
+
         title, separator, body = text.partition(":")
         if not separator:
             return "", text
@@ -1285,67 +1311,8 @@ class PdfThemeRenderer:
         if not label:
             return False
 
-        # Явно фиксируем продуктовый кейс: вопросительное вступление
-        # «Почему это важно: ...» считается коротким label.
-        if label.casefold() == "почему это важно":
-            return True
-
-        if label[-1] in ".!?;,":
-            return False
-
-        words = [word for word in label.split() if word]
-        if not 1 <= len(words) <= 4:
-            return False
-
-        verb_like_tokens = {
-            "быть",
-            "есть",
-            "будет",
-            "будут",
-            "может",
-            "можешь",
-            "могу",
-            "делает",
-            "делаешь",
-            "делать",
-            "хочу",
-            "хочешь",
-            "хочет",
-            "нужно",
-        }
-        verb_like_suffixes = (
-            "ться",
-            "ить",
-            "ать",
-            "ять",
-            "еть",
-            "уть",
-            "ишь",
-            "ешь",
-            "ет",
-            "ют",
-            "ут",
-            "ем",
-            "им",
-            "ешься",
-            "ется",
-            "ются",
-            "утся",
-            "ал",
-            "ала",
-            "али",
-            "ил",
-            "ила",
-            "или",
-        )
-        for raw_word in words:
-            word = raw_word.strip("«»\"'()[]{}").casefold()
-            if not word:
-                continue
-            if word in verb_like_tokens or word.endswith(verb_like_suffixes):
-                return False
-
-        return True
+        normalized_label = label.strip().casefold()
+        return normalized_label in _SUBSECTION_LABEL_WHITELIST_CASEFOLDED
 
 
     def _draw_text_block(
