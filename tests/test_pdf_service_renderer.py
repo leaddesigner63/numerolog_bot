@@ -222,7 +222,7 @@ class PdfServiceRendererTests(unittest.TestCase):
 
         self.assertEqual(lines, ["Первая строка", "", "Третья строка"])
 
-    def test_draw_header_draws_only_subtitle_when_report_document_passed(self) -> None:
+    def test_draw_header_draws_subtitle_when_report_document_passed(self) -> None:
         renderer = PdfThemeRenderer()
         theme = resolve_pdf_theme("T1")
         canvas = _CanvasSpy()
@@ -242,9 +242,8 @@ class PdfServiceRendererTests(unittest.TestCase):
             report_document=mock.Mock(title=long_title, subtitle="Тариф: T1"),
         )
 
-        self.assertEqual(len(canvas.draw_calls), 2)
-        self.assertEqual(canvas.draw_calls[0][2], "Тариф: T1 [T1]")
-        self.assertEqual(canvas.draw_calls[1][2], "Тариф: T1")
+        self.assertEqual(len(canvas.draw_calls), 1)
+        self.assertEqual(canvas.draw_calls[0][2], "Тариф: T1")
         self.assertGreater(body_start_y, 740)
 
 
@@ -265,10 +264,10 @@ class PdfServiceRendererTests(unittest.TestCase):
         )
 
         rendered_text = " ".join(text for _, _, text in canvas.draw_calls)
-        self.assertIn("Где твои деньги?", rendered_text)
+        normalized_rendered_text = " ".join(rendered_text.split())
+        self.assertIn("Где твои деньги?", normalized_rendered_text)
         self.assertNotIn("Report #42", rendered_text)
-        self.assertIn("Тариф:", rendered_text)
-        self.assertIn("[T2]", rendered_text)
+        self.assertNotIn("[T2]", rendered_text)
 
 
 

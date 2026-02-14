@@ -17,7 +17,7 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         self.assertEqual(doc.tariff, "T3")
         self.assertEqual(doc.decoration_depth, 3)
         self.assertTrue(doc.key_findings)
-        self.assertTrue(any(section.title == "Титульный лист T3" for section in doc.sections))
+        self.assertFalse(any(section.title == "Титульный лист T3" for section in doc.sections))
 
     def test_returns_none_for_empty_text(self) -> None:
         builder = ReportDocumentBuilder()
