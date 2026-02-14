@@ -590,8 +590,6 @@ class PdfThemeRenderer:
         max_width = page_width - margin * 2
         subtitle_size = theme.typography.subtitle_size
         subtitle_line_height = int(subtitle_size * theme.typography.line_height_ratio)
-        tariff_badge_size = max(subtitle_size + 1, 12)
-        tariff_badge_line_height = int(tariff_badge_size * theme.typography.line_height_ratio)
 
         pdf.saveState()
         y = page_height - margin
@@ -599,12 +597,6 @@ class PdfThemeRenderer:
         report_tariff = getattr(report_document, "tariff", "") if report_document else ""
         resolved_tariff = report_tariff if isinstance(report_tariff, str) and report_tariff else str(tariff or "")
         subtitle = (report_document.subtitle if report_document else "") or tariff_display_title(resolved_tariff, fallback="Тариф не указан")
-        tariff_badge = self._format_tariff_badge(resolved_tariff, subtitle)
-        pdf.setFillColor(theme.palette[2], alpha=0.98)
-        pdf.setFont(font_map["subtitle"], tariff_badge_size)
-        pdf.drawString(margin, y, tariff_badge)
-        y -= tariff_badge_line_height
-
         subtitle_lines = self._split_text_into_visual_lines(
             subtitle,
             font_map["subtitle"],
@@ -619,15 +611,6 @@ class PdfThemeRenderer:
         pdf.restoreState()
 
         return y - max(int(subtitle_line_height * 0.4), 8)
-
-    def _format_tariff_badge(self, tariff_code: str, subtitle: str) -> str:
-        normalized_code = (tariff_code or "").strip().upper()
-        display_code = normalized_code if normalized_code else "—"
-        normalized_subtitle = (subtitle or "Тариф не указан").strip()
-        lowered = normalized_subtitle.lower()
-        if lowered.startswith("тариф:"):
-            normalized_subtitle = normalized_subtitle.split(":", 1)[1].strip() or "Тариф не указан"
-        return f"Тариф: {normalized_subtitle} [{display_code}]"
 
     def _draw_body(
         self,

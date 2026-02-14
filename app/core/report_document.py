@@ -126,9 +126,6 @@ class ReportDocumentBuilder:
 
             if tariff_value in {"T2", "T3"}:
                 self._append_focus_block(sections)
-            if tariff_value == "T3":
-                self._append_t3_cover(sections)
-
             sections, key_findings = self._strip_pdf_promotions(sections, key_findings)
             if not key_findings:
                 key_findings = [
@@ -206,29 +203,6 @@ class ReportDocumentBuilder:
                         points=[
                             "Определите один сценарий и критерий результата.",
                             "Проведите короткий тест 2–4 недели и зафиксируйте выводы.",
-                        ],
-                    )
-                ],
-            )
-        )
-
-    def _append_t3_cover(self, sections: list[ReportSection]) -> None:
-        if not sections:
-            return
-        sections.insert(
-            0,
-            ReportSection(
-                title="Титульный лист T3",
-                paragraphs=[
-                    "Расширенный формат отчёта: усиленные визуальные блоки, ключевые ориентиры и план действий.",
-                ],
-                accent_blocks=[
-                    ReportAccentBlock(
-                        title="Что внутри",
-                        points=[
-                            "Ключевые выводы и приоритеты.",
-                            "Сценарии с акцентом на применение навыков.",
-                            "План действий на месяц и год.",
                         ],
                     )
                 ],
