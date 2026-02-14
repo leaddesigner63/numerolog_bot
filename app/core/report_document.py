@@ -77,6 +77,21 @@ class ReportDocumentBuilder:
         re.compile(r"^осторожно[.!?]*$", re.IGNORECASE),
     )
     _TECHNICAL_SEPARATOR_RE = re.compile(r"^[-=_~]{3,}$")
+    _TITLE_MAX_CHARS = 72
+    _NARRATIVE_CONNECTORS = (
+        "что",
+        "как",
+        "когда",
+        "это",
+        "потому что",
+        "чтобы",
+        "если",
+        "котор",
+        "поэтому",
+    )
+    _VERB_LIKE_WORD_RE = re.compile(
+        r"(?i)(ться|тись|ешь|ете|ем|им|ут|ют|ешься|ется|ются|ится|ится|ал|ала|али|ило|или|ать|ять|ить|еть|уть|лся|лась|лись)$"
+    )
 
     def build(
         self,
@@ -238,8 +253,17 @@ class ReportDocumentBuilder:
         if raw.startswith("##") or raw.endswith(":"):
             return True
 
+        # Важно: эти правила намеренно отсекают обычные абзацы,
+        # чтобы не "перекрашивать" их в section/subsection style.
+        if len(sanitized) > self._TITLE_MAX_CHARS:
+            return False
+
         words_count = len(sanitized.split())
         if words_count < 2 or words_count > 6:
+            return False
+
+        normalized = f" {sanitized.lower()} "
+        if words_count >= 5 and any(f" {marker} " in normalized for marker in self._NARRATIVE_CONNECTORS):
             return False
 
         punctuation_count = len(re.findall(r"[.!?:;,]", sanitized))
@@ -248,9 +272,21 @@ class ReportDocumentBuilder:
         if sanitized.endswith("."):
             return False
         if sanitized.endswith(("?", "!")):
-            return punctuation_count == 1
+            return False
+        if punctuation_count != 0:
+            return False
 
-        return punctuation_count == 0
+        return self._looks_like_nominal_title(sanitized)
+
+    def _looks_like_nominal_title(self, line: str) -> bool:
+        words = [word for word in re.findall(r"[А-Яа-яЁёA-Za-z-]+", line) if len(word) > 1]
+        if not words or len(words) > 6:
+            return False
+
+        for word in words:
+            if self._VERB_LIKE_WORD_RE.search(word):
+                return False
+        return True
 
     def _is_warning_line(self, line: str) -> bool:
         normalized = " ".join((line or "").lower().split())
