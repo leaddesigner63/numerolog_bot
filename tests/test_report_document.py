@@ -212,7 +212,7 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         assert section is not None
         self.assertEqual(section.paragraphs, ["Сейчас полезно сохранить фокус на одной ключевой цели."])
 
-    def test_question_and_exclamation_subheadings_go_to_section_title(self) -> None:
+    def test_question_and_exclamation_lines_prefer_paragraphs(self) -> None:
         builder = ReportDocumentBuilder()
         source = """Персональный аналитический отчёт
 
@@ -227,8 +227,27 @@ class ReportDocumentBuilderTests(unittest.TestCase):
 
         self.assertIsNotNone(doc)
         assert doc is not None
-        self.assertTrue(any(section.title == "Где твой ресурс?" for section in doc.sections))
-        self.assertTrue(any(section.title == "С чего начать!" for section in doc.sections))
+        self.assertFalse(any(section.title == "Где твой ресурс?" for section in doc.sections))
+        self.assertFalse(any(section.title == "С чего начать!" for section in doc.sections))
+        all_paragraphs = [paragraph for section in doc.sections for paragraph in section.paragraphs]
+        self.assertIn("Где твой ресурс?", all_paragraphs)
+        self.assertIn("С чего начать!", all_paragraphs)
+
+    def test_long_line_with_connectors_is_not_promoted_to_title(self) -> None:
+        builder = ReportDocumentBuilder()
+        source = """Персональный аналитический отчёт
+
+Почему это важно и как это помогает, когда фокус теряется
+Выбери одно действие и повторяй его ежедневно.
+"""
+
+        doc = builder.build(source, tariff="T1", meta={"id": "206"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        self.assertFalse(any(section.title == "Почему это важно и как это помогает, когда фокус теряется" for section in doc.sections))
+        all_paragraphs = [paragraph for section in doc.sections for paragraph in section.paragraphs]
+        self.assertTrue(any(paragraph.startswith("Почему это важно и как это помогает, когда фокус теряется") for paragraph in all_paragraphs))
 
     def test_short_standalone_subheadings_without_colon_become_section_titles(self) -> None:
         builder = ReportDocumentBuilder()
