@@ -100,6 +100,17 @@ class ReportDocumentBuilder:
         r"(?i)^\s*(?:недел(?:я|и|ю|е|ь)|месяц(?:а|ев)?|(?:1\s*[–—-]\s*3|4\s*[–—-]\s*6|7\s*[–—-]\s*9|10\s*[–—-]\s*12))\b"
     )
     _TIMELINE_HEADER_RE = re.compile(r"(?i)\(по\s+неделям\):$|\(помесячно\):$")
+    _WEEK_MARKER_RE = re.compile(r"(?i)^\s*(неделя\s+\d+)\s*:?(.*)$")
+    _WEEKLY_BULLET_PREFIXES = (
+        "фокус недели",
+        "старт недели",
+        "середина недели",
+        "конец недели",
+        "привычка недели",
+        "артефакт недели",
+        "ловушка недели",
+        "критерий успеха недели",
+    )
 
     def build(
         self,
@@ -169,6 +180,7 @@ class ReportDocumentBuilder:
 
             if tariff_value in {"T2", "T3"}:
                 self._append_focus_block(sections)
+            sections = self._combine_weekly_plan_blocks(sections)
             sections, key_findings = self._strip_pdf_promotions(sections, key_findings)
             sections, key_findings = self._strip_subtitle_artifacts(
                 sections,
@@ -501,6 +513,134 @@ class ReportDocumentBuilder:
         compact = re.sub(r"[«»\"'`]+", "", lowered)
         compact = re.sub(r"\s*[—-]\s*", " ", compact)
         return re.sub(r"\s+", " ", compact).strip()
+
+    def _combine_weekly_plan_blocks(self, sections: list[ReportSection]) -> list[ReportSection]:
+        combined_sections: list[ReportSection] = []
+        normalized_sections = self._normalize_weekly_split_sections(sections)
+
+        for section in normalized_sections:
+            week_entries: list[tuple[int, str]] = []
+            skip_indices: set[int] = set()
+
+            for index, paragraph in enumerate(section.paragraphs):
+                marker_match = self._WEEK_MARKER_RE.match((paragraph or "").strip())
+                if not marker_match:
+                    continue
+                marker = marker_match.group(1).strip()
+                remainder = marker_match.group(2).strip(" :—-")
+                label = remainder
+
+                next_index = index + 1
+                if next_index < len(section.paragraphs):
+                    next_line = (section.paragraphs[next_index] or "").strip()
+                    if next_line and ":" not in next_line and self._is_title(next_line):
+                        label = next_line
+                        skip_indices.add(next_index)
+
+                marker_with_label = marker if not label else f"{marker} — {label}"
+                week_entries.append((index, marker_with_label))
+
+            weekly_bullet_chunks = self._extract_weekly_bullet_chunks(section.bullets)
+            if not week_entries or len(weekly_bullet_chunks) < len(week_entries):
+                combined_sections.append(section)
+                continue
+
+            updated_paragraphs: list[str] = []
+            for index, paragraph in enumerate(section.paragraphs):
+                if index in skip_indices:
+                    continue
+                week_entry = next((entry for entry in week_entries if entry[0] == index), None)
+                if week_entry is None:
+                    updated_paragraphs.append(paragraph)
+                    continue
+                _, marker = week_entry
+                chunk_index = week_entries.index(week_entry)
+                week_details = "; ".join(weekly_bullet_chunks[chunk_index]).strip()
+                updated_paragraphs.append(f"{marker}: {week_details}" if week_details else marker)
+
+            consumed_bullet_count = sum(len(chunk) for chunk in weekly_bullet_chunks[: len(week_entries)])
+            combined_sections.append(
+                ReportSection(
+                    title=section.title,
+                    paragraphs=updated_paragraphs,
+                    bullets=section.bullets[consumed_bullet_count:],
+                    accent_blocks=section.accent_blocks,
+                )
+            )
+
+        return combined_sections
+
+
+    def _normalize_weekly_split_sections(self, sections: list[ReportSection]) -> list[ReportSection]:
+        normalized: list[ReportSection] = []
+        index = 0
+
+        while index < len(sections):
+            current = sections[index]
+            if (current.title or "").strip().casefold() != "план действий" or not any(
+                self._WEEK_MARKER_RE.match((paragraph or "").strip()) for paragraph in current.paragraphs
+            ):
+                normalized.append(current)
+                index += 1
+                continue
+
+            merged_paragraphs = list(current.paragraphs)
+            merged_bullets = list(current.bullets)
+            cursor = index + 1
+            while cursor < len(sections):
+                candidate = sections[cursor]
+                candidate_title = (candidate.title or "").strip()
+                candidate_has_week_marker = any(
+                    self._WEEK_MARKER_RE.match((paragraph or "").strip()) for paragraph in candidate.paragraphs
+                )
+                candidate_has_weekly_bullets = bool(candidate.bullets) and all(
+                    any((bullet or "").strip().casefold().startswith(prefix) for prefix in self._WEEKLY_BULLET_PREFIXES)
+                    for bullet in candidate.bullets
+                )
+                candidate_title_is_label = bool(candidate_title) and self._is_title(candidate_title) and not self._WEEK_MARKER_RE.match(candidate_title)
+
+                if not (candidate_has_week_marker or candidate_has_weekly_bullets or candidate_title_is_label):
+                    break
+
+                if candidate_title_is_label:
+                    merged_paragraphs.append(candidate_title)
+                merged_paragraphs.extend(candidate.paragraphs)
+                merged_bullets.extend(candidate.bullets)
+                cursor += 1
+
+                if candidate_has_weekly_bullets:
+                    break
+
+            normalized.append(
+                ReportSection(
+                    title=current.title,
+                    paragraphs=merged_paragraphs,
+                    bullets=merged_bullets,
+                    accent_blocks=current.accent_blocks,
+                )
+            )
+            index = cursor
+
+        return normalized
+
+    def _extract_weekly_bullet_chunks(self, bullets: list[str]) -> list[list[str]]:
+        chunks: list[list[str]] = []
+        current_chunk: list[str] = []
+        for bullet in bullets:
+            normalized = (bullet or "").strip().casefold()
+            is_new_chunk = normalized.startswith("фокус недели")
+            is_weekly_bullet = any(normalized.startswith(prefix) for prefix in self._WEEKLY_BULLET_PREFIXES)
+            if is_new_chunk and current_chunk:
+                chunks.append(current_chunk)
+                current_chunk = []
+            if is_weekly_bullet:
+                current_chunk.append(bullet)
+            elif current_chunk:
+                chunks.append(current_chunk)
+                current_chunk = []
+        if current_chunk:
+            chunks.append(current_chunk)
+        return chunks
 
 
 report_document_builder = ReportDocumentBuilder()
