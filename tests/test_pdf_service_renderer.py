@@ -1153,6 +1153,85 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertEqual(draw_text_block.call_count, 2)
         self.assertEqual(result_y, 320 - theme.typography.timeline_item_spacing - theme.typography.timeline_period_spacing)
 
+    def test_draw_body_renders_full_t3_plan_timeline_periods_in_order_and_without_glue(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T3")
+        canvas = _CanvasSpy()
+        report_document = ReportDocument(
+            title="Отчёт",
+            subtitle="Тариф: T3",
+            key_findings=[],
+            sections=[
+                ReportSection(
+                    title="План действий",
+                    paragraphs=[
+                        f"{SUBSECTION_CONTRACT_PREFIX}1 месяц (по неделям):",
+                        "Неделя 1: стабилизировать ритм и сон.",
+                        "",
+                        "Неделя 2: закрепить режим восстановления.",
+                        "Неделя 3: расширить регулярные практики.",
+                        "",
+                        "Неделя 4: зафиксировать устойчивый график.",
+                        f"{SUBSECTION_CONTRACT_PREFIX}1 год (помесячно):",
+                        "1–3: адаптировать рабочую нагрузку.",
+                        "",
+                        "4–6: усилить концентрацию и фокус.",
+                        "7–9: масштабировать полезные привычки.",
+                        "",
+                        "10–12: закрепить итоговый результат.",
+                    ],
+                )
+            ],
+            disclaimer="",
+        )
+
+        with mock.patch.object(renderer, "_draw_content_surface", return_value=None), mock.patch.object(
+            renderer,
+            "_draw_background",
+            return_value=None,
+        ), mock.patch.object(renderer, "_draw_decorative_layers", return_value=None):
+            renderer._draw_body(
+                canvas,
+                theme,
+                {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                report_text="",
+                page_width=595,
+                page_height=842,
+                asset_bundle=mock.Mock(),
+                body_start_y=700,
+                report_document=report_document,
+            )
+
+        rendered_text = [call[3] for call in canvas.text_draw_calls]
+        expected_periods = [
+            "1 месяц (по неделям)",
+            "Неделя 1",
+            "Неделя 2",
+            "Неделя 3",
+            "Неделя 4",
+            "1 год (помесячно)",
+            "1–3",
+            "4–6",
+            "7–9",
+            "10–12",
+        ]
+
+        index_by_period = {
+            period: next(index for index, text in enumerate(rendered_text) if text.startswith(period))
+            for period in expected_periods
+        }
+
+        self.assertEqual(
+            sorted(expected_periods, key=lambda period: index_by_period[period]),
+            expected_periods,
+        )
+
+        for period in expected_periods:
+            self.assertEqual(sum(1 for text in rendered_text if text.startswith(period)), 1)
+
+        self.assertFalse(any("Неделя 1" in text and "Неделя 2" in text for text in rendered_text))
+        self.assertFalse(any("4–6" in text and "7–9" in text for text in rendered_text))
+
     def test_timeline_detection_helpers(self) -> None:
         renderer = PdfThemeRenderer()
 
@@ -1160,6 +1239,8 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertTrue(renderer._is_timeline_header("1 год (помесячно)"))
         self.assertTrue(renderer._is_timeline_marker("Неделя 3: добавить прогулки"))
         self.assertTrue(renderer._is_timeline_marker("1–3: стабилизировать режим"))
+        self.assertTrue(renderer._is_timeline_marker("1-3: стабилизировать режим"))
+        self.assertTrue(renderer._is_timeline_marker("1 — 3: стабилизировать режим"))
         self.assertFalse(renderer._is_timeline_marker("Ресурс: дышать и отдыхать"))
 
     def test_draw_bullet_item_draws_marker_and_wrapped_lines_with_expected_offsets(self) -> None:
