@@ -1,5 +1,6 @@
 import unittest
 
+from app.core.pdf_service import PdfThemeRenderer
 from app.core.report_document import ReportDocumentBuilder
 
 
@@ -106,6 +107,34 @@ class ReportDocumentBuilderTests(unittest.TestCase):
                 "Отказ от одной необязательной задачи, чтобы освободить ресурс.",
             ],
         )
+
+    def test_filters_diagnostic_sections_and_bullets_without_breaking_render(self) -> None:
+        builder = ReportDocumentBuilder()
+        source = """Персональный аналитический отчёт
+
+- Главный акцент: держать фокус на сильных сторонах.
+- Не распознано поле даты рождения.
+
+Проверка данных:
+- Не полностью заполнено поле времени рождения.
+- Ошибка парсинга входного JSON.
+
+Сильные стороны:
+- Ты быстро адаптируешься к изменениям и сохраняешь устойчивость.
+"""
+
+        doc = builder.build(source, tariff="T1", meta={"id": "100"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        self.assertTrue(all(section.title != "Проверка данных" for section in doc.sections))
+        self.assertTrue(all("не распознано" not in point.lower() for point in doc.key_findings))
+        self.assertTrue(all("ошибка парсинга" not in bullet.lower() for section in doc.sections for bullet in section.bullets))
+
+        renderer = PdfThemeRenderer()
+        payload = renderer.render(source, tariff="T1", meta={"id": "100"}, report_document=doc)
+        self.assertTrue(payload.startswith(b"%PDF"))
+
 
 
 if __name__ == "__main__":
