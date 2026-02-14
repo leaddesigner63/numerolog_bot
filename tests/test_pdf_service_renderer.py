@@ -413,6 +413,59 @@ class PdfServiceRendererTests(unittest.TestCase):
         self.assertNotEqual(section_title_draw[5], body_draw[5])
         self.assertNotEqual(section_title_draw[6], body_draw[6])
 
+    def test_draw_body_renders_subsection_title_and_body_separately(self) -> None:
+        renderer = PdfThemeRenderer()
+        theme = resolve_pdf_theme("T1")
+        canvas = _CanvasSpy()
+        report_document = ReportDocument(
+            title="Отчёт",
+            subtitle="Тариф: T1",
+            key_findings=[],
+            sections=[
+                ReportSection(
+                    title="Раздел",
+                    paragraphs=["Подзаголовок: Абзац после двоеточия"],
+                )
+            ],
+            disclaimer="",
+        )
+
+        with mock.patch.object(renderer, "_draw_content_surface", return_value=None), mock.patch.object(
+            renderer,
+            "_draw_background",
+            return_value=None,
+        ), mock.patch.object(renderer, "_draw_decorative_layers", return_value=None):
+            renderer._draw_body(
+                canvas,
+                theme,
+                {"title": "Helvetica-Bold", "subtitle": "Helvetica-Bold", "body": "Helvetica", "numeric": "Helvetica"},
+                report_text="",
+                page_width=300,
+                page_height=842,
+                asset_bundle=mock.Mock(),
+                body_start_y=700,
+                report_document=report_document,
+            )
+
+        subsection_draw = next(call for call in canvas.text_draw_calls if call[3] == "Подзаголовок")
+        body_draw = next(call for call in canvas.text_draw_calls if call[3].startswith("Абзац после"))
+
+        self.assertEqual(subsection_draw[4], "Helvetica-Bold")
+        self.assertEqual(subsection_draw[5], theme.typography.subsection_title_size)
+        self.assertEqual(subsection_draw[6], (*theme.typography.subsection_title_color_rgb, 1.0))
+        self.assertEqual(body_draw[4], "Helvetica")
+        self.assertEqual(body_draw[5], theme.typography.body_size)
+
+    def test_extract_subsection_title_keeps_raw_user_format(self) -> None:
+        renderer = PdfThemeRenderer()
+
+        title, body = renderer._extract_subsection_title("A:   текст в любом формате ###")
+        self.assertEqual(title, "A")
+        self.assertEqual(body, "текст в любом формате ###")
+
+        title_no_sep, body_no_sep = renderer._extract_subsection_title("без двоеточия")
+        self.assertEqual(title_no_sep, "")
+        self.assertEqual(body_no_sep, "без двоеточия")
 
 
     def test_draw_body_uses_disclaimer_typography_overrides(self) -> None:

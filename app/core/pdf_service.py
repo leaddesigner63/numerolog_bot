@@ -714,9 +714,27 @@ class PdfThemeRenderer:
                     font_map=font_map,
                 )
             for paragraph in section.paragraphs:
+                subsection_title, paragraph_text = self._extract_subsection_title(paragraph)
+                if subsection_title:
+                    y -= theme.typography.subsection_spacing_before
+                    y = self._draw_subsection_title(
+                        pdf,
+                        text=subsection_title,
+                        y=y,
+                        margin=margin + paragraph_gap,
+                        width=effective_width - paragraph_gap,
+                        page_width=page_width,
+                        page_height=page_height,
+                        theme=theme,
+                        asset_bundle=asset_bundle,
+                        font_map=font_map,
+                    )
+                    y -= theme.typography.subsection_spacing_after
+                if not paragraph_text:
+                    continue
                 y = self._draw_text_block(
                     pdf,
-                    text=paragraph,
+                    text=paragraph_text,
                     y=y,
                     margin=margin + paragraph_gap,
                     width=effective_width - paragraph_gap,
@@ -1216,6 +1234,49 @@ class PdfThemeRenderer:
             text_alpha=1.0,
             text_color_rgb=theme.typography.section_title_color_rgb,
         )
+
+    def _draw_subsection_title(
+        self,
+        pdf: canvas.Canvas,
+        *,
+        text: str,
+        y: float,
+        margin: float,
+        width: float,
+        page_width: float,
+        page_height: float,
+        theme: PdfTheme,
+        asset_bundle: PdfThemeAssetBundle,
+        font_map: dict[str, str],
+    ) -> float:
+        return self._draw_text_block(
+            pdf,
+            text=text,
+            y=y,
+            margin=margin,
+            width=width,
+            font=self._section_title_font(font_map, theme),
+            size=theme.typography.subsection_title_size,
+            page_width=page_width,
+            page_height=page_height,
+            theme=theme,
+            asset_bundle=asset_bundle,
+            line_height_ratio=theme.typography.subsection_title_line_height_ratio,
+            text_alpha=1.0,
+            text_color_rgb=theme.typography.subsection_title_color_rgb,
+        )
+
+    def _extract_subsection_title(self, paragraph: str) -> tuple[str, str]:
+        text = (paragraph or "").strip()
+        if not text:
+            return "", ""
+
+        title, separator, body = text.partition(":")
+        if not separator:
+            return "", text
+
+        return title.strip(), body.lstrip()
+
 
     def _draw_text_block(
         self,
