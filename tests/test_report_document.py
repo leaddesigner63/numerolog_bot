@@ -258,6 +258,45 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         self.assertEqual(growth_section.paragraphs, ["Сузь фокус до одной цели и отслеживай прогресс ежедневно."])
         self.assertEqual(support_section.paragraphs, ["Верни стабильный ритм сна и отдыха."])
 
+    def test_merges_wrapped_lines_into_single_paragraph_before_parsing(self) -> None:
+        builder = ReportDocumentBuilder()
+        source = """Персональный аналитический отчёт
+
+В этом блоке первая строка
+продолжает мысль без разрыва
+и должна остаться в одном абзаце.
+"""
+
+        doc = builder.build(source, tariff="T1", meta={"id": "206"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        self.assertEqual(
+            doc.sections[0].paragraphs,
+            ["В этом блоке первая строка продолжает мысль без разрыва и должна остаться в одном абзаце."],
+        )
+
+    def test_keeps_explicit_titles_bullets_and_separators_when_merging_lines(self) -> None:
+        builder = ReportDocumentBuilder()
+        source = """Персональный аналитический отчёт
+
+Фокус:
+Первая строка абзаца
+вторая строка абзаца
+---
+- Отдельный пункт
+"""
+
+        doc = builder.build(source, tariff="T1", meta={"id": "207"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        section = next((item for item in doc.sections if item.title == "Фокус"), None)
+        self.assertIsNotNone(section)
+        assert section is not None
+        self.assertEqual(section.paragraphs, ["Первая строка абзаца вторая строка абзаца"])
+        self.assertIn("Отдельный пункт", section.bullets)
+
     def test_does_not_treat_long_or_warning_sentences_as_titles(self) -> None:
         builder = ReportDocumentBuilder()
         source = """Персональный аналитический отчёт
