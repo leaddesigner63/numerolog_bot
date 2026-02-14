@@ -135,6 +135,32 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         payload = renderer.render(source, tariff="T1", meta={"id": "100"}, report_document=doc)
         self.assertTrue(payload.startswith(b"%PDF"))
 
+    def test_removes_pdf_promo_phrases_from_findings_and_sections(self) -> None:
+        builder = ReportDocumentBuilder()
+        source = """Персональный аналитический отчёт
+
+- Бесплатный превью-отчёт доступен раз в месяц.
+- Это превью твоих сильных сторон.
+
+Подробности:
+Это превью и бесплатный превью-отчёт о текущем состоянии.
+- Доступен раз в месяц.
+- Конкретный рабочий вывод без промо-фраз.
+"""
+
+        doc = builder.build(source, tariff="T1", meta={"id": "201"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        self.assertTrue(all("бесплатный превью-отчёт" not in point.lower() for point in doc.key_findings))
+        self.assertTrue(all("доступен раз в месяц" not in point.lower() for point in doc.key_findings))
+        self.assertTrue(all("это превью" not in point.lower() for point in doc.key_findings))
+        self.assertTrue(all("доступен раз в месяц" not in paragraph.lower() for section in doc.sections for paragraph in section.paragraphs))
+        self.assertTrue(all("это превью" not in paragraph.lower() for section in doc.sections for paragraph in section.paragraphs))
+        self.assertTrue(all("бесплатный превью-отчёт" not in bullet.lower() for section in doc.sections for bullet in section.bullets))
+        self.assertTrue(any("конкретный рабочий вывод" in bullet.lower() for section in doc.sections for bullet in section.bullets))
+        self.assertTrue(all(section.bullets or section.paragraphs or section.accent_blocks for section in doc.sections))
+
 
 
 if __name__ == "__main__":
