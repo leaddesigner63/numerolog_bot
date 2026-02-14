@@ -233,6 +233,24 @@ class ReportDocumentBuilderTests(unittest.TestCase):
         assert section is not None
         self.assertEqual(section.paragraphs, ["Сейчас полезно сохранить фокус на одной ключевой цели."])
 
+    def test_removes_t3_subtitle_artifact_line_from_pdf_content(self) -> None:
+        builder = ReportDocumentBuilder()
+        source = """Твой путь к себе!
+
+«Твой путь к себе!» — персональный маршрут
+
+Лёгкое вступление:
+Это содержательная часть отчёта, которая должна остаться.
+"""
+
+        doc = builder.build(source, tariff="T3", meta={"id": "303"})
+
+        self.assertIsNotNone(doc)
+        assert doc is not None
+        all_paragraphs = [paragraph for section in doc.sections for paragraph in section.paragraphs]
+        self.assertFalse(any("персональный маршрут" in paragraph.lower() for paragraph in all_paragraphs))
+        self.assertTrue(any("содержательная часть отчёта" in paragraph.lower() for paragraph in all_paragraphs))
+
     def test_question_and_exclamation_lines_prefer_paragraphs(self) -> None:
         builder = ReportDocumentBuilder()
         source = """Персональный аналитический отчёт
