@@ -82,7 +82,7 @@ def _register_font() -> dict[str, str]:
         accent_font = regular_font
 
     family: dict[str, str] = {
-        "body": regular_font,
+        "body": bold_font,
         "title": bold_font,
         "subtitle": bold_font,
         "numeric": accent_font,
@@ -131,10 +131,20 @@ def _resolve_font_paths_for_variant(variant: str) -> list[Path]:
     legacy_path = settings.pdf_font_path
     if variant == "regular":
         configured_path = settings.pdf_font_regular_path or legacy_path
-        bundled = [fonts_dir / "DejaVuSans.ttf"]
+        bundled = [
+            fonts_dir / "Manrope-Bold.ttf",
+            fonts_dir / "manrope-bold.ttf",
+            fonts_dir / "DejaVuSans-Bold.ttf",
+            fonts_dir / "DejaVuSans.ttf",
+        ]
     elif variant == "bold":
         configured_path = settings.pdf_font_bold_path
-        bundled = [fonts_dir / "DejaVuSans-Bold.ttf", fonts_dir / "DejaVuSans.ttf"]
+        bundled = [
+            fonts_dir / "Manrope-Bold.ttf",
+            fonts_dir / "manrope-bold.ttf",
+            fonts_dir / "DejaVuSans-Bold.ttf",
+            fonts_dir / "DejaVuSans.ttf",
+        ]
     else:
         configured_path = settings.pdf_font_accent_path
         bundled = [
@@ -893,7 +903,7 @@ class PdfThemeRenderer:
             asset_bundle=asset_bundle,
             line_height_ratio=theme.typography.disclaimer_line_height_ratio,
             text_alpha=theme.typography.disclaimer_alpha,
-            text_color_rgb=(0.99, 0.98, 0.96),
+            text_color_rgb=theme.typography.body_color_rgb,
         )
 
 
