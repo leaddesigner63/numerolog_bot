@@ -1,6 +1,4 @@
 User-agent: *
+Disallow: /legal/
 Allow: /
-Disallow: /legal/privacy/
-Disallow: /legal/offer/
-
-Sitemap: https://aireadu.ru/sitemap.xml
+Sitemap: https://[DOMAIN]/sitemap.xml
