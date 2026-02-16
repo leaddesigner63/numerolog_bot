@@ -669,22 +669,45 @@ sudo systemctl restart numerolog.target
 [`AUTODEPLOY_INSTRUCTIONS.md`](AUTODEPLOY_INSTRUCTIONS.md) и
 [`docs/deploy/landing_autodeploy.md`](docs/deploy/landing_autodeploy.md).
 
-Ключевые секреты для workflow:
-- `SERVICE_NAME` — имя systemd-сервиса или target для перезапуска.
-- `SERVICE_NAMES` — опционально, список сервисов/target’ов через пробел (имеет приоритет).
-- `ENV_FILE`, `DEPLOY_PATH`, `SSH_HOST`, `SSH_USER`, `SSH_PORT`, `SSH_PRIVATE_KEY` — инфраструктурные параметры.
-- `PRESERVE_PATHS` — список каталогов для полного сохранения при деплое (по умолчанию `app/assets/screen_images app/assets/pdf`).
-  Не добавляйте сюда `web`, если хотите, чтобы лендинг обновлялся из Git при каждом деплое.
-- `LANDING_URL`, `LANDING_EXPECTED_CTA`, `LANDING_ASSET_URLS` — параметры smoke-check после деплоя.
+### Единый контракт деплоя
 
-Workflow запускает `scripts/deploy.sh` на сервере и передаёт ссылку на ветку,
-в которую был сделан push (например, `origin/work` или `origin/main`).
-Во время деплоя скрипт сохраняет локальные каталоги из `PRESERVE_PATHS` (по умолчанию `app/assets/screen_images app/assets/pdf`): перед `git reset --hard` делает backup и затем возвращает файлы обратно. Каталог `web/` по умолчанию не сохраняется, поэтому его изменения из репозитория всегда доезжают на сервер. Дополнительно `git clean` исключает маски `app/assets/screen_images/S15*` и `app/assets/screen_images/s15*`, чтобы генерация/ручные изображения экрана оплаты не удалялись независимо от регистра и суффикса папки.
-Workflow по умолчанию запускается на push в `main` и содержит последовательность: `build -> lint/check -> deploy` в production-окружение.
-Проверьте, что unit-файлы созданы и имена сервисов совпадают с тем, что вы передали
-в `SERVICE_NAME`/`SERVICE_NAMES`. Если получаете ошибку вида
-`...service: command not found`, это признак отсутствующего unit-файла или неверного имени сервиса.
-.
+- Автозапуск workflow: только при push в ветку `main`.
+- Фиксированный `GIT_REF`: `origin/main` (зашит в `.github/workflows/deploy.yml`).
+- Ручной запуск: **Actions -> Landing CI/CD (VPS + Nginx) -> Run workflow -> Branch: main -> Run workflow**.
+- На сервере всегда должен деплоиться коммит из `origin/main`, даже если workflow запущен вручную.
+
+### Troubleshooting: сайт не обновился после деплоя
+
+Выполните на сервере проверки ниже.
+
+1) Проверка фактического коммита в деплой-директории:
+```bash
+git -C <DEPLOY_PATH> rev-parse HEAD
+```
+- Норма: выводится SHA коммита, который вы ожидаете видеть в проде.
+- Ошибка: SHA старый/неожиданный — сервер остался на предыдущем коммите.
+
+2) Проверка актуального коммита удалённой ветки:
+```bash
+git -C <DEPLOY_PATH> rev-parse origin/<branch>
+```
+- Норма: для единого контракта используйте `<branch>=main`; SHA совпадает с целевым релизом.
+- Ошибка: SHA отличается от `HEAD` из шага 1 — деплой не догнал удалённую ветку.
+
+3) Проверка состояния сервисов:
+```bash
+systemctl status <services>
+```
+- Норма: сервисы в состоянии `active (running)` без циклических рестартов.
+- Ошибка: `failed`, `activating (auto-restart)` или частые рестарты.
+
+4) Проверка последних логов проблемного сервиса:
+```bash
+journalctl -u <service> -n 200 --no-pager
+```
+- Норма: нет критических ошибок запуска, импорта и миграций.
+- Ошибка: есть traceback/`ModuleNotFoundError`/ошибки подключения к БД/ошибки чтения `.env`.
+
 
 ## Экранные изображения
 
