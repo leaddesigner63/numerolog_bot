@@ -16,7 +16,7 @@
 ## 3) Основное целевое действие (CTA)
 
 - **Единственное основное действие:** кнопка **«Перейти в Telegram»**.
-- Кнопка ведёт на Telegram deep-link бота (`https://t.me/<bot_username>?start=<source_tag>`).
+- Кнопка ведёт на Telegram deep-link бота (`https://t.me/AIreadUbot?start=<source_tag>`).
 
 ---
 

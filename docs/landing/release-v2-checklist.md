@@ -31,22 +31,22 @@
 ## 7) Smoke-check CTA после выкладки
 1. Выполнить smoke-check:
    ```bash
-   LANDING_URL="https://[DOMAIN]/" \
-   LANDING_EXPECTED_CTA="[BOT_LINK]" \
-   LANDING_ASSET_URLS="https://[DOMAIN]/styles.css,https://[DOMAIN]/script.js" \
+   LANDING_URL="https://aireadu.ru/" \
+   LANDING_EXPECTED_CTA="https://t.me/AIreadUbot" \
+   LANDING_ASSET_URLS="https://aireadu.ru/styles.css,https://aireadu.ru/script.js" \
    ./scripts/smoke_check_landing.sh
    ```
 2. Ручной обход ключевых страниц после деплоя:
-   - `https://[DOMAIN]/`
-   - `https://[DOMAIN]/prices/`
-   - `https://[DOMAIN]/faq/`
-   - `https://[DOMAIN]/contacts/`
-   - `https://[DOMAIN]/articles/`
+   - `https://aireadu.ru/`
+   - `https://aireadu.ru/prices/`
+   - `https://aireadu.ru/faq/`
+   - `https://aireadu.ru/contacts/`
+   - `https://aireadu.ru/articles/`
 
 ## Обязательный шаг релиза перед продом
-Перед прод-выкладкой обязательно заменить все плейсхолдеры:
-- `[DOMAIN]`
-- `[BOT_LINK]`
-- `[PLACEHOLDER]`
+Перед прод-выкладкой обязательно:
+- убедиться, что на лендинге используется домен `https://aireadu.ru`;
+- проверить, что все CTA ведут на `https://t.me/AIreadUbot`;
+- заменить технические заглушки `будет добавлено` на финальные значения.
 
-Релиз блокируется до полной замены плейсхолдеров на боевые значения.
+Релиз блокируется до полной замены технических заглушек.
