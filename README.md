@@ -55,7 +55,7 @@ docs/
   payments/
     prodamus_contract.md  # контракт интеграции Prodamus (сверка полей ссылки/webhook/status)
 web/                  # многостраничный статический сайт (SEO + переход в Telegram-бот)
-  test.html           # главная страница с расширенным контентом (временно до финального продакшена)
+  index.html          # главная страница сайта
   prices/index.html   # тарифы + JSON-LD Service/Offer
   articles/index.html # каталог статей (заготовка)
   faq/index.html      # FAQ + JSON-LD FAQPage
@@ -65,9 +65,9 @@ web/                  # многостраничный статический с
   404.html            # страница ошибки
   robots.txt          # правила индексации
   sitemap.xml         # карта сайта (без /legal/*)
-  assets/sprite.svg   # SVG-спрайт иконок
-  styles.css          # единый CSS для всех страниц
-  script.js           # меню + FAQ-аккордеон + подтягивание цен с /api/public/tariffs
+  assets/css/styles.css # единый CSS для всех страниц
+  assets/js/script.js   # клиентские интеракции сайта
+  assets/svg/sprite.svg # SVG-спрайт иконок
 AUTODEPLOY_INSTRUCTIONS.md # пошаговая инструкция по автодеплою
 CONTRIBUTING.md      # правила разработки и обязательный паттерн enter_text_input_mode для текстового ввода
 .env.prompts.example # пример файла с системными промптами по тарифам
@@ -172,8 +172,6 @@ python -m http.server 8080 --directory web
 ```
 
 После запуска откройте `http://localhost:8080`.
-
-> В `web/test.html` используются Telegram deep-link вида `https://t.me/AIreadUbot?start=<utm_tag>`.
 
 ### `web/`: чеклист релиза и порядок выкладки
 
@@ -357,15 +355,15 @@ pytest -q
 
 ## Ревью текстов лендинга
 
-Источник всех текстов лендинга: `web/content/landing-content.json`.
+Тексты лендинга хранятся непосредственно в HTML-файлах каталога `web/` (главная и внутренние страницы).
 
-Перед публикацией контентных изменений обязательно:
+Перед публикацией контентных изменений рекомендуется выполнить:
 
 ```bash
 python scripts/check_landing_content.py
 ```
 
-Подробный регламент: `docs/landing/review-rules.md`.
+и ручной просмотр ключевых страниц (`/`, `/prices/`, `/faq/`, `/articles/`, `/contacts/`).
 
 ## Контентная безопасность
 

@@ -1,8 +1,23 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://aireadu.ru/</loc></url>
-  <url><loc>https://aireadu.ru/prices/</loc></url>
-  <url><loc>https://aireadu.ru/articles/</loc></url>
-  <url><loc>https://aireadu.ru/faq/</loc></url>
-  <url><loc>https://aireadu.ru/contacts/</loc></url>
+  <url>
+    <loc>https://[DOMAIN]/</loc>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://[DOMAIN]/prices/</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://[DOMAIN]/faq/</loc>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://[DOMAIN]/articles/</loc>
+    <priority>0.6</priority>
+  </url>
+  <url>
+    <loc>https://[DOMAIN]/contacts/</loc>
+    <priority>0.5</priority>
+  </url>
 </urlset>
