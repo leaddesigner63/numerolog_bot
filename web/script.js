@@ -1,12 +1,30 @@
 (function () {
   const menuButton = document.querySelector('[data-menu-button]');
-  const nav = document.querySelector('[data-main-nav]');
+  const menuNavId = menuButton ? menuButton.getAttribute('aria-controls') : null;
+  const nav = menuNavId
+    ? document.getElementById(menuNavId)
+    : document.querySelector('[data-main-nav]');
 
   if (menuButton && nav) {
+    if (!nav.id) {
+      nav.id = 'main-nav';
+    }
+
+    if (!menuButton.getAttribute('aria-controls')) {
+      menuButton.setAttribute('aria-controls', nav.id);
+    }
+
+    const syncMenuState = function (expanded) {
+      menuButton.setAttribute('aria-expanded', String(expanded));
+      nav.classList.toggle('open', expanded);
+      menuButton.setAttribute('aria-label', expanded ? 'Закрыть меню навигации' : 'Открыть меню навигации');
+    };
+
+    syncMenuState(nav.classList.contains('open'));
+
     menuButton.addEventListener('click', function () {
       const expanded = menuButton.getAttribute('aria-expanded') === 'true';
-      menuButton.setAttribute('aria-expanded', String(!expanded));
-      nav.classList.toggle('open');
+      syncMenuState(!expanded);
     });
   }
 
