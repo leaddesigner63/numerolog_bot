@@ -14,6 +14,7 @@ app/
   api/                # HTTP API (FastAPI)
     routes/
       admin.py         # веб-админка (HTTP UI + API)
+      public.py        # публичные API-эндпоинты для сайта (в т.ч. цены тарифов из конфигурации бота)
   bot/                # Telegram-бот (aiogram)
     handlers/         # обработчики сценариев и FSM ввода профиля
       screen_manager.py # менеджер экранов (очищает чат, ведёт safe-лог переходов экранов и funnel entry/exit)
@@ -66,12 +67,19 @@ web/                  # многостраничный статический с
   sitemap.xml         # карта сайта (без /legal/*)
   assets/sprite.svg   # SVG-спрайт иконок
   styles.css          # единый CSS для всех страниц
-  script.js           # меню + FAQ-аккордеон
+  script.js           # меню + FAQ-аккордеон + подтягивание цен с /api/public/tariffs
 AUTODEPLOY_INSTRUCTIONS.md # пошаговая инструкция по автодеплою
 CONTRIBUTING.md      # правила разработки и обязательный паттерн enter_text_input_mode для текстового ввода
 .env.prompts.example # пример файла с системными промптами по тарифам
 ```
 
+
+## Синхронизация цен между ботом и сайтом
+
+- Единый источник цен — переменные `TARIFF_T0_PRICE_RUB` ... `TARIFF_T3_PRICE_RUB` (см. `app/core/config.py`).
+- Бот использует эти значения через `settings.tariff_prices_rub` (экраны/оплата).
+- Сайт на странице `/prices/` подгружает те же значения через `GET /api/public/tariffs` и обновляет карточки тарифов на клиенте.
+- При недоступности API страница не падает: остаются fallback-значения из HTML.
 
 ## Локальный запуск статического сайта
 
