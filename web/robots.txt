@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /legal/privacy/
+Disallow: /legal/offer/
+
+Sitemap: https://[DOMAIN]/sitemap.xml

@@ -206,10 +206,10 @@ server {
     server_name landing.example.com;
 
     root /var/www/numerolog_bot/web;
-    index test.html;
+    index index.html;
 
     location / {
-        try_files $uri $uri/ /test.html;
+        try_files $uri $uri/ /404.html;
     }
 }
 ```
