@@ -56,7 +56,7 @@ docs/
     prodamus_contract.md  # контракт интеграции Prodamus (сверка полей ссылки/webhook/status)
 web/                  # многостраничный статический сайт (SEO + переход в Telegram-бот)
   index.html          # главная страница сайта
-  prices/index.html   # тарифы + JSON-LD Service/Offer
+  prices/index.html   # тарифы: клиентская подгрузка цен из /api/public/tariffs + JSON-LD Service/Offer
   articles/index.html # каталог статей (заготовка)
   faq/index.html      # FAQ + JSON-LD FAQPage
   contacts/index.html # контакты без формы
@@ -78,7 +78,7 @@ CONTRIBUTING.md      # правила разработки и обязатель
 
 - Единый источник цен — переменные `TARIFF_T0_PRICE_RUB` ... `TARIFF_T3_PRICE_RUB` (см. `app/core/config.py`).
 - Бот использует эти значения через `settings.tariff_prices_rub` (экраны/оплата).
-- Сайт на странице `/prices/` подгружает те же значения через `GET /api/public/tariffs` и обновляет карточки тарифов на клиенте.
+- Сайт на странице `/prices/` подгружает те же значения через `GET /api/public/tariffs` и обновляет карточки тарифов + JSON-LD Offer на клиенте.
 - При недоступности API страница не падает: остаются fallback-значения из HTML.
 
 ## Локальный запуск статического сайта

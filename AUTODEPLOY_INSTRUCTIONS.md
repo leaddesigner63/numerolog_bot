@@ -13,8 +13,9 @@
    - `GET /admin/api/orders?user_id=<ID>&payment_confirmed=true`
    - `GET /admin/api/users?sort_by=confirmed_revenue_total&sort_dir=desc`
    - `GET /api/public/tariffs` (цены для страницы `/prices/` должны совпадать с тарифами бота).
-5. Перейдите в раздел **Analytics** и убедитесь, что отображаются блоки «Финансовая воронка» и «Выручка по тарифам» с пометкой `provider-confirmed only`, а также мини-график выручки по дням.
-6. Проверьте новые финансовые endpoints:
+5. Откройте страницу `/prices/` и убедитесь, что отображаемые цены совпадают с ответом `GET /api/public/tariffs` (страница берет цены из API бота).
+6. Перейдите в раздел **Analytics** и убедитесь, что отображаются блоки «Финансовая воронка» и «Выручка по тарифам» с пометкой `provider-confirmed only`, а также мини-график выручки по дням.
+7. Проверьте новые финансовые endpoints:
    - `GET /admin/api/analytics/finance/summary?period=7d`
    - `GET /admin/api/analytics/finance/by-tariff?period=7d`
    - `GET /admin/api/analytics/finance/timeseries?period=7d`

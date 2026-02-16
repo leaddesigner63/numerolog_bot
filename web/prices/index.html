@@ -50,7 +50,7 @@
   <div class="grid-3 mt-4">
     <div class="card">
       <h3>«В чём твоя сила?»</h3>
-      <div style="font-size: 2rem; color: var(--accent); margin: 1rem 0;">560 ₽</div>
+      <div style="font-size: 2rem; color: var(--accent); margin: 1rem 0;" data-tariff-price="T1">560 ₽</div>
       <p>Базовый нумерология анализ личности. Узнайте свои опорные точки.</p>
       <ul>
         <li>• Сильные стороны</li>
@@ -62,7 +62,7 @@
 
     <div class="card" style="border-color: var(--accent);">
       <h3>«Где твои деньги?»</h3>
-      <div style="font-size: 2rem; color: var(--accent); margin: 1rem 0;">2 190 ₽</div>
+      <div style="font-size: 2rem; color: var(--accent); margin: 1rem 0;" data-tariff-price="T2">2 190 ₽</div>
       <p>Профильный разбор финансов. Нумерология денег по дате рождения.</p>
       <ul>
         <li>• Код денег по дате рождения</li>
@@ -75,7 +75,7 @@
 
     <div class="card">
       <h3>«Твой путь к себе!»</h3>
-      <div style="font-size: 2rem; color: var(--accent); margin: 1rem 0;">5 930 ₽</div>
+      <div style="font-size: 2rem; color: var(--accent); margin: 1rem 0;" data-tariff-price="T3">5 930 ₽</div>
       <p>Полный разбор. Как найти свое призвание по дате рождения.</p>
       <ul>
         <li>• Всё включено</li>
@@ -114,5 +114,71 @@
     <p>© 2024 Нумерология-бот.</p>
   </div>
 </footer>
+
+<script>
+  (function () {
+    function formatRub(value) {
+      return new Intl.NumberFormat('ru-RU').format(value) + ' ₽';
+    }
+
+    function updatePriceCards(tariffs) {
+      document.querySelectorAll('[data-tariff-price]').forEach(function (node) {
+        var tariffCode = node.getAttribute('data-tariff-price');
+        var rawValue = tariffs ? tariffs[tariffCode] : null;
+        if (typeof rawValue !== 'number') {
+          return;
+        }
+        node.textContent = formatRub(rawValue);
+      });
+    }
+
+    function updateJsonLdOfferPrices(tariffs) {
+      var schemaNode = document.querySelector('script[type="application/ld+json"]');
+      if (!schemaNode || !schemaNode.textContent) {
+        return;
+      }
+      try {
+        var schema = JSON.parse(schemaNode.textContent);
+        var offers = Array.isArray(schema.offers) ? schema.offers : [];
+        var byName = {
+          'В чём твоя сила?': 'T1',
+          'Где твои деньги?': 'T2',
+          'Твой путь к себе!': 'T3'
+        };
+        offers.forEach(function (offer) {
+          if (!offer || typeof offer !== 'object') {
+            return;
+          }
+          var tariffCode = byName[offer.name];
+          var value = tariffs ? tariffs[tariffCode] : null;
+          if (typeof value !== 'number') {
+            return;
+          }
+          offer.price = String(value);
+        });
+        schemaNode.textContent = JSON.stringify(schema);
+      } catch (_) {
+        // fallback to static values in markup
+      }
+    }
+
+    async function syncTariffsFromBotApi() {
+      try {
+        var response = await fetch('/api/public/tariffs', { cache: 'no-store' });
+        if (!response.ok) {
+          return;
+        }
+        var payload = await response.json();
+        var tariffs = payload && payload.tariffs ? payload.tariffs : null;
+        updatePriceCards(tariffs);
+        updateJsonLdOfferPrices(tariffs);
+      } catch (_) {
+        // fallback to static values in markup
+      }
+    }
+
+    syncTariffsFromBotApi();
+  })();
+</script>
 </body>
 </html>
