@@ -234,6 +234,25 @@ server {
 }
 ```
 
+### 9.1.1. Проверка после выкладки лендинга v2
+1. Перед smoke-check убедитесь, что перед продом заменены все плейсхолдеры: `[DOMAIN]`, `[BOT_LINK]`, `[PLACEHOLDER]`.
+2. Выполните smoke-check лендинга и CTA:
+   ```bash
+   LANDING_URL="https://[DOMAIN]/" \
+   LANDING_EXPECTED_CTA="[BOT_LINK]" \
+   LANDING_ASSET_URLS="https://[DOMAIN]/styles.css,https://[DOMAIN]/script.js" \
+   ./scripts/smoke_check_landing.sh
+   ```
+3. Выполните ручную проверку ключевых страниц:
+   ```bash
+   curl -I https://[DOMAIN]/
+   curl -I https://[DOMAIN]/prices/
+   curl -I https://[DOMAIN]/faq/
+   curl -I https://[DOMAIN]/contacts/
+   curl -I https://[DOMAIN]/articles/
+   ```
+4. Откройте страницы в браузере и проверьте визуально: шапку, CTA-кнопки, ссылки в футере и отсутствие плейсхолдеров в тексте/мета-данных.
+
 ## 10. Чек-лист после автодеплоя
 1. Проверьте, что миграции применились: `alembic current` и `alembic heads`.
 2. Убедитесь, что бот и API активны: `systemctl status numerolog-bot.service numerolog-api.service`.
