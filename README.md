@@ -49,6 +49,8 @@ docs/
   deploy/
     landing_autodeploy.md # подробный runbook по автодеплою лендинга (VPS + Nginx)
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
+  landing/
+    release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)
   payments/
     prodamus_contract.md  # контракт интеграции Prodamus (сверка полей ссылки/webhook/status)
 web/                  # многостраничный статический сайт (SEO + переход в Telegram-бот)
@@ -164,6 +166,14 @@ python -m http.server 8080 --directory web
 После запуска откройте `http://localhost:8080`.
 
 > В `web/test.html` используются Telegram deep-link вида `https://t.me/your_bot_username?start=<utm_tag>`. Перед публикацией замените `your_bot_username` на реальный username вашего бота.
+
+### `web/`: чеклист релиза и порядок выкладки
+
+- Подробный чеклист релиза лендинга v2: [`docs/landing/release-v2-checklist.md`](docs/landing/release-v2-checklist.md).
+- Краткий порядок выкладки:
+  1. Пройти контент- и SEO-ревизию, проверить `robots.txt`, `sitemap.xml`, JSON-LD, A11y и CTA smoke-check по чеклисту.
+  2. Обязательно заменить плейсхолдеры `[DOMAIN]`, `[BOT_LINK]`, `[PLACEHOLDER]` на боевые значения перед прод-выкладкой.
+  3. Запустить автодеплой и выполнить пост-проверки из `AUTODEPLOY_INSTRUCTIONS.md` (включая smoke-check лендинга и ручной обход страниц).
 
 5. Выполните миграции:
 
