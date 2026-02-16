@@ -102,8 +102,11 @@ sudo systemctl status certbot.timer
 
 ### 4.3 Запуск автодеплоя
 
-- Pipeline стартует автоматически при push в `main`.
-- Также можно запустить вручную: **Actions -> Landing CI/CD (VPS + Nginx) -> Run workflow**.
+### Единый контракт деплоя
+- Автозапуск workflow: только при push в ветку `main`.
+- Фиксированный `GIT_REF`: `origin/main` (зашит в `.github/workflows/deploy.yml`).
+- Ручной запуск: **Actions -> Landing CI/CD (VPS + Nginx) -> Run workflow -> Branch: main -> Run workflow**.
+- На сервере всегда должен деплоиться коммит из `origin/main`, даже если workflow запущен вручную.
 
 Шаги pipeline:
 1. **Build**: `python -m compileall app scripts tests`.
@@ -114,7 +117,39 @@ sudo systemctl status certbot.timer
    - наличие CTA-ссылки;
    - доступность ассетов.
 
-## 5) Rollback-сценарий
+## 5) Troubleshooting: сайт не обновился после деплоя
+
+Выполните на сервере проверки ниже.
+
+1) Проверка фактического коммита в деплой-директории:
+```bash
+git -C <DEPLOY_PATH> rev-parse HEAD
+```
+- Норма: выводится SHA коммита, который вы ожидаете видеть в проде.
+- Ошибка: SHA старый/неожиданный — сервер остался на предыдущем коммите.
+
+2) Проверка актуального коммита удалённой ветки:
+```bash
+git -C <DEPLOY_PATH> rev-parse origin/<branch>
+```
+- Норма: для единого контракта используйте `<branch>=main`; SHA совпадает с целевым релизом.
+- Ошибка: SHA отличается от `HEAD` из шага 1 — деплой не догнал удалённую ветку.
+
+3) Проверка состояния сервисов:
+```bash
+systemctl status <services>
+```
+- Норма: сервисы в состоянии `active (running)` без циклических рестартов.
+- Ошибка: `failed`, `activating (auto-restart)` или частые рестарты.
+
+4) Проверка последних логов проблемного сервиса:
+```bash
+journalctl -u <service> -n 200 --no-pager
+```
+- Норма: нет критических ошибок запуска, импорта и миграций.
+- Ошибка: есть traceback/`ModuleNotFoundError`/ошибки подключения к БД/ошибки чтения `.env`.
+
+## 6) Rollback-сценарий
 
 Если релиз проблемный:
 
