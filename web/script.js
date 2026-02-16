@@ -51,4 +51,99 @@
       }
     });
   });
+
+  const priceNodes = document.querySelectorAll('[data-tariff-price]');
+  if (priceNodes.length === 0) {
+    return;
+  }
+
+  const formatRubPrice = function (value) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return null;
+    }
+    return value.toLocaleString('ru-RU') + ' ₽';
+  };
+
+  const updateMetaDescription = function (tariffs) {
+    const target = document.querySelector('meta[data-price-meta-description]');
+    if (!target) {
+      return;
+    }
+
+    const t0 = formatRubPrice(tariffs.T0);
+    const t1 = formatRubPrice(tariffs.T1);
+    const t2 = formatRubPrice(tariffs.T2);
+    const t3 = formatRubPrice(tariffs.T3);
+    if (!t0 || !t1 || !t2 || !t3) {
+      return;
+    }
+
+    target.setAttribute(
+      'content',
+      'Тарифы Нумерология-бот: превью ' + t0 + ', «В чём твоя сила?» ' + t1 + ', «Где твои деньги?» ' + t2 + ' и «Твой путь к себе!» ' + t3 + '.'
+    );
+  };
+
+  const updateJsonLd = function (tariffs, currency) {
+    const jsonLd = document.getElementById('prices-jsonld');
+    if (!jsonLd) {
+      return;
+    }
+
+    let payload;
+    try {
+      payload = JSON.parse(jsonLd.textContent || '{}');
+    } catch (_error) {
+      return;
+    }
+
+    if (!payload || !Array.isArray(payload.offers)) {
+      return;
+    }
+
+    payload.offers = payload.offers.map(function (offer, index) {
+      const key = index === 0 ? 'T1' : index === 1 ? 'T2' : 'T3';
+      const price = tariffs[key];
+      if (typeof price !== 'number' || !Number.isFinite(price)) {
+        return offer;
+      }
+      return Object.assign({}, offer, {
+        price: String(price),
+        priceCurrency: currency || 'RUB',
+      });
+    });
+
+    jsonLd.textContent = JSON.stringify(payload);
+  };
+
+  fetch('/api/public/tariffs', { cache: 'no-store' })
+    .then(function (response) {
+      if (!response.ok) {
+        throw new Error('prices_api_unavailable');
+      }
+      return response.json();
+    })
+    .then(function (payload) {
+      const tariffs = (payload && payload.tariffs) || {};
+      const currency = (payload && payload.currency) || 'RUB';
+
+      priceNodes.forEach(function (node) {
+        const tariff = node.getAttribute('data-tariff-price');
+        if (!tariff) {
+          return;
+        }
+        const value = tariffs[tariff];
+        const formatted = formatRubPrice(value);
+        if (!formatted) {
+          return;
+        }
+        node.textContent = formatted;
+      });
+
+      updateMetaDescription(tariffs);
+      updateJsonLd(tariffs, currency);
+    })
+    .catch(function () {
+      // Оставляем fallback-цены из статического HTML.
+    });
 })();
