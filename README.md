@@ -54,7 +54,7 @@ docs/
   payments/
     prodamus_contract.md  # контракт интеграции Prodamus (сверка полей ссылки/webhook/status)
 web/                  # многостраничный статический сайт (SEO + переход в Telegram-бот)
-  index.html          # главная страница с расширенным контентом
+  test.html           # главная страница с расширенным контентом (временно до финального продакшена)
   prices/index.html   # тарифы + JSON-LD Service/Offer
   articles/index.html # каталог статей (заготовка)
   faq/index.html      # FAQ + JSON-LD FAQPage
