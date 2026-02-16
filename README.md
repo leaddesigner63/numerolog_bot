@@ -165,14 +165,14 @@ python -m http.server 8080 --directory web
 
 После запуска откройте `http://localhost:8080`.
 
-> В `web/test.html` используются Telegram deep-link вида `https://t.me/your_bot_username?start=<utm_tag>`. Перед публикацией замените `your_bot_username` на реальный username вашего бота.
+> В `web/test.html` используются Telegram deep-link вида `https://t.me/AIreadUbot?start=<utm_tag>`.
 
 ### `web/`: чеклист релиза и порядок выкладки
 
 - Подробный чеклист релиза лендинга v2: [`docs/landing/release-v2-checklist.md`](docs/landing/release-v2-checklist.md).
 - Краткий порядок выкладки:
   1. Пройти контент- и SEO-ревизию, проверить `robots.txt`, `sitemap.xml`, JSON-LD, A11y и CTA smoke-check по чеклисту.
-  2. Обязательно заменить плейсхолдеры `[DOMAIN]`, `[BOT_LINK]`, `[PLACEHOLDER]` на боевые значения перед прод-выкладкой.
+  2. Проверить, что домен `aireadu.ru` и ссылка на бота `https://t.me/AIreadUbot` используются на всех ключевых страницах, а также заменить все `будет добавлено` на финальные значения перед прод-выкладкой.
   3. Запустить автодеплой и выполнить пост-проверки из `AUTODEPLOY_INSTRUCTIONS.md` (включая smoke-check лендинга и ручной обход страниц).
 
 5. Выполните миграции:

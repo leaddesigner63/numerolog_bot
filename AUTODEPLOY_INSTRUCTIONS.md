@@ -235,21 +235,21 @@ server {
 ```
 
 ### 9.1.1. Проверка после выкладки лендинга v2
-1. Перед smoke-check убедитесь, что перед продом заменены все плейсхолдеры: `[DOMAIN]`, `[BOT_LINK]`, `[PLACEHOLDER]`.
+1. Перед smoke-check убедитесь, что на всех страницах используются `https://aireadu.ru` и `https://t.me/AIreadUbot`, а технические заглушки `будет добавлено` заменены на финальные значения.
 2. Выполните smoke-check лендинга и CTA:
    ```bash
-   LANDING_URL="https://[DOMAIN]/" \
-   LANDING_EXPECTED_CTA="[BOT_LINK]" \
-   LANDING_ASSET_URLS="https://[DOMAIN]/styles.css,https://[DOMAIN]/script.js" \
+   LANDING_URL="https://aireadu.ru/" \
+   LANDING_EXPECTED_CTA="https://t.me/AIreadUbot" \
+   LANDING_ASSET_URLS="https://aireadu.ru/styles.css,https://aireadu.ru/script.js" \
    ./scripts/smoke_check_landing.sh
    ```
 3. Выполните ручную проверку ключевых страниц:
    ```bash
-   curl -I https://[DOMAIN]/
-   curl -I https://[DOMAIN]/prices/
-   curl -I https://[DOMAIN]/faq/
-   curl -I https://[DOMAIN]/contacts/
-   curl -I https://[DOMAIN]/articles/
+   curl -I https://aireadu.ru/
+   curl -I https://aireadu.ru/prices/
+   curl -I https://aireadu.ru/faq/
+   curl -I https://aireadu.ru/contacts/
+   curl -I https://aireadu.ru/articles/
    ```
 4. Откройте страницы в браузере и проверьте визуально: шапку, CTA-кнопки, ссылки в футере и отсутствие плейсхолдеров в тексте/мета-данных.
 
