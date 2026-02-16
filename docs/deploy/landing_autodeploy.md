@@ -49,7 +49,7 @@ server {
 
     location / {
         root /opt/numerolog_bot/web;
-        try_files $uri $uri/ /test.html;
+        try_files $uri $uri/ /index.html;
     }
 }
 ```
@@ -86,7 +86,7 @@ sudo systemctl status certbot.timer
 - `SSH_PRIVATE_KEY` — приватный ключ для входа;
 - `DEPLOY_PATH` — путь до репозитория на сервере (`/opt/numerolog_bot`);
 - `ENV_FILE` — путь к env на сервере (`/opt/numerolog_bot/.env`);
-- `PRESERVE_PATHS` — опционально: каталоги, которые нужно сохранить при деплое (по умолчанию `app/assets/screen_images app/assets/pdf web`);
+- `PRESERVE_PATHS` — опционально: каталоги, которые нужно сохранить при деплое (по умолчанию `app/assets/screen_images app/assets/pdf`, без `web`);
 - `SERVICE_NAME` — основной systemd unit (или используйте `SERVICE_NAMES`);
 - `SERVICE_NAMES` — несколько unit’ов через пробел (опционально, приоритетнее);
 - `LANDING_URL` — URL лендинга для smoke-check (например, `https://example.com`);

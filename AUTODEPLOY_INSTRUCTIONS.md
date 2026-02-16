@@ -20,12 +20,12 @@
 
 ## 1. Подготовьте сервер
 1. Создайте пользователя для деплоя (без root), например `deployer`.
-2. Создайте директорию для проекта, например `/var/www/numerolog_bot`.
+2. Создайте директорию для проекта, например `/opt/numerolog_bot`.
 3. Убедитесь, что на сервере установлены `git`, `python` и `bash`.
 4. Создайте systemd-сервисы для API и бота (см. ниже пример unit-файлов) и убедитесь, что **имена совпадают** с теми, что вы укажете в `SERVICE_NAME` или `SERVICE_NAMES`.
 5. Разместите секреты **вне репозитория** (например, `/etc/numerolog_bot/.env`) и подключите их через systemd (`EnvironmentFile=`) или экспортом переменных окружения. `DATABASE_URL` обязателен: без него сервис не запустится.
    Для защиты от переполнения подключений PostgreSQL сразу задайте лимиты пула: `DATABASE_POOL_SIZE`, `DATABASE_MAX_OVERFLOW`, `DATABASE_POOL_TIMEOUT_SECONDS`, `DATABASE_POOL_RECYCLE_SECONDS`.
-6. Если хотите управлять системными промптами **без админки**, создайте файл `/var/www/numerolog_bot/.env.prompts` (или рядом с репозиторием) и заполните `PROMPT_T0`–`PROMPT_T3`. Файл сохраняется при деплое благодаря исключению `.env.*` в workflow. При наличии хотя бы одного промпта в админке файл `.env.prompts` полностью игнорируется.
+6. Если хотите управлять системными промптами **без админки**, создайте файл `/opt/numerolog_bot/.env.prompts` (или рядом с репозиторием) и заполните `PROMPT_T0`–`PROMPT_T3`. Файл сохраняется при деплое благодаря исключению `.env.*` в workflow. При наличии хотя бы одного промпта в админке файл `.env.prompts` полностью игнорируется.
 7. Проверьте, что `PAYMENT_WEBHOOK_URL` указывает на внешний HTTPS-адрес вашего backend (например, `https://api.example.com/webhooks/payments`).
 8. Для Prodamus укажите `PRODAMUS_API_KEY` и `PRODAMUS_STATUS_URL` (эндпоинт проверки статуса платежа по order_id). Для совместимости можно оставить `PRODAMUS_SECRET`: если он есть, используется для проверки статуса.
 9. Убедитесь, что в `.env` добавлены ключи LLM: `GEMINI_API_KEY`/`GEMINI_API_KEYS`/`GEMINI_MODEL` и `OPENAI_API_KEY`/`OPENAI_API_KEYS`/`OPENAI_MODEL` (fallback). Для команды `/fill_screen_images` отдельно задайте `GEMINI_IMAGE_MODEL`. При наличии нескольких ключей они перечисляются через запятую и перебираются автоматически. При необходимости настройте `LLM_AUTH_ERROR_BLOCK_SECONDS`, чтобы временно отключать ключи при 401/403 и избегать бесконечных повторов.
@@ -37,7 +37,7 @@
 13. Чтобы получать обратную связь в Telegram, задайте `ADMIN_IDS` (ID администраторов через запятую).
 14. Если нужно отключить глобальное inline-меню, оставьте `GLOBAL_MENU_ENABLED=false` в `.env`.
 15. Если нужно скрыть технические названия экранов (префикс `S1:`), задайте `SCREEN_TITLE_ENABLED=false`.
-16. Если хотите хранить картинки экранов вне репозитория, задайте `SCREEN_IMAGES_DIR` (например, `/var/www/numerolog_bot/storage/screen_images`).
+16. Если хотите хранить картинки экранов вне репозитория, задайте `SCREEN_IMAGES_DIR` (например, `/opt/numerolog_bot/storage/screen_images`).
 17. Если нужно включить искусственную задержку перед выдачей отчёта, задайте `REPORT_DELAY_SECONDS` в секундах.
 18. Стоимость тарифов задаётся через `.env`: `TARIFF_T0_PRICE_RUB`, `TARIFF_T1_PRICE_RUB`, `TARIFF_T2_PRICE_RUB`, `TARIFF_T3_PRICE_RUB` (без перезаписи кода).
 19. Если нужно отключить post-фильтрацию отчёта (без проверки контентной безопасности), добавьте `REPORT_SAFETY_ENABLED=false`.
@@ -63,11 +63,11 @@
 - `SSH_USER` — пользователь SSH (например, `deployer`).
 - `SSH_PRIVATE_KEY` — приватный ключ (полное содержимое файла, включая строки `BEGIN/END`).
 - `SSH_PORT` — SSH-порт (обычно `22`).
-- `DEPLOY_PATH` — путь к директории проекта на сервере (например, `/var/www/numerolog_bot`).
+- `DEPLOY_PATH` — путь к директории проекта на сервере (например, `/opt/numerolog_bot`).
 - `SERVICE_NAME` — имя systemd-сервиса или `target` (например, `numerolog.target`), если перезапуск один.
 - `SERVICE_NAMES` — опционально: список сервисов/target’ов через пробел (например, `numerolog-api.service numerolog-bot.service`). Если задан, он имеет приоритет над `SERVICE_NAME`.
 - `ENV_FILE` — полный путь к вашему файлу окружения на сервере (например, `/etc/numerolog_bot/.env`), нужен для запуска миграций Alembic с `DATABASE_URL`.
-- `PRESERVE_PATHS` — опционально: каталоги, которые нужно полностью сохранить при деплое (через пробел). По умолчанию: `app/assets/screen_images app/assets/pdf web`.
+- `PRESERVE_PATHS` — опционально: каталоги, которые нужно полностью сохранить при деплое (через пробел). По умолчанию: `app/assets/screen_images app/assets/pdf` (без `web`, чтобы лендинг обновлялся после каждого деплоя).
 
 ## 4. Проверьте workflow
 1. Убедитесь, что **секреты с точными именами** из шага 3 добавлены в репозиторий.
@@ -81,9 +81,9 @@
 - `venv`, `.venv`, `.python-version`
 - каталоги `data`, `storage`, `uploads`, `logs`
 - локальные ассеты экрана оплаты и его вариаций по маскам `app/assets/screen_images/S15*` и `app/assets/screen_images/s15*`
-- каталоги из `PRESERVE_PATHS` (по умолчанию `app/assets/screen_images app/assets/pdf web`) — скрипт делает резервную копию перед `git reset --hard` и возвращает после очистки
+- каталоги из `PRESERVE_PATHS` (по умолчанию `app/assets/screen_images app/assets/pdf`) — скрипт делает резервную копию перед `git reset --hard` и возвращает после очистки
 
-Если нужно изменить набор полностью сохраняемых каталогов, задайте секрет `PRESERVE_PATHS` в GitHub Actions (например: `app/assets/screen_images app/assets/pdf web storage/screen_images`).
+Если нужно изменить набор полностью сохраняемых каталогов, задайте секрет `PRESERVE_PATHS` в GitHub Actions (например: `app/assets/screen_images app/assets/pdf storage/screen_images`).
 
 ## 5. Миграции базы данных
 При каждом деплое workflow автоматически выполняет `alembic upgrade head`, если в проекте есть `alembic.ini` и установлен Alembic.
@@ -128,9 +128,9 @@ After=network.target
 [Service]
 Type=simple
 User=deployer
-WorkingDirectory=/var/www/numerolog_bot
+WorkingDirectory=/opt/numerolog_bot
 EnvironmentFile=/etc/numerolog_bot/.env
-ExecStart=/var/www/numerolog_bot/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
+ExecStart=/opt/numerolog_bot/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
 
@@ -147,9 +147,9 @@ After=network.target
 [Service]
 Type=simple
 User=deployer
-WorkingDirectory=/var/www/numerolog_bot
+WorkingDirectory=/opt/numerolog_bot
 EnvironmentFile=/etc/numerolog_bot/.env
-ExecStart=/var/www/numerolog_bot/.venv/bin/python -m app.bot.polling
+ExecStart=/opt/numerolog_bot/.venv/bin/python -m app.bot.polling
 Restart=always
 RestartSec=5
 
@@ -205,7 +205,7 @@ server {
     listen 80;
     server_name landing.example.com;
 
-    root /var/www/numerolog_bot/web;
+    root /opt/numerolog_bot/web;
     index index.html;
 
     location / {
