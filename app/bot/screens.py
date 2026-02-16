@@ -578,10 +578,13 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     requires_payment = selected_tariff_raw in {"T1", "T2", "T3"} and order_status != "paid"
     is_t0 = selected_tariff_raw == "T0"
 
+    payment_success_banner = "<b>🟧 ОПЛАТА ПРОШЛА УСПЕШНО. 🟧</b>\n\n"
+
     if has_profile:
         text = _with_screen_prefix(
             "S4",
             (
+                f"{payment_success_banner}"
                 f"Мои данные для тарифа {selected_tariff_title}:\n\n"
                 f"Имя: {profile_data.get('name')}\n"
                 f"Пол: {profile_data.get('gender') or 'не указано'}\n"
@@ -604,6 +607,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         text = _with_screen_prefix(
             "S4",
             (
+                f"{payment_success_banner}"
                 f"Мои данные для тарифа {selected_tariff_title}.\n\n"
                 "Данные ещё не заполнены. Нажмите «Заполнить данные» и следуйте шагам:\n"
                 "1) Имя\n"
