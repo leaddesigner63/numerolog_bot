@@ -43,7 +43,7 @@ scripts/              # вспомогательные скрипты
   deploy.sh           # серверный деплой-скрипт (используется GitHub Actions)
   test.sh             # полный набор локальных проверок
   fast_checks.py      # быстрые сценарные проверки без внешних зависимостей
-  check_landing_content.py # статическая проверка словаря/дисклеймеров лендинга
+  check_landing_content.py # статическая проверка контента лендинга (JSON или fallback по HTML)
   smoke_check_landing.sh # smoke-check доступности лендинга/CTA/ассетов после деплоя
 docs/
   deploy/
@@ -51,16 +51,36 @@ docs/
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   payments/
     prodamus_contract.md  # контракт интеграции Prodamus (сверка полей ссылки/webhook/status)
-web/                  # one-screen лендинг для перехода в Telegram-бот
-  test.html           # секции Hero/Преимущества/Тарифы/FAQ/Footer + CTA deep-link
-  styles.css          # mobile-first стили (360px+, tablet, desktop)
-  script.js           # рендер контента из JSON + FAQ-аккордеон + UTM/deep-link + аналитика
+web/                  # многостраничный статический сайт (SEO + переход в Telegram-бот)
+  index.html          # главная страница с расширенным контентом
   content/
-    landing-content.json # централизованный контент лендинга + словарь проверок
+    landing-content.json # словарь контента/политик для scripts/check_landing_content.py
+  prices/index.html   # тарифы + JSON-LD Service/Offer
+  articles/index.html # каталог статей (заготовка)
+  faq/index.html      # FAQ + JSON-LD FAQPage
+  contacts/index.html # контакты без формы
+  legal/privacy/index.html # privacy (noindex, follow)
+  legal/offer/index.html   # offer (noindex, follow)
+  404.html            # страница ошибки
+  robots.txt          # правила индексации
+  sitemap.xml         # карта сайта (без /legal/*)
+  assets/sprite.svg   # SVG-спрайт иконок
+  styles.css          # единый CSS для всех страниц
+  script.js           # меню + FAQ-аккордеон
 AUTODEPLOY_INSTRUCTIONS.md # пошаговая инструкция по автодеплою
 CONTRIBUTING.md      # правила разработки и обязательный паттерн enter_text_input_mode для текстового ввода
 .env.prompts.example # пример файла с системными промптами по тарифам
 ```
+
+
+## Локальный запуск статического сайта
+
+```bash
+cd web
+python -m http.server 8080
+```
+
+После запуска откройте `http://localhost:8080/`.
 
 ## Предварительные требования
 
