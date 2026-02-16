@@ -7,7 +7,7 @@ class DeployScriptPreserveAssetsTests(unittest.TestCase):
         script = Path("scripts/deploy.sh").read_text(encoding="utf-8")
 
         self.assertIn(
-            'PRESERVE_PATHS="${PRESERVE_PATHS:-app/assets/screen_images app/assets/pdf web}"',
+            'PRESERVE_PATHS="${PRESERVE_PATHS:-app/assets/screen_images app/assets/pdf}"',
             script,
         )
         self.assertIn('cp -a "$preserve_path" "$backup_root/$preserve_path"', script)

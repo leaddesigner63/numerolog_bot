@@ -6,7 +6,7 @@ GIT_REF="${GIT_REF:-}"
 ENV_FILE="${ENV_FILE:-}"
 SERVICE_NAME="${SERVICE_NAME:-}"
 SERVICE_NAMES="${SERVICE_NAMES:-}"
-PRESERVE_PATHS="${PRESERVE_PATHS:-app/assets/screen_images app/assets/pdf web}"
+PRESERVE_PATHS="${PRESERVE_PATHS:-app/assets/screen_images app/assets/pdf}"
 
 if [ -z "$DEPLOY_PATH" ]; then
   echo "DEPLOY_PATH не задан. Укажите путь к директории проекта на сервере."
