@@ -166,5 +166,8 @@ elif [ -n "${WEBMASTER_PING_URLS:-}" ] && command -v curl >/dev/null 2>&1; then
     curl --silent --show-error --max-time 15 "$ping_url" >/dev/null       || echo "Не удалось пинговать: $ping_url"
   done
 else
-  echo "Пинг вебмастеров пропущен: не задан WEBMASTER_PING_URLS и не найден скрипт post_release_ping.sh."
+  echo "[WARNING] Пост-релизный SEO-пинг пропущен."
+  echo "[WARNING] Чтобы включить индексацию после деплоя, выполните одно из действий:"
+  echo "[WARNING] 1) задайте секрет WEBMASTER_PING_URLS в CI (URL через запятую),"
+  echo "[WARNING] 2) или задайте WEBMASTER_PING_SCRIPT и разместите исполняемый скрипт на сервере."
 fi
