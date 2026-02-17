@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     newsletter_unsubscribe_base_url: str | None = None
     newsletter_unsubscribe_secret: str | None = None
     newsletter_consent_document_version: str = "v1"
+    yandex_metrika_counter_id: int = 106884182
     admin_ids: str | None = None
     feedback_group_chat_id: int | None = None
     feedback_group_url: str | None = None
