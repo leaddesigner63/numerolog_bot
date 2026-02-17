@@ -49,6 +49,7 @@ scripts/              # вспомогательные скрипты
 docs/
   deploy/
     landing_autodeploy.md # подробный runbook по автодеплою лендинга (VPS + Nginx)
+    autodeploy_step_by_step.md # пошаговая инструкция по настройке автодеплоя для пользователя
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   landing/
     release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)
@@ -59,6 +60,11 @@ web/                  # многостраничный статический с
   prices/index.html   # тарифы: клиентская подгрузка цен из /api/public/tariffs + JSON-LD Service/Offer
   articles/index.html # каталог статей + финальный CTA-блок в Telegram
   articles/numerology-date-of-birth/index.html # статья: нумерология по дате рождения и онлайн-расчет
+  articles/numerology-online-calculation/index.html # статья: кластер «нумерология онлайн расчет»
+  articles/purpose-by-date-of-birth/index.html # статья: кластер «предназначение по дате рождения»
+  articles/destiny-number-online/index.html # статья: кластер «число судьбы онлайн расчет»
+  articles/financial-code-by-date-of-birth/index.html # статья: кластер «финансовый код по дате рождения»
+  articles/ai-natal-chart-free/index.html # статья: кластер «ИИ натальная карта бесплатно»
   articles/destiny-number-and-purpose/index.html # статья: число судьбы и предназначение
   articles/money-and-career-by-date-of-birth/index.html # статья: деньги, профессия и карьера по дате рождения
   articles/ai-natal-chart-and-personality-analysis/index.html # статья: ИИ натальная карта и анализ личности
