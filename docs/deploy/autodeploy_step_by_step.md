@@ -107,3 +107,13 @@
 
 1. Откройте `https://<домен>/legal/newsletter-consent/` и убедитесь, что страница доступна (HTTP 200).
 2. Проверьте, что в боте экран маркетингового согласия содержит рабочую ссылку на этот URL.
+
+3. Проверьте счётчик Метрики на проде:
+   ```bash
+   curl -s https://<домен>/ | rg "mc.yandex.ru/metrika/tag.js|ym\(106884182, \"init\""
+   ```
+4. Если домен использует редиректы (http→https, www→без www), убедитесь, что параметры URL сохраняются после редиректа:
+   ```bash
+   curl -I "http://<домен>/?utm_source=test&utm_campaign=test"
+   ```
+   В `Location` должны остаться `utm_source` и `utm_campaign`.
