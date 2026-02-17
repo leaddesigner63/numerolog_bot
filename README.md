@@ -58,6 +58,10 @@ web/                  # многостраничный статический с
   index.html          # главная страница сайта
   prices/index.html   # тарифы: клиентская подгрузка цен из /api/public/tariffs + JSON-LD Service/Offer
   articles/index.html # каталог статей + финальный CTA-блок в Telegram
+  articles/numerology-date-of-birth/index.html # статья: нумерология по дате рождения и онлайн-расчет
+  articles/destiny-number-and-purpose/index.html # статья: число судьбы и предназначение
+  articles/money-and-career-by-date-of-birth/index.html # статья: деньги, профессия и карьера по дате рождения
+  articles/ai-natal-chart-and-personality-analysis/index.html # статья: ИИ натальная карта и анализ личности
   faq/index.html      # FAQ + JSON-LD FAQPage + финальный CTA-блок
   contacts/index.html # контакты без формы + финальный CTA-блок
   legal/privacy/index.html # privacy (noindex, follow) + финальный CTA-блок
