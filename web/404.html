@@ -1,30 +1,84 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru-RU">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>404 — Страница не найдена | Нумерология-бот</title>
-  <meta name="description" content="Запрошенная страница не найдена. Перейдите на главную или откройте Telegram-бота для персонального нумерологического разбора.">
+  <meta name="description" content="Запрошенная страница не найдена. Перейдите на главную, в раздел цен или FAQ, либо откройте Telegram-бота для персонального разбора.">
   <link rel="stylesheet" href="/assets/css/styles.css">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
   <link rel="canonical" href="https://[DOMAIN]/404.html">
   <meta name="robots" content="noindex, follow">
   <meta property="og:title" content="404 — Страница не найдена | Нумерология-бот">
-  <meta property="og:description" content="Страница не найдена. Вернитесь на главную или продолжите в Telegram-боте Нумерология-бот.">
+  <meta property="og:description" content="Страница не найдена. Вернитесь на главную, в цены или FAQ, либо продолжите в Telegram-боте.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://[DOMAIN]/404.html">
   <meta name="twitter:card" content="summary">
   <meta name="twitter:title" content="404 — Страница не найдена | Нумерология-бот">
-  <meta name="twitter:description" content="Эта страница недоступна. Откройте главную или перейдите в Telegram-бот для разбора.">
+  <meta name="twitter:description" content="Эта страница недоступна. Используйте быстрые ссылки для возврата или откройте Telegram-бота.">
   <meta name="yandex-verification" content="[PLACEHOLDER: YANDEX_VERIFICATION]">
 </head>
-<body class="container text-center" style="padding-top: 100px;">
-  <h1>404</h1>
-  <p>Страница не найдена.</p>
-  <a href="/" class="btn">На главную</a>
+<body>
+<a class="skip-link" href="#main-content">Перейти к основному контенту</a>
 
-  <section class="card final-cta text-center" style="max-width: 640px; margin-left: auto; margin-right: auto;">
-    <p class="final-cta-offer">Не нашли нужную страницу? Перейдите в бота и начните персональный разбор.</p>
+<header>
+  <div class="container nav-container">
+    <a href="/" class="logo">
+      <svg width="24" height="24"><use href="/assets/svg/sprite.svg#icon-logo"></use></svg>
+      Нумерология-бот
+    </a>
+    <button class="mobile-toggle" type="button" aria-label="Меню" aria-expanded="false" aria-controls="primary-navigation">
+      <svg width="24" height="24"><use href="/assets/svg/sprite.svg#icon-menu"></use></svg>
+    </button>
+    <nav class="nav-links" id="primary-navigation">
+      <a href="/prices/">Цены</a>
+      <a href="/articles/">Статьи</a>
+      <a href="/faq/">FAQ</a>
+      <a href="/contacts/">Контакты</a>
+      <a href="[BOT_LINK]" class="btn">Открыть в Telegram</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main-content" class="container mt-4">
+  <section class="card text-center">
+    <h1>404</h1>
+    <p>Страница не найдена. Возможно, ссылка устарела или была перемещена.</p>
+    <a href="/" class="btn mt-4">На главную</a>
+  </section>
+
+  <section class="card mt-4">
+    <h2>Куда перейти дальше</h2>
+    <p>Используйте быстрые ссылки, чтобы вернуться к основным разделам сайта:</p>
+    <div class="footer-links" style="justify-content: flex-start; margin-top: 1rem;">
+      <a href="/">Главная</a>
+      <a href="/prices/">Цены</a>
+      <a href="/faq/">FAQ</a>
+    </div>
+  </section>
+
+  <section class="card final-cta text-center">
+    <p class="final-cta-offer">Если хотите сразу перейти к персональному разбору, откройте бота в Telegram.</p>
     <a href="[BOT_LINK]" class="btn">Открыть в Telegram</a>
   </section>
+</main>
+
+<footer>
+  <div class="container">
+    <div class="footer-links">
+      <a href="/">Главная</a>
+      <a href="/prices/">Цены</a>
+      <a href="/faq/">FAQ</a>
+      <a href="/contacts/">Контакты</a>
+    </div>
+    <div class="footer-links" style="font-size: 0.8rem;">
+      <a href="/legal/offer/">Оферта</a>
+      <a href="/legal/privacy/">Конфиденциальность</a>
+    </div>
+    <p>© 2024 Нумерология-бот. [PLACEHOLDER: ЮР_ЛИЦО]. Все права защищены.</p>
+  </div>
+</footer>
+
+<script src="/assets/js/script.js"></script>
 </body>
 </html>
