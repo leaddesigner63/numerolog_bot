@@ -17,7 +17,7 @@
   <meta name="twitter:title" content="Цены на разбор по дате рождения — Нумерология-бот">
   <meta name="twitter:description" content="Сравните тарифы и выберите нумерологический разбор под свои задачи: личность, финансы, карьера и предназначение.">
   <meta name="yandex-verification" content="[PLACEHOLDER: YANDEX_VERIFICATION]">
-  <script type="application/ld+json">
+  <script id="prices-service-schema" type="application/ld+json">
   {
     "@context": "https://schema.org",
     "@type": "Service",
@@ -30,6 +30,26 @@
       { "@type": "Offer", "name": "В чём твоя сила?", "price": "560", "priceCurrency": "RUB" },
       { "@type": "Offer", "name": "Где твои деньги?", "price": "2190", "priceCurrency": "RUB" },
       { "@type": "Offer", "name": "Твой путь к себе!", "price": "5930", "priceCurrency": "RUB" }
+    ]
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    "itemListElement": [
+      {
+        "@type": "ListItem",
+        "position": 1,
+        "name": "Главная",
+        "item": "https://aireadu.ru/"
+      },
+      {
+        "@type": "ListItem",
+        "position": 2,
+        "name": "Цены",
+        "item": "https://aireadu.ru/prices/"
+      }
     ]
   }
   </script>
@@ -194,7 +214,7 @@
     }
 
     function updateJsonLdOfferPrices(tariffs) {
-      var schemaNode = document.querySelector('script[type="application/ld+json"]');
+      var schemaNode = document.getElementById('prices-service-schema');
       if (!schemaNode || !schemaNode.textContent) {
         return;
       }
