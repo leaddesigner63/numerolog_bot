@@ -501,7 +501,7 @@ class ScreenStateRecord(Base):
     __tablename__ = "screen_states"
 
     telegram_user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
-    screen_id: Mapped[str | None] = mapped_column(String(16))
+    screen_id: Mapped[str | None] = mapped_column(String(32))
     message_ids: Mapped[list[int] | None] = mapped_column(JSON)
     user_message_ids: Mapped[list[int] | None] = mapped_column(JSON)
     last_question_message_id: Mapped[int | None] = mapped_column(BigInteger)
