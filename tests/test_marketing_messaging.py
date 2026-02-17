@@ -51,6 +51,16 @@ def test_append_unsubscribe_block() -> None:
     assert text.endswith("Отписаться: https://example.com/u")
 
 
+def test_marketing_template_contains_unsubscribe_link() -> None:
+    prepared = append_unsubscribe_block(
+        message_text="Персональная подборка на неделю",
+        unsubscribe_link="https://example.com/newsletter/unsubscribe?token=abc",
+    )
+
+    assert "Отписаться:" in prepared
+    assert "https://example.com/newsletter/unsubscribe?token=abc" in prepared
+
+
 def test_send_marketing_message_skips_revoked_consent() -> None:
     SessionLocal, engine = _create_session_factory()
     with SessionLocal() as session:
