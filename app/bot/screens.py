@@ -1353,6 +1353,32 @@ def screen_s14(state: dict[str, Any]) -> ScreenContent:
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
+def screen_marketing_consent(_: dict[str, Any]) -> ScreenContent:
+    text = _with_screen_prefix(
+        "S_MARKETING_CONSENT",
+        "Хочешь получать короткие полезные разборы, анонсы обновлений и спец-предложения?\n"
+        "Мы пишем по делу и без спама.\n\n"
+        "Условия подписки: https://numerologbot.ru/legal/newsletter-consent/",
+    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Подписаться", "✅"),
+                callback_data="marketing:consent:accept",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Не сейчас", "⏭️"),
+                callback_data="marketing:consent:skip",
+            )
+        ],
+    ]
+    rows.extend(_global_menu())
+    keyboard = _build_keyboard(rows)
+    return ScreenContent(messages=[text], keyboard=keyboard)
+
+
 SCREEN_REGISTRY = {
     "S0": screen_s0,
     "S1": screen_s1,
@@ -1373,4 +1399,5 @@ SCREEN_REGISTRY = {
     "S13": screen_s13,
     "S14": screen_s14,
     "S15": screen_s15,
+    "S_MARKETING_CONSENT": screen_marketing_consent,
 }

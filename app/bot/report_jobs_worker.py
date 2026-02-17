@@ -119,17 +119,10 @@ class ReportJobWorker:
                     report_text=report.report_text,
                     report_model=report.model_used.value if report.model_used else None,
                 )
-                await screen_manager.show_screen(
+                await screens_handler.show_post_report_screen(
                     bot=bot,
                     chat_id=chat_id,
                     user_id=telegram_user_id,
-                    screen_id="S7",
-                    trigger_type="job",
-                    trigger_value=f"report_job:{job.id}:completed",
-                    metadata_json={
-                        "report_job_status": job.status.value,
-                        "reason": "report_completed",
-                    },
                 )
                 report_meta = screens_handler._get_report_pdf_meta(report)
                 pdf_bytes = screens_handler._get_report_pdf_bytes(session, report)
