@@ -95,27 +95,29 @@ async def newsletter_unsubscribe(token: str = "") -> HTMLResponse:
         ).scalar_one_or_none()
 
         if profile is not None:
-            profile.marketing_consent_revoked_at = revoked_at
-            profile.marketing_consent_revoked_source = "unsubscribe_link"
+            already_revoked = profile.marketing_consent_revoked_at is not None
             profile.marketing_consent_accepted_at = None
             if not profile.marketing_consent_document_version:
                 profile.marketing_consent_document_version = settings.newsletter_consent_document_version
 
-            session.add(
-                MarketingConsentEvent(
-                    user_id=profile.user_id,
-                    event_type=MarketingConsentEventType.REVOKED,
-                    event_at=revoked_at,
-                    document_version=profile.marketing_consent_document_version
-                    or settings.newsletter_consent_document_version,
-                    source="unsubscribe_link",
-                    metadata_json={
-                        "issued_at": payload.get("issued_at"),
-                        "token_user_id": user_id,
-                        "route": "newsletter_unsubscribe",
-                    },
+            if not already_revoked:
+                profile.marketing_consent_revoked_at = revoked_at
+                profile.marketing_consent_revoked_source = "unsubscribe_link"
+                session.add(
+                    MarketingConsentEvent(
+                        user_id=profile.user_id,
+                        event_type=MarketingConsentEventType.REVOKED,
+                        event_at=revoked_at,
+                        document_version=profile.marketing_consent_document_version
+                        or settings.newsletter_consent_document_version,
+                        source="unsubscribe_link",
+                        metadata_json={
+                            "issued_at": payload.get("issued_at"),
+                            "token_user_id": user_id,
+                            "route": "newsletter_unsubscribe",
+                        },
+                    )
                 )
-            )
             session.commit()
 
     html = _unsubscribe_html_page(

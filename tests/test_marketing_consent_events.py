@@ -120,6 +120,8 @@ class MarketingConsentEventHandlersTests(unittest.IsolatedAsyncioTestCase):
 
         with self.SessionLocal() as session:
             db_profile = session.execute(select(UserProfile).where(UserProfile.user_id == 1)).scalar_one()
+            self.assertIsNotNone(db_profile.marketing_consent_accepted_at)
+            self.assertEqual(db_profile.marketing_consent_document_version, "v1")
             self.assertEqual(db_profile.marketing_consent_source, "marketing_prompt")
             events = session.execute(select(MarketingConsentEvent).order_by(MarketingConsentEvent.id)).scalars().all()
             self.assertEqual(events[-1].source, "marketing_prompt")
@@ -153,6 +155,38 @@ class MarketingConsentEventHandlersTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state_data.get("marketing_consent_choice"), "skip")
         send_ephemeral.assert_awaited_once()
         show_screen.assert_awaited_once()
+        self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S7")
+
+    async def test_prompt_skip_does_not_block_post_report_screen(self) -> None:
+        callback = SimpleNamespace(
+            bot=AsyncMock(),
+            message=SimpleNamespace(chat=SimpleNamespace(id=5003), answer=AsyncMock()),
+            from_user=SimpleNamespace(id=1001, username="tester"),
+            answer=AsyncMock(),
+        )
+        state_data = {"marketing_consent_return_screen": "S7"}
+
+        def _update_state(_user_id: int, **kwargs):
+            if kwargs:
+                state_data.update(kwargs)
+            return SimpleNamespace(data=state_data.copy())
+
+        with (
+            patch.object(profile.screen_manager, "update_state", side_effect=_update_state),
+            patch.object(profile.screen_manager, "send_ephemeral_message", new=AsyncMock()),
+            patch.object(profile.screen_manager, "show_screen", new=AsyncMock()),
+        ):
+            await profile.skip_marketing_consent_prompt(callback)
+
+        from app.bot.handlers import screens
+
+        with (
+            patch.object(screens.screen_manager, "update_state", side_effect=_update_state),
+            patch.object(screens.screen_manager, "show_screen", new=AsyncMock()) as show_screen,
+        ):
+            delivered = await screens.show_post_report_screen(callback.bot, chat_id=5003, user_id=1001)
+
+        self.assertTrue(delivered)
         self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S7")
 
 
