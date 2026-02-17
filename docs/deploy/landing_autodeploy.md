@@ -89,9 +89,9 @@ sudo systemctl status certbot.timer
 - `PRESERVE_PATHS` — опционально: каталоги, которые нужно сохранить при деплое (по умолчанию `app/assets/screen_images app/assets/pdf`, без `web`);
 - `SERVICE_NAME` — основной systemd unit (или используйте `SERVICE_NAMES`);
 - `SERVICE_NAMES` — несколько unit’ов через пробел (опционально, приоритетнее);
-- `LANDING_URL` — URL лендинга для smoke-check (например, `https://example.com`);
-- `LANDING_EXPECTED_CTA` — ожидаемый фрагмент CTA-ссылки (например, `https://t.me/your_bot`);
-- `LANDING_ASSET_URLS` — список URL ассетов через запятую для проверки (например, `https://example.com/styles.css,https://example.com/script.js`).
+- `LANDING_URL` — URL лендинга для smoke-check (рабочий пример: `https://aireadu.ru/`);
+- `LANDING_EXPECTED_CTA` — ожидаемый фрагмент CTA-ссылки (рабочий пример: `https://t.me/AIreadUbot`);
+- `LANDING_ASSET_URLS` — список URL ассетов через запятую для проверки (рабочий пример: `https://aireadu.ru/assets/css/styles.css,https://aireadu.ru/assets/js/script.js`).
 
 ### 4.2 Защищённое хранение секретов
 
@@ -171,9 +171,9 @@ sudo systemctl restart numerolog-web.service
 sudo systemctl --no-pager --full status numerolog-bot.service numerolog-web.service | head -n 80
 
 # 5. Прогнать smoke-check вручную
-LANDING_URL="https://example.com" \
-LANDING_EXPECTED_CTA="https://t.me/your_bot" \
-LANDING_ASSET_URLS="https://example.com/styles.css,https://example.com/script.js" \
+LANDING_URL="https://aireadu.ru/" \
+LANDING_EXPECTED_CTA="https://t.me/AIreadUbot" \
+LANDING_ASSET_URLS="https://aireadu.ru/assets/css/styles.css,https://aireadu.ru/assets/js/script.js" \
 bash scripts/smoke_check_landing.sh
 ```
 

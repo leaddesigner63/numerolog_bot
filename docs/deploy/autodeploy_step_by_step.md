@@ -34,9 +34,9 @@
 - `SERVICE_NAMES` — список сервисов через запятую (если несколько).
 - `ENV_FILE` — путь к env-файлу на сервере (если используется).
 - `PRESERVE_PATHS` — пути, которые нужно сохранять при деплое.
-- `LANDING_URL` — URL лендинга для smoke-check.
-- `LANDING_EXPECTED_CTA` — ожидаемый текст CTA для проверки после деплоя.
-- `LANDING_ASSET_URLS` — список критичных asset URL для проверки.
+- `LANDING_URL` — URL лендинга для smoke-check (рабочий пример: `https://aireadu.ru/`).
+- `LANDING_EXPECTED_CTA` — ожидаемый текст CTA для проверки после деплоя (рабочий пример: `https://t.me/AIreadUbot`).
+- `LANDING_ASSET_URLS` — список критичных asset URL для проверки (рабочий пример: `https://aireadu.ru/assets/css/styles.css,https://aireadu.ru/assets/js/script.js`).
 - `SITEMAP_BASE_URL` — базовый домен для генерации URL в sitemap (например, `https://aireadu.ru`).
 - `WEBMASTER_PING_SCRIPT` — путь до исполняемого скрипта пост-релизного пинга (опционально).
 - `WEBMASTER_PING_URLS` — список URL для пинга панелей вебмастеров через запятую (опционально).
@@ -61,6 +61,13 @@
 1. Выполните push в `main`.
 2. Откройте вкладку **Actions** в GitHub и дождитесь успешного завершения двух jobs.
 3. Проверьте, что сайт и бот доступны, а smoke-check прошел без ошибок.
+4. При необходимости прогоните smoke-check вручную с единым рабочим примером:
+   ```bash
+   LANDING_URL="https://aireadu.ru/" \
+   LANDING_EXPECTED_CTA="https://t.me/AIreadUbot" \
+   LANDING_ASSET_URLS="https://aireadu.ru/assets/css/styles.css,https://aireadu.ru/assets/js/script.js" \
+   ./scripts/smoke_check_landing.sh
+   ```
 
 ## 6) Базовая диагностика, если деплой не прошел
 
