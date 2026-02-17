@@ -101,6 +101,11 @@ class ScreenTransitionStatus(enum.StrEnum):
     UNKNOWN = "unknown"
 
 
+class MarketingConsentEventType(enum.StrEnum):
+    ACCEPTED = "accepted"
+    REVOKED = "revoked"
+
+
 def _enum_values(enum_cls: type[enum.Enum]) -> list[str]:
     return [member.value for member in enum_cls]
 
@@ -129,6 +134,9 @@ class User(Base):
         back_populates="user"
     )
     questionnaire_responses: Mapped[list["QuestionnaireResponse"]] = relationship(
+        back_populates="user"
+    )
+    marketing_consent_events: Mapped[list["MarketingConsentEvent"]] = relationship(
         back_populates="user"
     )
 
@@ -169,6 +177,34 @@ class UserProfile(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="profile")
+
+
+class MarketingConsentEvent(Base):
+    __tablename__ = "marketing_consent_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        index=True,
+    )
+    event_type: Mapped[MarketingConsentEventType] = mapped_column(
+        Enum(
+            MarketingConsentEventType,
+            values_callable=_enum_values,
+            name="marketingconsenteventtype",
+        ),
+        index=True,
+    )
+    event_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+    document_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    metadata_json: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+
+    user: Mapped[User] = relationship(back_populates="marketing_consent_events")
 
 
 class Order(Base):

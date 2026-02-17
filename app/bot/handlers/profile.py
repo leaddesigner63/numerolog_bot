@@ -18,6 +18,8 @@ from app.core.timezone import APP_TIMEZONE, format_app_datetime, now_app_timezon
 from app.db.models import (
     FeedbackMessage,
     FreeLimit,
+    MarketingConsentEvent,
+    MarketingConsentEventType,
     Order,
     OrderStatus,
     QuestionnaireResponse,
@@ -152,6 +154,28 @@ def _profile_payload(profile: UserProfile | None) -> dict[str, Any]:
         ),
         "personal_data_consent_source": profile.personal_data_consent_source,
     }
+
+
+def _append_marketing_consent_event(
+    *,
+    session,
+    user_id: int,
+    event_type: MarketingConsentEventType,
+    event_at,
+    document_version: str | None,
+    source: str | None,
+    metadata_json: dict[str, Any] | None,
+) -> None:
+    session.add(
+        MarketingConsentEvent(
+            user_id=user_id,
+            event_type=event_type,
+            event_at=event_at,
+            document_version=document_version,
+            source=source,
+            metadata_json=metadata_json,
+        )
+    )
 
 
 async def _show_profile_screen(message: Message, user_id: int) -> None:
@@ -425,6 +449,69 @@ async def accept_profile_consent(callback: CallbackQuery) -> None:
         user_id=callback.from_user.id,
         screen_id=next_screen,
     )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "profile:marketing_consent:accept")
+async def accept_marketing_consent(callback: CallbackQuery) -> None:
+    if not callback.from_user:
+        await callback.answer()
+        return
+
+    with get_session() as session:
+        user = _get_or_create_user(
+            session,
+            callback.from_user.id,
+            callback.from_user.username,
+        )
+        profile = user.profile
+        if profile:
+            accepted_at = now_app_timezone()
+            profile.marketing_consent_accepted_at = accepted_at
+            profile.marketing_consent_revoked_at = None
+            profile.marketing_consent_document_version = "v1"
+            profile.marketing_consent_source = "profile_flow"
+            profile.marketing_consent_revoked_source = None
+            _append_marketing_consent_event(
+                session=session,
+                user_id=user.id,
+                event_type=MarketingConsentEventType.ACCEPTED,
+                event_at=accepted_at,
+                document_version=profile.marketing_consent_document_version,
+                source=profile.marketing_consent_source,
+                metadata_json={"handler": "profile:marketing_consent:accept"},
+            )
+
+    await callback.answer()
+
+
+@router.callback_query(F.data == "profile:marketing_consent:revoke")
+async def revoke_marketing_consent(callback: CallbackQuery) -> None:
+    if not callback.from_user:
+        await callback.answer()
+        return
+
+    with get_session() as session:
+        user = _get_or_create_user(
+            session,
+            callback.from_user.id,
+            callback.from_user.username,
+        )
+        profile = user.profile
+        if profile:
+            revoked_at = now_app_timezone()
+            profile.marketing_consent_revoked_at = revoked_at
+            profile.marketing_consent_revoked_source = "profile_flow"
+            _append_marketing_consent_event(
+                session=session,
+                user_id=user.id,
+                event_type=MarketingConsentEventType.REVOKED,
+                event_at=revoked_at,
+                document_version=profile.marketing_consent_document_version,
+                source=profile.marketing_consent_revoked_source,
+                metadata_json={"handler": "profile:marketing_consent:revoke"},
+            )
+
     await callback.answer()
 
 
