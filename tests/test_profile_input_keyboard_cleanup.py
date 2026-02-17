@@ -52,6 +52,47 @@ class ProfileInputKeyboardCleanupTests(unittest.IsolatedAsyncioTestCase):
             preserve_last_question=True,
         )
 
+    async def test_accept_consent_uses_cleanup_friendly_screen_manager_messages(self) -> None:
+        callback = SimpleNamespace(
+            bot=AsyncMock(),
+            message=SimpleNamespace(chat=SimpleNamespace(id=100), answer=AsyncMock()),
+            from_user=SimpleNamespace(id=7, username="tester"),
+            answer=AsyncMock(),
+        )
+
+        with (
+            patch.object(profile, "get_session") as get_session,
+            patch.object(profile, "_get_or_create_user") as get_or_create_user,
+            patch.object(profile.screen_manager, "update_state") as update_state,
+            patch.object(profile.screen_manager, "send_ephemeral_message", new=AsyncMock()) as send_ephemeral,
+            patch.object(profile.screen_manager, "show_screen", new=AsyncMock()) as show_screen,
+        ):
+            fake_session = get_session.return_value.__enter__.return_value
+            fake_profile = SimpleNamespace(
+                name="Иван",
+                gender="Мужской",
+                birth_date="2000-01-01",
+                birth_time="10:00",
+                birth_place_city="Москва",
+                birth_place_region="Московская область",
+                birth_place_country="Россия",
+                personal_data_consent_accepted_at=None,
+                personal_data_consent_source=None,
+            )
+            fake_session.flush = lambda: None
+            get_or_create_user.return_value = SimpleNamespace(profile=fake_profile)
+            update_state.side_effect = [
+                None,
+                SimpleNamespace(data={"selected_tariff": "T2"}),
+                None,
+            ]
+
+            await profile.accept_profile_consent(callback)
+
+        send_ephemeral.assert_awaited_once()
+        show_screen.assert_awaited_once()
+        callback.message.answer.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
