@@ -7,6 +7,7 @@ Create Date: 2026-02-17 00:00:00.000000
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 
 revision = "0027_add_marketing_consent_events"
@@ -15,10 +16,11 @@ branch_labels = None
 depends_on = None
 
 
-marketing_consent_event_type_enum = sa.Enum(
+marketing_consent_event_type_enum = postgresql.ENUM(
     "accepted",
     "revoked",
     name="marketingconsenteventtype",
+    create_type=False,
 )
 
 
