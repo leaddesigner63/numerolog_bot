@@ -64,7 +64,7 @@ web/                  # многостраничный статический с
   articles/ai-natal-chart-and-personality-analysis/index.html # статья: ИИ натальная карта и анализ личности
   faq/index.html      # FAQ + JSON-LD FAQPage + финальный CTA-блок
   contacts/index.html # контакты без формы (Email: AlreadU@yandex.com, Telegram: @AlreadU и @AlreadUbot) + финальный CTA-блок
-  legal/privacy/index.html # privacy (noindex, follow) + блок с реквизитами исполнителя + финальный CTA-блок
+  legal/privacy/index.html # privacy policy для РФ (152-ФЗ, noindex/follow, с заполненными реквизитами оператора) + финальный CTA-блок
   legal/offer/index.html   # offer (noindex, follow) + юридическая информация и реквизиты + финальный CTA-блок
   404.html            # страница ошибки + финальный CTA-блок
   robots.txt          # правила индексации
