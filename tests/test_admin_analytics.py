@@ -8,7 +8,9 @@ from sqlalchemy.orm import sessionmaker
 from app.services.admin_analytics import (
     AnalyticsFilters,
     FinanceAnalyticsFilters,
+    MarketingAnalyticsFilters,
     build_finance_analytics,
+    build_marketing_subscription_analytics,
     build_screen_transition_analytics,
 )
 from app.db.base import Base
@@ -171,6 +173,86 @@ class AdminAnalyticsTests(unittest.TestCase):
         self.assertEqual(result["summary"]["provider_confirmed_orders"], 1)
         self.assertEqual(result["summary"]["provider_confirmed_revenue"], 1200.0)
         self.assertEqual(result["by_tariff"][0]["tariff"], "T1")
+
+
+    def test_marketing_subscription_analytics(self) -> None:
+        base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        from app.db.models import MarketingConsentEvent, MarketingConsentEventType, User, UserProfile
+
+        with self.Session() as session:
+            session.add_all([
+                User(id=1, telegram_user_id=1001),
+                User(id=2, telegram_user_id=1002),
+                User(id=3, telegram_user_id=1003),
+            ])
+            session.add_all([
+                UserProfile(
+                    user_id=1,
+                    name="A",
+                    birth_date="2000-01-01",
+                    birth_place_city="M",
+                    birth_place_country="RU",
+                    marketing_consent_accepted_at=base_time,
+                    marketing_consent_document_version="v1",
+                ),
+                UserProfile(
+                    user_id=2,
+                    name="B",
+                    birth_date="2000-01-01",
+                    birth_place_city="M",
+                    birth_place_country="RU",
+                    marketing_consent_accepted_at=base_time,
+                    marketing_consent_revoked_at=base_time + timedelta(days=1),
+                    marketing_consent_document_version="v1",
+                ),
+            ])
+            session.add_all([
+                MarketingConsentEvent(
+                    user_id=1,
+                    event_type=MarketingConsentEventType.ACCEPTED,
+                    event_at=base_time + timedelta(hours=1),
+                    source="marketing_prompt",
+                ),
+                MarketingConsentEvent(
+                    user_id=2,
+                    event_type=MarketingConsentEventType.REVOKED,
+                    event_at=base_time + timedelta(hours=2),
+                    source="marketing_prompt",
+                ),
+            ])
+            session.add_all([
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=1001,
+                    from_screen_id="S3",
+                    to_screen_id="S4",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                ),
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=1002,
+                    from_screen_id="S3",
+                    to_screen_id="S4",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                ),
+            ])
+            session.flush()
+            for idx, event in enumerate(session.query(ScreenTransitionEvent).order_by(ScreenTransitionEvent.id.asc()).all()):
+                event.created_at = base_time + timedelta(minutes=idx)
+            session.commit()
+
+            result = build_marketing_subscription_analytics(
+                session,
+                MarketingAnalyticsFilters(
+                    from_dt=base_time - timedelta(days=1),
+                    to_dt=base_time + timedelta(days=2),
+                ),
+            )
+
+        self.assertEqual(result["total_subscribed"], 1)
+        self.assertEqual(result["new_subscribes_per_period"], 1)
+        self.assertEqual(result["unsubscribes_per_period"], 1)
+        self.assertEqual(result["prompted_users_per_period"], 2)
+        self.assertEqual(result["subscribed_from_prompt_per_period"], 1)
+        self.assertEqual(result["prompt_to_subscribe_conversion_rate"], 0.5)
 
     def test_admin_users_are_excluded_from_transition_analytics(self) -> None:
         with self.Session() as session:

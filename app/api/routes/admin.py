@@ -19,7 +19,9 @@ from app.core.config import settings
 from app.services.admin_analytics import (
     AnalyticsFilters,
     FinanceAnalyticsFilters,
+    MarketingAnalyticsFilters,
     build_finance_analytics,
+    build_marketing_subscription_analytics,
     build_screen_transition_analytics,
     parse_trigger_type,
 )
@@ -3552,6 +3554,17 @@ def _safe_build_finance_analytics(session: Session, filters: FinanceAnalyticsFil
         ) from exc
 
 
+def _safe_build_marketing_subscription_analytics(session: Session, filters: MarketingAnalyticsFilters) -> dict:
+    try:
+        return build_marketing_subscription_analytics(session, filters)
+    except (OperationalError, SQLAlchemyTimeoutError) as exc:
+        logger.exception("admin_marketing_analytics_db_unavailable")
+        raise HTTPException(
+            status_code=503,
+            detail="База данных временно перегружена. Попробуйте повторить запрос позже.",
+        ) from exc
+
+
 def _transition_analytics_cache_key(filters: AnalyticsFilters) -> tuple:
     return (
         filters.from_dt.isoformat() if filters.from_dt else None,
@@ -3778,6 +3791,18 @@ def _build_finance_filters(
     return FinanceAnalyticsFilters(from_dt=from_dt, to_dt=to_dt, tariff=tariff)
 
 
+def _build_marketing_filters(
+    *,
+    from_dt: datetime | None,
+    to_dt: datetime | None,
+    period: str | None,
+) -> MarketingAnalyticsFilters:
+    from_dt, to_dt, _ = _resolve_period_bounds(period, from_dt, to_dt)
+    if from_dt and to_dt and from_dt > to_dt:
+        raise HTTPException(status_code=422, detail="Parameter 'from' must be less than or equal to 'to'")
+    return MarketingAnalyticsFilters(from_dt=from_dt, to_dt=to_dt)
+
+
 @router.get("/api/analytics/finance/summary")
 def admin_finance_summary(
     from_dt: datetime | None = Query(default=None, alias="from"),
@@ -3825,6 +3850,21 @@ def admin_finance_timeseries(
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "data": {"timeseries": items},
+    }
+
+
+@router.get("/api/analytics/subscriptions/summary")
+def admin_marketing_subscriptions_summary(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters = _build_marketing_filters(from_dt=from_dt, to_dt=to_dt, period=period)
+    result = _safe_build_marketing_subscription_analytics(session, filters)
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "data": {"summary": result},
     }
 
 
@@ -4369,6 +4409,7 @@ def admin_users(
     limit: int = 50,
     sort_by: str = Query(default="created_at"),
     sort_dir: str = Query(default="desc"),
+    marketing_consent_status: str | None = Query(default=None),
     session: Session = Depends(_get_db_session),
 ) -> dict:
     order_agg = (
@@ -4404,7 +4445,7 @@ def admin_users(
     sort_column = sortable_fields.get(sort_by, User.created_at)
     sort_expression = sort_column.asc() if str(sort_dir).lower() == "asc" else sort_column.desc()
 
-    rows = session.execute(
+    query = (
         select(
             User,
             UserProfile,
@@ -4414,9 +4455,29 @@ def admin_users(
         )
         .outerjoin(UserProfile, UserProfile.user_id == User.id)
         .outerjoin(order_agg, order_agg.c.user_id == User.id)
-        .order_by(sort_expression, User.id.desc())
-        .limit(limit)
-    ).all()
+    )
+
+    status_filter = (marketing_consent_status or "").strip().lower()
+    if status_filter == "subscribed":
+        query = query.where(
+            UserProfile.marketing_consent_accepted_at.is_not(None),
+            UserProfile.marketing_consent_revoked_at.is_(None),
+        )
+    elif status_filter == "unsubscribed":
+        query = query.where(UserProfile.marketing_consent_revoked_at.is_not(None))
+    elif status_filter == "never-asked":
+        query = query.where(
+            or_(
+                UserProfile.user_id.is_(None),
+                and_(
+                    UserProfile.marketing_consent_accepted_at.is_(None),
+                    UserProfile.marketing_consent_revoked_at.is_(None),
+                    UserProfile.marketing_consent_document_version.is_(None),
+                ),
+            )
+        )
+
+    rows = session.execute(query.order_by(sort_expression, User.id.desc()).limit(limit)).all()
     users = []
     for user, profile, confirmed_orders_count, confirmed_revenue_total, manual_paid_orders_count in rows:
         users.append(
@@ -4427,12 +4488,24 @@ def admin_users(
                 "name": profile.name if profile else None,
                 "gender": profile.gender if profile else None,
                 "birth_date": profile.birth_date if profile else None,
+                "marketing_consent_status": _resolve_marketing_consent_status(profile),
+                "marketing_consent_document_version": profile.marketing_consent_document_version if profile else None,
                 "confirmed_orders_count": int(confirmed_orders_count or 0),
                 "confirmed_revenue_total": float(confirmed_revenue_total or 0),
                 "manual_paid_orders_count": int(manual_paid_orders_count or 0),
             }
         )
     return {"users": users}
+
+
+def _resolve_marketing_consent_status(profile: UserProfile | None) -> str:
+    if not profile:
+        return "never-asked"
+    if profile.marketing_consent_revoked_at is not None:
+        return "unsubscribed"
+    if profile.marketing_consent_accepted_at is not None:
+        return "subscribed"
+    return "never-asked"
 
 
 def _resolve_thread_feedback_id(feedback: FeedbackMessage) -> int:

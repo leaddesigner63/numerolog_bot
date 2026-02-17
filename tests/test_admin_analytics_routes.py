@@ -22,6 +22,9 @@ from app.db.models import (
     ScreenTransitionTriggerType,
     Tariff,
     User,
+    UserProfile,
+    MarketingConsentEvent,
+    MarketingConsentEventType,
 )
 from app.main import create_app
 
@@ -291,6 +294,136 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(first["confirmed_revenue_total"], 3000.0)
         self.assertEqual(first["manual_paid_orders_count"], 1)
         self.assertEqual(second["id"], 131)
+
+
+    def test_users_payload_includes_marketing_consent_fields_and_filters(self) -> None:
+        now = datetime.now(timezone.utc)
+        with self.SessionLocal() as session:
+            user_sub = User(id=501, telegram_user_id=9501)
+            user_unsub = User(id=502, telegram_user_id=9502)
+            user_never = User(id=503, telegram_user_id=9503)
+            session.add_all([user_sub, user_unsub, user_never])
+            session.add_all([
+                UserProfile(
+                    user_id=501,
+                    name="sub",
+                    birth_date="2000-01-01",
+                    birth_place_city="M",
+                    birth_place_country="RU",
+                    marketing_consent_accepted_at=now,
+                    marketing_consent_document_version="v2",
+                ),
+                UserProfile(
+                    user_id=502,
+                    name="unsub",
+                    birth_date="2000-01-01",
+                    birth_place_city="M",
+                    birth_place_country="RU",
+                    marketing_consent_accepted_at=now,
+                    marketing_consent_revoked_at=now,
+                    marketing_consent_document_version="v1",
+                ),
+            ])
+            session.commit()
+
+        all_users = self.client.get("/admin/api/users")
+        self.assertEqual(all_users.status_code, 200)
+        payload = all_users.json()["users"]
+        row_sub = next(item for item in payload if item["id"] == 501)
+        row_unsub = next(item for item in payload if item["id"] == 502)
+        row_never = next(item for item in payload if item["id"] == 503)
+
+        self.assertEqual(row_sub["marketing_consent_status"], "subscribed")
+        self.assertEqual(row_sub["marketing_consent_document_version"], "v2")
+        self.assertEqual(row_unsub["marketing_consent_status"], "unsubscribed")
+        self.assertEqual(row_never["marketing_consent_status"], "never-asked")
+
+        subscribed = self.client.get("/admin/api/users", params={"marketing_consent_status": "subscribed"})
+        self.assertEqual(subscribed.status_code, 200)
+        self.assertEqual({item["id"] for item in subscribed.json()["users"]}, {501})
+
+        unsubscribed = self.client.get("/admin/api/users", params={"marketing_consent_status": "unsubscribed"})
+        self.assertEqual(unsubscribed.status_code, 200)
+        self.assertEqual({item["id"] for item in unsubscribed.json()["users"]}, {502})
+
+        never_asked = self.client.get("/admin/api/users", params={"marketing_consent_status": "never-asked"})
+        self.assertEqual(never_asked.status_code, 200)
+        self.assertEqual({item["id"] for item in never_asked.json()["users"]}, {503})
+
+    def test_marketing_subscriptions_analytics_summary(self) -> None:
+        base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        with self.SessionLocal() as session:
+            session.add_all([
+                User(id=601, telegram_user_id=9601),
+                User(id=602, telegram_user_id=9602),
+            ])
+            session.add_all([
+                UserProfile(
+                    user_id=601,
+                    name="x",
+                    birth_date="2000-01-01",
+                    birth_place_city="M",
+                    birth_place_country="RU",
+                    marketing_consent_accepted_at=base_time,
+                    marketing_consent_document_version="v3",
+                ),
+                UserProfile(
+                    user_id=602,
+                    name="y",
+                    birth_date="2000-01-01",
+                    birth_place_city="M",
+                    birth_place_country="RU",
+                    marketing_consent_accepted_at=base_time,
+                    marketing_consent_revoked_at=base_time + timedelta(hours=1),
+                    marketing_consent_document_version="v3",
+                ),
+            ])
+            session.add_all([
+                MarketingConsentEvent(
+                    user_id=601,
+                    event_type=MarketingConsentEventType.ACCEPTED,
+                    event_at=base_time,
+                    source="marketing_prompt",
+                ),
+                MarketingConsentEvent(
+                    user_id=602,
+                    event_type=MarketingConsentEventType.REVOKED,
+                    event_at=base_time + timedelta(hours=1),
+                    source="marketing_prompt",
+                ),
+            ])
+            session.add_all([
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=9601,
+                    from_screen_id="S3",
+                    to_screen_id="S4",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                ),
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=9602,
+                    from_screen_id="S3",
+                    to_screen_id="S4",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                ),
+            ])
+            session.flush()
+            events = session.query(ScreenTransitionEvent).order_by(ScreenTransitionEvent.id.asc()).all()
+            for idx, event in enumerate(events):
+                event.created_at = base_time + timedelta(minutes=idx)
+            session.commit()
+
+        response = self.client.get(
+            "/admin/api/analytics/subscriptions/summary",
+            params={"from": "2025-12-31T00:00:00Z", "to": "2026-01-02T00:00:00Z"},
+        )
+        self.assertEqual(response.status_code, 200)
+        summary = response.json()["data"]["summary"]
+        self.assertEqual(summary["total_subscribed"], 1)
+        self.assertEqual(summary["new_subscribes_per_period"], 1)
+        self.assertEqual(summary["unsubscribes_per_period"], 1)
+        self.assertEqual(summary["prompted_users_per_period"], 2)
+        self.assertEqual(summary["subscribed_from_prompt_per_period"], 1)
+        self.assertEqual(summary["prompt_to_subscribe_conversion_rate"], 0.5)
 
     def test_overview_financial_kpi_split_provider_confirmed_and_manual(self) -> None:
         with self.SessionLocal() as session:
