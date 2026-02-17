@@ -19,7 +19,7 @@
    - `GET /admin/api/analytics/finance/summary?period=7d`
    - `GET /admin/api/analytics/finance/by-tariff?period=7d`
    - `GET /admin/api/analytics/finance/timeseries?period=7d`
-8. Проверьте финальные CTA-блоки с кнопкой **«Открыть в Telegram»** на страницах `/prices/`, `/articles/`, `/faq/`, `/contacts/`, `/404.html`, `/legal/privacy/`, `/legal/offer/` (кнопка должна вести на актуальный `[BOT_LINK]`).
+8. Проверьте финальные CTA-блоки с кнопкой **«Открыть в Telegram»** на страницах `/prices/`, `/articles/`, `/faq/`, `/contacts/`, `/404.html`, `/legal/privacy/`, `/legal/offer/` (кнопка должна вести на актуальный `https://t.me/AlreadUbot`).
 9. Проверьте, что после деплоя открываются новые SEO-статьи: `/articles/numerology-date-of-birth/`, `/articles/destiny-number-and-purpose/`, `/articles/money-and-career-by-date-of-birth/`, `/articles/ai-natal-chart-and-personality-analysis/`.
 
 ## 1. Подготовьте сервер

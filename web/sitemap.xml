@@ -1,39 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://[DOMAIN]/</loc>
+    <loc>https://aireadu.ru/</loc>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://[DOMAIN]/prices/</loc>
+    <loc>https://aireadu.ru/prices/</loc>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://[DOMAIN]/faq/</loc>
+    <loc>https://aireadu.ru/faq/</loc>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://[DOMAIN]/articles/</loc>
+    <loc>https://aireadu.ru/articles/</loc>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://[DOMAIN]/articles/numerology-date-of-birth/</loc>
+    <loc>https://aireadu.ru/articles/numerology-date-of-birth/</loc>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://[DOMAIN]/articles/destiny-number-and-purpose/</loc>
+    <loc>https://aireadu.ru/articles/destiny-number-and-purpose/</loc>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://[DOMAIN]/articles/money-and-career-by-date-of-birth/</loc>
+    <loc>https://aireadu.ru/articles/money-and-career-by-date-of-birth/</loc>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://[DOMAIN]/articles/ai-natal-chart-and-personality-analysis/</loc>
+    <loc>https://aireadu.ru/articles/ai-natal-chart-and-personality-analysis/</loc>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://[DOMAIN]/contacts/</loc>
+    <loc>https://aireadu.ru/contacts/</loc>
     <priority>0.5</priority>
   </url>
 </urlset>
