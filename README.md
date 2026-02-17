@@ -56,6 +56,7 @@ docs/
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   landing/
     release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)
+    seo-keyword-map.md  # карта SEO-ключей: кластер -> целевой URL -> вторичные анкоры/LSI + антиканнибализация интента
   payments/
     prodamus_contract.md  # контракт интеграции Prodamus (сверка полей ссылки/webhook/status)
 web/                  # многостраничный статический сайт (SEO + переход в Telegram-бот)
@@ -195,6 +196,7 @@ python -m http.server 8080 --directory web
   1. Пройти контент- и SEO-ревизию, проверить `robots.txt`, `sitemap.xml`, JSON-LD, A11y и CTA smoke-check по чеклисту.
   2. Проверить, что домен `aireadu.ru` (в canonical/OG/robots/sitemap) и ссылка на бота `https://t.me/AlreadUbot` используются на всех ключевых страницах, а также заменить все `будет добавлено` на финальные значения перед прод-выкладкой.
   3. Запустить автодеплой и выполнить пост-проверки из `AUTODEPLOY_INSTRUCTIONS.md` (включая smoke-check лендинга и ручной обход страниц).
+  4. Перед публикацией новых статей обновить `docs/landing/seo-keyword-map.md` и подтвердить чек «новый URL не дублирует существующий кластер».
 
 5. Выполните миграции:
 
