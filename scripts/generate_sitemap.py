@@ -27,10 +27,6 @@ URL_META: dict[str, UrlMeta] = {
     "/faq/": UrlMeta(changefreq="weekly", priority="0.8"),
     "/articles/": UrlMeta(changefreq="daily", priority="0.9"),
     "/contacts/": UrlMeta(changefreq="monthly", priority="0.6"),
-    "/legal/privacy/": UrlMeta(changefreq="yearly", priority="0.3"),
-    "/legal/consent/": UrlMeta(changefreq="yearly", priority="0.3"),
-    "/legal/offer/": UrlMeta(changefreq="yearly", priority="0.3"),
-    "/legal/newsletter-consent/": UrlMeta(changefreq="yearly", priority="0.3"),
 }
 
 ARTICLE_META = UrlMeta(changefreq="monthly", priority="0.7")
@@ -68,6 +64,8 @@ def collect_urls() -> list[tuple[str, str, UrlMeta]]:
     for html_path in sorted(WEB_DIR.rglob("*.html")):
         url_path = path_to_url(html_path)
         if not url_path:
+            continue
+        if url_path.startswith("/legal/"):
             continue
         meta = detect_meta(url_path)
         entries.append((url_path, file_lastmod(html_path), meta))
