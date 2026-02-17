@@ -1889,6 +1889,16 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
                 if user.free_limit:
                     user.free_limit.last_t0_at = now_app_timezone()
+
+        if not state_snapshot.data.get("personal_data_consent_accepted"):
+            await _send_notice(callback, "Нужно согласие на обработку данных.")
+            await _show_screen_for_callback(
+                callback,
+                screen_id="S4_CONSENT",
+            )
+            await _safe_callback_answer(callback)
+            return
+
         screen_manager.update_state(callback.from_user.id, profile_flow=None)
         next_screen = "S5" if tariff in {Tariff.T2.value, Tariff.T3.value} else "S6"
         if next_screen == "S6":
@@ -1938,6 +1948,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         existing_questionnaire = state_snapshot.data.get("questionnaire") or {}
         with get_session() as session:
             _refresh_questionnaire_state(session, callback.from_user.id)
+            _refresh_profile_state(session, callback.from_user.id)
         state_snapshot = screen_manager.update_state(callback.from_user.id)
         refreshed_questionnaire = state_snapshot.data.get("questionnaire") or {}
         if (
@@ -1951,6 +1962,14 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             )
         tariff = state_snapshot.data.get("selected_tariff")
         if tariff in {Tariff.T2.value, Tariff.T3.value}:
+            if not state_snapshot.data.get("personal_data_consent_accepted"):
+                await _send_notice(callback, "Нужно согласие на обработку данных.")
+                await _show_screen_for_callback(
+                    callback,
+                    screen_id="S4_CONSENT",
+                )
+                await _safe_callback_answer(callback)
+                return
             order_id = _safe_int(state_snapshot.data.get("order_id"))
             if not order_id:
                 await _send_notice(

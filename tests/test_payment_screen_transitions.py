@@ -95,7 +95,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         return order_id
 
 
-    def _create_profile(self) -> None:
+    def _create_profile(self, consent_accepted: bool = False) -> None:
         with self.SessionLocal() as session:
             profile = UserProfile(
                 user_id=1,
@@ -105,6 +105,10 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
                 birth_place_city="Москва",
                 birth_place_region="Московская область",
                 birth_place_country="Россия",
+                personal_data_consent_accepted_at=(
+                    screens.now_app_timezone() if consent_accepted else None
+                ),
+                personal_data_consent_source=("profile_flow" if consent_accepted else None),
             )
             session.add(profile)
             session.commit()
@@ -370,6 +374,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_questionnaire_done_resets_stale_failed_status_before_wait_screen(self) -> None:
         order_id = self._create_order(OrderStatus.PAID, tariff=Tariff.T2)
+        self._create_profile(consent_accepted=True)
         with self.SessionLocal() as session:
             failed_job = ReportJob(
                 user_id=1,

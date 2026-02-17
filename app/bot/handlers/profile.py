@@ -379,6 +379,8 @@ async def accept_profile_consent(callback: CallbackQuery) -> None:
     if not callback.from_user or not callback.message:
         await callback.answer()
         return
+
+    consent_saved = False
     with get_session() as session:
         user = _get_or_create_user(
             session,
@@ -395,12 +397,34 @@ async def accept_profile_consent(callback: CallbackQuery) -> None:
                 callback.from_user.id,
                 **_profile_payload(profile),
             )
+            consent_saved = True
+
+    if not consent_saved:
+        await screen_manager.send_ephemeral_message(
+            callback.message,
+            "Сначала заполните «Мои данные».",
+            user_id=callback.from_user.id,
+        )
+        await _show_profile_screen(callback.message, callback.from_user.id)
+        await callback.answer()
+        return
+
+    state_snapshot = screen_manager.update_state(callback.from_user.id)
+    tariff = state_snapshot.data.get("selected_tariff")
+    next_screen = "S5" if tariff in {"T2", "T3"} else "S6"
+    screen_manager.update_state(callback.from_user.id, profile_flow=None)
+
     await screen_manager.send_ephemeral_message(
         callback.message,
         "Согласие подтверждено.",
         user_id=callback.from_user.id,
     )
-    await _show_profile_screen(callback.message, callback.from_user.id)
+    await screen_manager.show_screen(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+        screen_id=next_screen,
+    )
     await callback.answer()
 
 
