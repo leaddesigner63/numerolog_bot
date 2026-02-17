@@ -14,7 +14,23 @@
   </url>
   <url>
     <loc>https://[DOMAIN]/articles/</loc>
-    <priority>0.6</priority>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://[DOMAIN]/articles/numerology-date-of-birth/</loc>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://[DOMAIN]/articles/destiny-number-and-purpose/</loc>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://[DOMAIN]/articles/money-and-career-by-date-of-birth/</loc>
+    <priority>0.7</priority>
+  </url>
+  <url>
+    <loc>https://[DOMAIN]/articles/ai-natal-chart-and-personality-analysis/</loc>
+    <priority>0.7</priority>
   </url>
   <url>
     <loc>https://[DOMAIN]/contacts/</loc>
