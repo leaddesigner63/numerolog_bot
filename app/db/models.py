@@ -151,6 +151,17 @@ class UserProfile(Base):
         nullable=True,
     )
     personal_data_consent_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    marketing_consent_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    marketing_consent_document_version: Mapped[str | None] = mapped_column(Text, nullable=True)
+    marketing_consent_source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    marketing_consent_revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    marketing_consent_revoked_source: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
