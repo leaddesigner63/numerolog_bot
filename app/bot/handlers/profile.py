@@ -374,6 +374,36 @@ async def start_profile_flow(callback: CallbackQuery, state: FSMContext) -> None
     await callback.answer()
 
 
+@router.callback_query(F.data == "profile:consent:accept")
+async def accept_profile_consent(callback: CallbackQuery) -> None:
+    if not callback.from_user or not callback.message:
+        await callback.answer()
+        return
+    with get_session() as session:
+        user = _get_or_create_user(
+            session,
+            callback.from_user.id,
+            callback.from_user.username,
+        )
+        profile = user.profile
+        if profile:
+            consent_at = now_app_timezone()
+            profile.personal_data_consent_accepted_at = consent_at
+            profile.personal_data_consent_source = "profile_flow"
+            session.flush()
+            screen_manager.update_state(
+                callback.from_user.id,
+                **_profile_payload(profile),
+            )
+    await screen_manager.send_ephemeral_message(
+        callback.message,
+        "Согласие подтверждено.",
+        user_id=callback.from_user.id,
+    )
+    await _show_profile_screen(callback.message, callback.from_user.id)
+    await callback.answer()
+
+
 @router.callback_query(F.data == "profile:edit:name")
 async def start_profile_edit_name(callback: CallbackQuery, state: FSMContext) -> None:
     await _start_profile_edit(
@@ -705,7 +735,12 @@ async def handle_profile_birth_place(message: Message, state: FSMContext) -> Non
         )
     await state.clear()
     await screen_manager.send_ephemeral_message(message, "Данные сохранены.")
-    await _show_profile_screen(message, message.from_user.id)
+    await screen_manager.show_screen(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        screen_id="S4_CONSENT",
+    )
     await screen_manager.delete_user_message(
         bot=message.bot,
         chat_id=message.chat.id,

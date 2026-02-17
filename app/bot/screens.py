@@ -792,6 +792,33 @@ def screen_s4_edit(state: dict[str, Any]) -> ScreenContent:
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
+def screen_s4_consent(_: dict[str, Any]) -> ScreenContent:
+    consent_url = settings.offer_url or "https://example.com/terms"
+    text = _with_screen_prefix(
+        "S4",
+        (
+            "Продолжая, вы соглашаетесь с [условиями]"
+            f"({consent_url})."
+        ),
+    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Подтвердить", "✅"),
+                callback_data="profile:consent:accept",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Вернуться к редактированию", "↩️"),
+                callback_data="screen:S4_EDIT",
+            )
+        ],
+    ]
+    keyboard = _build_keyboard(rows)
+    return ScreenContent(messages=[text], keyboard=keyboard)
+
+
 def screen_s4_delete_confirm(_: dict[str, Any]) -> ScreenContent:
     text = _with_screen_prefix(
         "S4",
@@ -1330,6 +1357,7 @@ SCREEN_REGISTRY = {
     "S3": screen_s3,
     "S4": screen_s4,
     "S4_EDIT": screen_s4_edit,
+    "S4_CONSENT": screen_s4_consent,
     "S4_DELETE": screen_s4_delete_confirm,
     "S5": screen_s5,
     "S6": screen_s6,
