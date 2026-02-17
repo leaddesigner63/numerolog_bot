@@ -80,7 +80,7 @@ web/                  # многостраничный статический с
   legal/offer/index.html   # offer (noindex, follow) + юридическая информация и реквизиты + финальный CTA-блок
   404.html            # страница ошибки + финальный CTA-блок
   robots.txt          # правила индексации
-  sitemap.xml         # карта сайта (включая страницу согласия на рассылку)
+  sitemap.xml         # карта сайта только для индексируемых публичных страниц (без /legal/*)
   assets/css/styles.css # единый CSS для всех страниц (в т.ч. компонент final-cta)
   assets/js/script.js   # клиентские интеракции сайта
   assets/svg/sprite.svg # SVG-спрайт иконок
@@ -844,3 +844,11 @@ journalctl -u <service> -n 200 --no-pager
 
 - `app/core/newsletter_unsubscribe.py` — подпись и проверка токенов отписки.
 - `docs/deploy/autodeploy_user_quickstart.md` — краткая пошаговая инструкция по автодеплою для пользователя.
+## SEO-политика для legal-страниц
+
+- Страницы `web/legal/*` **не индексируются**.
+- Для `web/legal/*/index.html` используется `meta name="robots" content="noindex,follow"`.
+- В `web/robots.txt` зафиксирован запрет обхода `Disallow: /legal/`.
+- В `web/sitemap.xml` legal-URL не публикуются (генератор `scripts/generate_sitemap.py` исключает префикс `/legal/`).
+
+

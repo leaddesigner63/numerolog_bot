@@ -79,30 +79,6 @@
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://aireadu.ru/legal/consent/</loc>
-    <lastmod>2026-02-17</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
-  <url>
-    <loc>https://aireadu.ru/legal/newsletter-consent/</loc>
-    <lastmod>2026-02-17</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
-  <url>
-    <loc>https://aireadu.ru/legal/offer/</loc>
-    <lastmod>2026-02-17</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
-  <url>
-    <loc>https://aireadu.ru/legal/privacy/</loc>
-    <lastmod>2026-02-17</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
-  </url>
-  <url>
     <loc>https://aireadu.ru/prices/</loc>
     <lastmod>2026-02-17</lastmod>
     <changefreq>weekly</changefreq>
