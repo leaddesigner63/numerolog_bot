@@ -51,6 +51,7 @@ FEEDBACK_SENT_NOTICE = (
     "Сообщение отправлено администраторам. "
     "Они обязательно ответят в ближайшее время!"
 )
+MARKETING_CONSENT_COOLDOWN = timedelta(hours=24)
 
 
 def _tariff_prices() -> dict[Tariff, int]:
@@ -59,6 +60,51 @@ def _tariff_prices() -> dict[Tariff, int]:
         Tariff.T2: settings.tariff_prices_rub["T2"],
         Tariff.T3: settings.tariff_prices_rub["T3"],
     }
+
+
+def _parse_state_datetime(raw_value: Any) -> datetime | None:
+    if not isinstance(raw_value, str) or not raw_value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw_value)
+    except ValueError:
+        return None
+    return as_app_timezone(parsed)
+
+
+def _should_show_marketing_consent_prompt(telegram_user_id: int) -> bool:
+    state_snapshot = screen_manager.update_state(telegram_user_id)
+    data = state_snapshot.data
+
+    if data.get("marketing_consent_choice") == "accept":
+        return False
+
+    last_prompted_at = _parse_state_datetime(data.get("marketing_consent_last_prompted_at"))
+    if not last_prompted_at:
+        return True
+    return now_app_timezone() - last_prompted_at >= MARKETING_CONSENT_COOLDOWN
+
+
+def _mark_marketing_prompt_shown(telegram_user_id: int, *, return_screen_id: str) -> None:
+    now = now_app_timezone()
+    screen_manager.update_state(
+        telegram_user_id,
+        marketing_consent_last_prompted_at=now.isoformat(),
+        marketing_consent_return_screen=return_screen_id,
+    )
+
+
+async def _show_marketing_consent_or_target_screen(
+    callback: CallbackQuery,
+    *,
+    screen_id: str,
+) -> bool:
+    if screen_id in {"S3", "S5", "S6", "S_MARKETING_CONSENT"}:
+        return await _show_screen_for_callback(callback, screen_id=screen_id)
+    if not _should_show_marketing_consent_prompt(callback.from_user.id):
+        return await _show_screen_for_callback(callback, screen_id=screen_id)
+    _mark_marketing_prompt_shown(callback.from_user.id, return_screen_id=screen_id)
+    return await _show_screen_for_callback(callback, screen_id="S_MARKETING_CONSENT")
 
 
 def _reset_tariff_runtime_state(telegram_user_id: int) -> None:
@@ -525,6 +571,22 @@ async def _show_screen_for_callback(
         trigger_type="callback",
         trigger_value=callback.data,
         metadata_json=metadata_json,
+    )
+
+
+async def show_post_report_screen(bot: Bot, chat_id: int, user_id: int) -> bool:
+    target_screen_id = "S7"
+    if _should_show_marketing_consent_prompt(user_id):
+        _mark_marketing_prompt_shown(user_id, return_screen_id=target_screen_id)
+        target_screen_id = "S_MARKETING_CONSENT"
+    return await screen_manager.show_screen(
+        bot=bot,
+        chat_id=chat_id,
+        user_id=user_id,
+        screen_id=target_screen_id,
+        trigger_type="job",
+        trigger_value="report_job:completed",
+        metadata_json={"reason": "report_completed_post_prompt"},
     )
 
 
@@ -1573,7 +1635,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         callback.from_user.id,
                         tariff_value=selected_tariff,
                     )
-        await _show_screen_for_callback(
+        await _show_marketing_consent_or_target_screen(
             callback,
             screen_id=screen_id,
         )

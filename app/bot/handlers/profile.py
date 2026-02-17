@@ -515,6 +515,90 @@ async def revoke_marketing_consent(callback: CallbackQuery) -> None:
     await callback.answer()
 
 
+
+
+@router.callback_query(F.data == "marketing:consent:accept")
+async def accept_marketing_consent_prompt(callback: CallbackQuery) -> None:
+    if not callback.from_user or not callback.message:
+        await callback.answer()
+        return
+
+    now = now_app_timezone()
+    with get_session() as session:
+        user = _get_or_create_user(
+            session,
+            callback.from_user.id,
+            callback.from_user.username,
+        )
+        profile = user.profile
+        if profile:
+            profile.marketing_consent_accepted_at = now
+            profile.marketing_consent_revoked_at = None
+            profile.marketing_consent_document_version = "v1"
+            profile.marketing_consent_source = "marketing_prompt"
+            profile.marketing_consent_revoked_source = None
+            _append_marketing_consent_event(
+                session=session,
+                user_id=user.id,
+                event_type=MarketingConsentEventType.ACCEPTED,
+                event_at=now,
+                document_version=profile.marketing_consent_document_version,
+                source=profile.marketing_consent_source,
+                metadata_json={"handler": "marketing:consent:accept"},
+            )
+
+    state_snapshot = screen_manager.update_state(callback.from_user.id)
+    return_screen_id = state_snapshot.data.get("marketing_consent_return_screen") or "S11"
+    screen_manager.update_state(
+        callback.from_user.id,
+        marketing_consent_choice="accept",
+        marketing_consent_last_prompted_at=now.isoformat(),
+        marketing_consent_last_action_at=now.isoformat(),
+        marketing_consent_return_screen=None,
+    )
+    await screen_manager.send_ephemeral_message(
+        callback.message,
+        "Отлично! Подписку на полезную рассылку включили.",
+        user_id=callback.from_user.id,
+    )
+    await screen_manager.show_screen(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+        screen_id=return_screen_id,
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "marketing:consent:skip")
+async def skip_marketing_consent_prompt(callback: CallbackQuery) -> None:
+    if not callback.from_user or not callback.message:
+        await callback.answer()
+        return
+
+    now = now_app_timezone()
+    state_snapshot = screen_manager.update_state(callback.from_user.id)
+    return_screen_id = state_snapshot.data.get("marketing_consent_return_screen") or "S11"
+    screen_manager.update_state(
+        callback.from_user.id,
+        marketing_consent_choice="skip",
+        marketing_consent_last_prompted_at=now.isoformat(),
+        marketing_consent_last_action_at=now.isoformat(),
+        marketing_consent_return_screen=None,
+    )
+    await screen_manager.send_ephemeral_message(
+        callback.message,
+        "Хорошо, вернёмся к этому позже.",
+        user_id=callback.from_user.id,
+    )
+    await screen_manager.show_screen(
+        bot=callback.bot,
+        chat_id=callback.message.chat.id,
+        user_id=callback.from_user.id,
+        screen_id=return_screen_id,
+    )
+    await callback.answer()
+
 @router.callback_query(F.data == "profile:edit:name")
 async def start_profile_edit_name(callback: CallbackQuery, state: FSMContext) -> None:
     await _start_profile_edit(
