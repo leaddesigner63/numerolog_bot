@@ -4,9 +4,36 @@ document.addEventListener('DOMContentLoaded', () => {
   const nav = document.querySelector('.nav-links');
   
   if(toggle && nav) {
+    const setMenuState = (isOpen) => {
+      nav.classList.toggle('active', isOpen);
+      toggle.setAttribute('aria-expanded', String(isOpen));
+    };
+
+    setMenuState(false);
+
     toggle.addEventListener('click', () => {
-      nav.classList.toggle('active');
-      toggle.setAttribute('aria-expanded', nav.classList.contains('active'));
+      setMenuState(!nav.classList.contains('active'));
+    });
+
+    document.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape' && nav.classList.contains('active')) {
+        setMenuState(false);
+        toggle.focus();
+      }
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!nav.classList.contains('active')) {
+        return;
+      }
+
+      if (!nav.contains(event.target) && !toggle.contains(event.target)) {
+        setMenuState(false);
+      }
+    });
+
+    nav.querySelectorAll('a').forEach((link) => {
+      link.addEventListener('click', () => setMenuState(false));
     });
   }
 
