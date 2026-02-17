@@ -11,11 +11,14 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.db.models import (
+    MarketingConsentEvent,
+    MarketingConsentEventType,
     Order,
     OrderStatus,
     PaymentConfirmationSource,
     ScreenTransitionEvent,
     ScreenTransitionTriggerType,
+    UserProfile,
 )
 
 
@@ -74,6 +77,12 @@ class FinanceAnalyticsFilters:
     tariff: str | None = None
 
 
+@dataclass(frozen=True)
+class MarketingAnalyticsFilters:
+    from_dt: datetime | None = None
+    to_dt: datetime | None = None
+
+
 def build_screen_transition_analytics(session: Session, filters: AnalyticsFilters) -> dict:
     events = _load_events(session, filters)
     if not events:
@@ -118,6 +127,73 @@ def build_finance_analytics(session: Session, filters: FinanceAnalyticsFilters) 
         "by_tariff": _build_revenue_by_tariff(confirmed_orders),
         "timeseries": _build_finance_timeseries(entries, confirmed_orders),
     }
+
+
+def build_marketing_subscription_analytics(session: Session, filters: MarketingAnalyticsFilters) -> dict:
+    total_subscribed = _count_total_subscribed(session)
+    period_new_subscribes = _count_consent_events(session, filters, MarketingConsentEventType.ACCEPTED)
+    period_unsubscribes = _count_consent_events(session, filters, MarketingConsentEventType.REVOKED)
+    prompted_users = _count_prompted_users(session, filters)
+    prompt_subscribes = _count_prompt_subscribes(session, filters)
+    conversion_rate = (prompt_subscribes / prompted_users) if prompted_users else 0.0
+    return {
+        "total_subscribed": total_subscribed,
+        "new_subscribes_per_period": period_new_subscribes,
+        "unsubscribes_per_period": period_unsubscribes,
+        "prompt_to_subscribe_conversion_rate": round(conversion_rate, 6),
+        "prompted_users_per_period": prompted_users,
+        "subscribed_from_prompt_per_period": prompt_subscribes,
+    }
+
+
+def _count_total_subscribed(session: Session) -> int:
+    value = session.execute(
+        select(UserProfile)
+        .where(
+            UserProfile.marketing_consent_accepted_at.is_not(None),
+            UserProfile.marketing_consent_revoked_at.is_(None),
+        )
+    ).scalars().all()
+    return len(value)
+
+
+def _count_consent_events(
+    session: Session,
+    filters: MarketingAnalyticsFilters,
+    event_type: MarketingConsentEventType,
+) -> int:
+    query: Select[tuple[MarketingConsentEvent]] = select(MarketingConsentEvent).where(
+        MarketingConsentEvent.event_type == event_type,
+    )
+    if filters.from_dt:
+        query = query.where(MarketingConsentEvent.event_at >= filters.from_dt)
+    if filters.to_dt:
+        query = query.where(MarketingConsentEvent.event_at <= filters.to_dt)
+    return len(session.execute(query).scalars().all())
+
+
+def _count_prompted_users(session: Session, filters: MarketingAnalyticsFilters) -> int:
+    query: Select[tuple[ScreenTransitionEvent]] = select(ScreenTransitionEvent).where(
+        (ScreenTransitionEvent.from_screen_id == "S4") | (ScreenTransitionEvent.to_screen_id == "S4")
+    )
+    if filters.from_dt:
+        query = query.where(ScreenTransitionEvent.created_at >= filters.from_dt)
+    if filters.to_dt:
+        query = query.where(ScreenTransitionEvent.created_at <= filters.to_dt)
+    rows = session.execute(query).scalars().all()
+    return len({int(row.telegram_user_id or 0) for row in rows if row.telegram_user_id})
+
+
+def _count_prompt_subscribes(session: Session, filters: MarketingAnalyticsFilters) -> int:
+    query: Select[tuple[MarketingConsentEvent]] = select(MarketingConsentEvent).where(
+        MarketingConsentEvent.event_type == MarketingConsentEventType.ACCEPTED,
+        MarketingConsentEvent.source == "marketing_prompt",
+    )
+    if filters.from_dt:
+        query = query.where(MarketingConsentEvent.event_at >= filters.from_dt)
+    if filters.to_dt:
+        query = query.where(MarketingConsentEvent.event_at <= filters.to_dt)
+    return len(session.execute(query).scalars().all())
 
 
 def _load_finance_entries(session: Session, filters: FinanceAnalyticsFilters) -> list[EventPoint]:
