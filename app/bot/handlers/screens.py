@@ -826,7 +826,19 @@ def _create_report_job(
         tariff = Tariff(tariff_value)
     except ValueError:
         return None
-    if tariff not in PAID_TARIFFS:
+    if tariff in PAID_TARIFFS:
+        if order_id is None:
+            return None
+        order = session.get(Order, order_id)
+        if not order:
+            return None
+        if order.user_id != user.id:
+            return None
+        if order.tariff != tariff:
+            return None
+        if order.status != OrderStatus.PAID:
+            return None
+    else:
         order_id = None
     query = select(ReportJob).where(
         ReportJob.user_id == user.id,
