@@ -36,4 +36,8 @@
     <loc>https://aireadu.ru/contacts/</loc>
     <priority>0.5</priority>
   </url>
+  <url>
+    <loc>https://aireadu.ru/legal/newsletter-consent/</loc>
+    <priority>0.3</priority>
+  </url>
 </urlset>

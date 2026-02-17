@@ -66,10 +66,11 @@ web/                  # многостраничный статический с
   contacts/index.html # контакты без формы (Email: AlreadU@yandex.com, Telegram: @AlreadU и @AlreadUbot) + финальный CTA-блок
   legal/privacy/index.html # privacy policy для РФ (152-ФЗ, noindex/follow, с заполненными реквизитами оператора) + финальный CTA-блок
   legal/consent/index.html # согласие субъекта персональных данных на обработку ПДн (152-ФЗ, noindex/follow)
+  legal/newsletter-consent/index.html # согласие на информационную и рекламную рассылку (38-ФЗ + 152-ФЗ, noindex/follow)
   legal/offer/index.html   # offer (noindex, follow) + юридическая информация и реквизиты + финальный CTA-блок
   404.html            # страница ошибки + финальный CTA-блок
   robots.txt          # правила индексации
-  sitemap.xml         # карта сайта (без /legal/*)
+  sitemap.xml         # карта сайта (включая страницу согласия на рассылку)
   assets/css/styles.css # единый CSS для всех страниц (в т.ч. компонент final-cta)
   assets/js/script.js   # клиентские интеракции сайта
   assets/svg/sprite.svg # SVG-спрайт иконок
