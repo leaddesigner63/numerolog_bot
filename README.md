@@ -808,3 +808,26 @@ journalctl -u <service> -n 200 --no-pager
 - Экран `S_MARKETING_CONSENT` показывается в неблокирующей точке (после выдачи отчёта и при возврате в главное меню), не вмешиваясь в оплату и генерацию отчёта.
 - Экран содержит ссылку на документ согласия: `web/legal/newsletter-consent/index.html`.
 - Повторный показ ограничен cooldown в `screen_manager` state-data (метка последнего показа + выбранное действие пользователя).
+
+## Newsletter unsubscribe (публичная отписка)
+
+Добавлен публичный endpoint `GET /newsletter/unsubscribe?token=...`.
+
+Токен подписывается HMAC-SHA256 и содержит payload:
+- `user_id`
+- `issued_at`
+
+Новые переменные окружения:
+- `NEWSLETTER_UNSUBSCRIBE_BASE_URL` — базовый URL для формирования ссылки отписки.
+- `NEWSLETTER_UNSUBSCRIBE_SECRET` — секрет для подписи/проверки токена отписки.
+- `NEWSLETTER_CONSENT_DOCUMENT_VERSION` — версия документа согласия (по умолчанию `v1`).
+
+При валидной ссылке endpoint:
+- проставляет отзыв согласия на маркетинг;
+- очищает время принятия согласия;
+- пишет событие `marketing_consent_events` с типом `revoked`.
+
+### Актуальная структура (дополнения)
+
+- `app/core/newsletter_unsubscribe.py` — подпись и проверка токенов отписки.
+- `docs/deploy/autodeploy_user_quickstart.md` — краткая пошаговая инструкция по автодеплою для пользователя.
