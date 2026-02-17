@@ -599,9 +599,14 @@ def _get_or_create_user(
 
 def _profile_payload(
     profile: UserProfile | None,
-) -> dict[str, dict[str, str | None] | None]:
+) -> dict[str, Any]:
     if not profile:
-        return {"profile": None}
+        return {
+            "profile": None,
+            "personal_data_consent_accepted": False,
+            "personal_data_consent_accepted_at": None,
+            "personal_data_consent_source": None,
+        }
     return {
         "profile": {
             "name": profile.name,
@@ -613,7 +618,21 @@ def _profile_payload(
                 "region": profile.birth_place_region,
                 "country": profile.birth_place_country,
             },
-        }
+            "personal_data_consent_accepted": bool(profile.personal_data_consent_accepted_at),
+            "personal_data_consent_accepted_at": (
+                profile.personal_data_consent_accepted_at.isoformat()
+                if profile.personal_data_consent_accepted_at
+                else None
+            ),
+            "personal_data_consent_source": profile.personal_data_consent_source,
+        },
+        "personal_data_consent_accepted": bool(profile.personal_data_consent_accepted_at),
+        "personal_data_consent_accepted_at": (
+            profile.personal_data_consent_accepted_at.isoformat()
+            if profile.personal_data_consent_accepted_at
+            else None
+        ),
+        "personal_data_consent_source": profile.personal_data_consent_source,
     }
 
 
