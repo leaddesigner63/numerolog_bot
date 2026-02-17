@@ -578,7 +578,10 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     requires_payment = selected_tariff_raw in {"T1", "T2", "T3"} and order_status != "paid"
     is_t0 = selected_tariff_raw == "T0"
 
-    payment_success_banner = "<b>🟧 ОПЛАТА ПРОШЛА УСПЕШНО. 🟧</b>\n\n"
+    show_payment_success_banner = order_status == "paid" and bool(profile_flow)
+    payment_success_banner = (
+        "<b>🟧 ОПЛАТА ПРОШЛА УСПЕШНО. 🟧</b>\n\n" if show_payment_success_banner else ""
+    )
 
     if has_profile:
         text = _with_screen_prefix(
