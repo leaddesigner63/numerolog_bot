@@ -63,9 +63,9 @@ web/                  # многостраничный статический с
   articles/money-and-career-by-date-of-birth/index.html # статья: деньги, профессия и карьера по дате рождения
   articles/ai-natal-chart-and-personality-analysis/index.html # статья: ИИ натальная карта и анализ личности
   faq/index.html      # FAQ + JSON-LD FAQPage + финальный CTA-блок
-  contacts/index.html # контакты без формы + финальный CTA-блок
-  legal/privacy/index.html # privacy (noindex, follow) + финальный CTA-блок
-  legal/offer/index.html   # offer (noindex, follow) + финальный CTA-блок
+  contacts/index.html # контакты без формы (Email: AlreadU@yandex.com, Telegram: @AlreadU и @AlreadUbot) + финальный CTA-блок
+  legal/privacy/index.html # privacy (noindex, follow) + блок с реквизитами исполнителя + финальный CTA-блок
+  legal/offer/index.html   # offer (noindex, follow) + юридическая информация и реквизиты + финальный CTA-блок
   404.html            # страница ошибки + финальный CTA-блок
   robots.txt          # правила индексации
   sitemap.xml         # карта сайта (без /legal/*)
@@ -182,7 +182,7 @@ python -m http.server 8080 --directory web
 - Подробный чеклист релиза лендинга v2: [`docs/landing/release-v2-checklist.md`](docs/landing/release-v2-checklist.md).
 - Краткий порядок выкладки:
   1. Пройти контент- и SEO-ревизию, проверить `robots.txt`, `sitemap.xml`, JSON-LD, A11y и CTA smoke-check по чеклисту.
-  2. Проверить, что домен `aireadu.ru` и ссылка на бота `https://t.me/AIreadUbot` используются на всех ключевых страницах, а также заменить все `будет добавлено` на финальные значения перед прод-выкладкой.
+  2. Проверить, что домен `aireadu.ru` (в canonical/OG/robots/sitemap) и ссылка на бота `https://t.me/AlreadUbot` используются на всех ключевых страницах, а также заменить все `будет добавлено` на финальные значения перед прод-выкладкой.
   3. Запустить автодеплой и выполнить пост-проверки из `AUTODEPLOY_INSTRUCTIONS.md` (включая smoke-check лендинга и ручной обход страниц).
 
 5. Выполните миграции:
