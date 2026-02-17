@@ -62,6 +62,8 @@ jobs:
           LANDING_URL: ${{ secrets.LANDING_URL }}
           LANDING_EXPECTED_CTA: ${{ secrets.LANDING_EXPECTED_CTA }}
           LANDING_ASSET_URLS: ${{ secrets.LANDING_ASSET_URLS }}
+          WEBMASTER_PING_SCRIPT: ${{ secrets.WEBMASTER_PING_SCRIPT }}
+          WEBMASTER_PING_URLS: ${{ secrets.WEBMASTER_PING_URLS }}
         run: |
           ssh -p "$PORT" "$USER@$HOST" \
             "env DEPLOY_PATH='$DEPLOY_PATH' \
@@ -73,6 +75,8 @@ jobs:
             LANDING_URL='$LANDING_URL' \
             LANDING_EXPECTED_CTA='$LANDING_EXPECTED_CTA' \
             LANDING_ASSET_URLS='$LANDING_ASSET_URLS' \
+            WEBMASTER_PING_SCRIPT='$WEBMASTER_PING_SCRIPT' \
+            WEBMASTER_PING_URLS='$WEBMASTER_PING_URLS' \
             bash -se" <<'EOF'
           set -euo pipefail
 
