@@ -793,7 +793,7 @@ def screen_s4_edit(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s4_consent(_: dict[str, Any]) -> ScreenContent:
-    consent_url = settings.offer_url or "https://example.com/terms"
+    consent_url = settings.legal_consent_url or "https://aireadu.ru/legal/consent/"
     text = _with_screen_prefix(
         "S4",
         (

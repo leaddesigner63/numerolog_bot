@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     webhook_url: str | None = None
 
     offer_url: str | None = None
+    legal_consent_url: str | None = None
     admin_ids: str | None = None
     feedback_group_chat_id: int | None = None
     feedback_group_url: str | None = None
