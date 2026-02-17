@@ -19,6 +19,7 @@
    - `GET /admin/api/analytics/finance/summary?period=7d`
    - `GET /admin/api/analytics/finance/by-tariff?period=7d`
    - `GET /admin/api/analytics/finance/timeseries?period=7d`
+8. Проверьте финальные CTA-блоки с кнопкой **«Открыть в Telegram»** на страницах `/prices/`, `/articles/`, `/faq/`, `/contacts/`, `/404.html`, `/legal/privacy/`, `/legal/offer/` (кнопка должна вести на актуальный `[BOT_LINK]`).
 
 ## 1. Подготовьте сервер
 1. Создайте пользователя для деплоя (без root), например `deployer`.
