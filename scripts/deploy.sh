@@ -115,6 +115,16 @@ if [ -f scripts/migrate.php ]; then
   php scripts/migrate.php
 fi
 
+if [ -f scripts/generate_sitemap.py ]; then
+  SITEMAP_PYTHON="python3"
+  if [ -x .venv/bin/python ]; then
+    SITEMAP_PYTHON=".venv/bin/python"
+  elif [ -x venv/bin/python ]; then
+    SITEMAP_PYTHON="venv/bin/python"
+  fi
+  "$SITEMAP_PYTHON" scripts/generate_sitemap.py
+fi
+
 SERVICES="${SERVICE_NAMES:-$SERVICE_NAME}"
 if [ -z "$SERVICES" ]; then
   echo "SERVICE_NAME или SERVICE_NAMES должны быть заданы."
@@ -140,4 +150,21 @@ if [ -f scripts/smoke_check_landing.sh ]; then
   bash scripts/smoke_check_landing.sh
 else
   echo "scripts/smoke_check_landing.sh не найден, smoke-check пропущен."
+fi
+
+
+if [ -n "${WEBMASTER_PING_SCRIPT:-}" ] && [ -x "${WEBMASTER_PING_SCRIPT}" ]; then
+  "$WEBMASTER_PING_SCRIPT" || echo "Пинг вебмастеров завершился с ошибкой (продолжаем деплой)."
+elif [ -x scripts/post_release_ping.sh ]; then
+  bash scripts/post_release_ping.sh || echo "Скрипт scripts/post_release_ping.sh завершился с ошибкой (продолжаем деплой)."
+elif [ -n "${WEBMASTER_PING_URLS:-}" ] && command -v curl >/dev/null 2>&1; then
+  IFS=',' read -r -a ping_urls <<< "$WEBMASTER_PING_URLS"
+  for ping_url in "${ping_urls[@]}"; do
+    ping_url="${ping_url## }"
+    ping_url="${ping_url%% }"
+    [ -z "$ping_url" ] && continue
+    curl --silent --show-error --max-time 15 "$ping_url" >/dev/null       || echo "Не удалось пинговать: $ping_url"
+  done
+else
+  echo "Пинг вебмастеров пропущен: не задан WEBMASTER_PING_URLS и не найден скрипт post_release_ping.sh."
 fi

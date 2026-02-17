@@ -47,6 +47,7 @@ scripts/              # вспомогательные скрипты
   fast_checks.py      # быстрые сценарные проверки без внешних зависимостей
   check_landing_content.py # статическая проверка словаря/дисклеймеров лендинга
   smoke_check_landing.sh # smoke-check доступности лендинга/CTA/ассетов после деплоя
+  generate_sitemap.py # генерация web/sitemap.xml с lastmod/changefreq/priority
 docs/
   deploy/
     landing_autodeploy.md # подробный runbook по автодеплою лендинга (VPS + Nginx)
@@ -434,6 +435,15 @@ python scripts/check_landing_content.py
 ## Автодеплой
 
 Подробные пошаговые инструкции по настройке автодеплоя описаны в `AUTODEPLOY_INSTRUCTIONS.md`.
+
+### Что теперь делает деплой автоматически
+
+- `scripts/deploy.sh` перед перезапуском сервисов запускает `scripts/generate_sitemap.py`, поэтому `web/sitemap.xml` всегда публикуется с актуальными `lastmod`, `changefreq` и `priority`.
+- После релиза скрипт пытается пинговать панели вебмастеров в fail-safe режиме: 
+  - сначала через `WEBMASTER_PING_SCRIPT` (если указан и исполняемый),
+  - затем через `scripts/post_release_ping.sh` (если скрипт есть),
+  - затем через список `WEBMASTER_PING_URLS` (через запятую).
+- Если ни один источник пинга не настроен, деплой не падает: шаг логируется как пропущенный.
 
 ## Системные промпты по тарифам
 
