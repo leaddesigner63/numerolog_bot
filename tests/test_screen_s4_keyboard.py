@@ -59,13 +59,42 @@ class ScreenS4KeyboardTests(unittest.TestCase):
 
 
     def test_profile_not_filled_text_starts_with_payment_success_banner(self) -> None:
-        content = screen_s4({"selected_tariff": "T1", "order_status": "paid"})
+        content = screen_s4(
+            {
+                "selected_tariff": "T1",
+                "order_status": "paid",
+                "profile_flow": "report",
+            }
+        )
 
         self.assertIn("🟧 ОПЛАТА ПРОШЛА УСПЕШНО. 🟧", content.messages[0])
         self.assertIn("\n\nМои данные для тарифа", content.messages[0])
         self.assertIn("Данные ещё не заполнены.", content.messages[0])
 
     def test_profile_text_starts_with_payment_success_banner(self) -> None:
+        content = screen_s4(
+            {
+                "selected_tariff": "T1",
+                "order_status": "paid",
+                "profile_flow": "report",
+                "profile": {
+                    "name": "Тест",
+                    "gender": "Мужской",
+                    "birth_date": "31.12.1988",
+                    "birth_time": "21:30",
+                    "birth_place": {
+                        "city": "Макеевка",
+                        "region": "Донецкая область",
+                        "country": "СССР",
+                    },
+                },
+            }
+        )
+
+        self.assertIn("🟧 ОПЛАТА ПРОШЛА УСПЕШНО. 🟧", content.messages[0])
+        self.assertIn("\n\nМои данные для тарифа", content.messages[0])
+
+    def test_profile_text_from_cabinet_hides_payment_success_banner(self) -> None:
         content = screen_s4(
             {
                 "selected_tariff": "T1",
@@ -84,8 +113,7 @@ class ScreenS4KeyboardTests(unittest.TestCase):
             }
         )
 
-        self.assertIn("🟧 ОПЛАТА ПРОШЛА УСПЕШНО. 🟧", content.messages[0])
-        self.assertIn("\n\nМои данные для тарифа", content.messages[0])
+        self.assertNotIn("🟧 ОПЛАТА ПРОШЛА УСПЕШНО. 🟧", content.messages[0])
 
 
 if __name__ == "__main__":
