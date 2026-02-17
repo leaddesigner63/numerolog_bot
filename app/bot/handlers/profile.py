@@ -119,7 +119,12 @@ def _t0_cooldown_status(session, telegram_user_id: int) -> tuple[bool, str | Non
 
 def _profile_payload(profile: UserProfile | None) -> dict[str, Any]:
     if not profile:
-        return {"profile": None}
+        return {
+            "profile": None,
+            "personal_data_consent_accepted": False,
+            "personal_data_consent_accepted_at": None,
+            "personal_data_consent_source": None,
+        }
     return {
         "profile": {
             "name": profile.name,
@@ -131,7 +136,21 @@ def _profile_payload(profile: UserProfile | None) -> dict[str, Any]:
                 "region": profile.birth_place_region,
                 "country": profile.birth_place_country,
             },
-        }
+            "personal_data_consent_accepted": bool(profile.personal_data_consent_accepted_at),
+            "personal_data_consent_accepted_at": (
+                profile.personal_data_consent_accepted_at.isoformat()
+                if profile.personal_data_consent_accepted_at
+                else None
+            ),
+            "personal_data_consent_source": profile.personal_data_consent_source,
+        },
+        "personal_data_consent_accepted": bool(profile.personal_data_consent_accepted_at),
+        "personal_data_consent_accepted_at": (
+            profile.personal_data_consent_accepted_at.isoformat()
+            if profile.personal_data_consent_accepted_at
+            else None
+        ),
+        "personal_data_consent_source": profile.personal_data_consent_source,
     }
 
 

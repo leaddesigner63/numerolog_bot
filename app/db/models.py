@@ -146,6 +146,11 @@ class UserProfile(Base):
     birth_place_city: Mapped[str] = mapped_column(Text)
     birth_place_region: Mapped[str | None] = mapped_column(Text, nullable=True)
     birth_place_country: Mapped[str] = mapped_column(Text)
+    personal_data_consent_accepted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    personal_data_consent_source: Mapped[str | None] = mapped_column(Text, nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
