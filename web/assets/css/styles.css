@@ -112,6 +112,18 @@ footer {
   padding: 1.5rem; border-radius: 8px; margin: 2rem 0; font-size: 0.9rem;
 }
 
+/* Final CTA */
+.final-cta {
+  margin-top: 3rem;
+  margin-bottom: 2rem;
+}
+
+.final-cta-offer {
+  margin-bottom: 1.25rem;
+  color: var(--text-main);
+  font-weight: 500;
+}
+
 /* Mobile */
 @media (max-width: 768px) {
   .nav-links {

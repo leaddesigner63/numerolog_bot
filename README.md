@@ -57,15 +57,15 @@ docs/
 web/                  # многостраничный статический сайт (SEO + переход в Telegram-бот)
   index.html          # главная страница сайта
   prices/index.html   # тарифы: клиентская подгрузка цен из /api/public/tariffs + JSON-LD Service/Offer
-  articles/index.html # каталог статей (заготовка)
-  faq/index.html      # FAQ + JSON-LD FAQPage
-  contacts/index.html # контакты без формы
-  legal/privacy/index.html # privacy (noindex, follow)
-  legal/offer/index.html   # offer (noindex, follow)
-  404.html            # страница ошибки
+  articles/index.html # каталог статей + финальный CTA-блок в Telegram
+  faq/index.html      # FAQ + JSON-LD FAQPage + финальный CTA-блок
+  contacts/index.html # контакты без формы + финальный CTA-блок
+  legal/privacy/index.html # privacy (noindex, follow) + финальный CTA-блок
+  legal/offer/index.html   # offer (noindex, follow) + финальный CTA-блок
+  404.html            # страница ошибки + финальный CTA-блок
   robots.txt          # правила индексации
   sitemap.xml         # карта сайта (без /legal/*)
-  assets/css/styles.css # единый CSS для всех страниц
+  assets/css/styles.css # единый CSS для всех страниц (в т.ч. компонент final-cta)
   assets/js/script.js   # клиентские интеракции сайта
   assets/svg/sprite.svg # SVG-спрайт иконок
 AUTODEPLOY_INSTRUCTIONS.md # пошаговая инструкция по автодеплою
