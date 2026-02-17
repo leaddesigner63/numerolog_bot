@@ -37,6 +37,9 @@
 - `LANDING_URL` — URL лендинга для smoke-check.
 - `LANDING_EXPECTED_CTA` — ожидаемый текст CTA для проверки после деплоя.
 - `LANDING_ASSET_URLS` — список критичных asset URL для проверки.
+- `SITEMAP_BASE_URL` — базовый домен для генерации URL в sitemap (например, `https://aireadu.ru`).
+- `WEBMASTER_PING_SCRIPT` — путь до исполняемого скрипта пост-релизного пинга (опционально).
+- `WEBMASTER_PING_URLS` — список URL для пинга панелей вебмастеров через запятую (опционально).
 
 ## 4) Проверьте workflow
 
@@ -45,6 +48,13 @@
 Логика:
 1. Job `build_and_check`: установка зависимостей, компиляция Python, запуск `scripts/test.sh`.
 2. Job `deploy_production`: SSH-подключение к VPS и запуск `scripts/deploy.sh`.
+
+
+4.1. После деплоя `scripts/deploy.sh` автоматически:
+   - пересобирает `web/sitemap.xml` на сервере (`scripts/generate_sitemap.py`),
+   - перезапускает сервисы,
+   - выполняет `smoke_check_landing.sh`,
+   - запускает пост-релизный пинг вебмастеров, если настроен `WEBMASTER_PING_SCRIPT`, `scripts/post_release_ping.sh` или `WEBMASTER_PING_URLS`.
 
 ## 5) Сделайте тестовый деплой
 
@@ -72,6 +82,8 @@
 - Ограничьте права пользователя деплоя только нужной директорией и сервисами.
 - Не храните секреты в репозитории, только в GitHub Secrets.
 - Перед релизом запускайте локально `bash scripts/test.sh`.
+- Проверяйте, что после выкладки доступен `https://<домен>/sitemap.xml` и в нём есть актуальные `lastmod/changefreq/priority`.
+- Для пинга вебмастеров лучше использовать отдельный скрипт (`WEBMASTER_PING_SCRIPT`) с вашими токенами/эндпоинтами: так проще сопровождать инфраструктурные изменения.
 
 
 ## Проверка после автодеплоя
