@@ -1,10 +1,19 @@
 import unittest
+import re
 
 from app.bot.screens import screen_s4_consent
 from app.core.config import settings
 
 
 class ScreenS4ConsentTests(unittest.TestCase):
+    def test_contains_consent_text_and_markdown_link(self) -> None:
+        content = screen_s4_consent({})
+        message = content.messages[0]
+
+        self.assertIn("Продолжая, вы соглашаетесь с", message)
+        link_match = re.search(r"\[условиями\]\(([^)]+)\)", message)
+        self.assertIsNotNone(link_match)
+
     def test_uses_default_consent_url_when_env_is_empty(self) -> None:
         original = settings.legal_consent_url
         settings.legal_consent_url = None

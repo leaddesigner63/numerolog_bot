@@ -137,6 +137,30 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             jobs_count = session.execute(select(func.count(ReportJob.id))).scalar_one()
         self.assertEqual(jobs_count, 0)
 
+    async def test_profile_save_requires_personal_data_consent(self) -> None:
+        order_id = self._create_order(OrderStatus.PAID, tariff=Tariff.T2)
+        self._create_profile(consent_accepted=False)
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T2.value,
+            order_id=str(order_id),
+        )
+        callback = _DummyCallback("profile:save")
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_send_notice", new=AsyncMock()) as send_notice,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S4_CONSENT")
+        send_notice.assert_awaited()
+        with self.SessionLocal() as session:
+            jobs_count = session.execute(select(func.count(ReportJob.id))).scalar_one()
+        self.assertEqual(jobs_count, 0)
+
     async def test_s3_auto_redirects_to_profile_when_order_already_paid(self) -> None:
         order_id = self._create_order(OrderStatus.PAID)
         screens.screen_manager.update_state(
