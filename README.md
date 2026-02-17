@@ -40,6 +40,7 @@ app/
     models.py         # включает report_jobs, support_dialog_messages и screen_transition_events (аналитика переходов экранов)
   services/           # сервисы бизнес-логики API/бота
     admin_analytics.py # агрегации аналитики переходов + финансовый слой (provider-confirmed funnel/revenue/timeseries)
+    marketing_messaging.py # единый сервис отправки маркетинговых сообщений (consent-check, ссылка отписки, campaign-логирование)
   payments/           # платёжные провайдеры и проверки webhook
 scripts/              # вспомогательные скрипты
   deploy.sh           # серверный деплой-скрипт (используется GitHub Actions)
