@@ -36,7 +36,7 @@
    ```bash
    LANDING_URL="https://aireadu.ru/" \
    LANDING_EXPECTED_CTA="https://t.me/AIreadUbot" \
-   LANDING_ASSET_URLS="https://aireadu.ru/styles.css,https://aireadu.ru/script.js" \
+   LANDING_ASSET_URLS="https://aireadu.ru/assets/css/styles.css,https://aireadu.ru/assets/js/script.js" \
    ./scripts/smoke_check_landing.sh
    ```
 2. Ручной обход ключевых страниц после деплоя:
