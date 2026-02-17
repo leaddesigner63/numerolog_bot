@@ -65,6 +65,7 @@ web/                  # многостраничный статический с
   faq/index.html      # FAQ + JSON-LD FAQPage + финальный CTA-блок
   contacts/index.html # контакты без формы (Email: AlreadU@yandex.com, Telegram: @AlreadU и @AlreadUbot) + финальный CTA-блок
   legal/privacy/index.html # privacy policy для РФ (152-ФЗ, noindex/follow, с заполненными реквизитами оператора) + финальный CTA-блок
+  legal/consent/index.html # согласие субъекта персональных данных на обработку ПДн (152-ФЗ, noindex/follow)
   legal/offer/index.html   # offer (noindex, follow) + юридическая информация и реквизиты + финальный CTA-блок
   404.html            # страница ошибки + финальный CTA-блок
   robots.txt          # правила индексации
