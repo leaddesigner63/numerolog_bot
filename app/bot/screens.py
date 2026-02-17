@@ -588,7 +588,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             "S4",
             (
                 f"{payment_success_banner}"
-                f"Мои данные для тарифа {selected_tariff_title}:\n\n"
+                "Мои данные:\n\n"
                 f"Имя: {profile_data.get('name')}\n"
                 f"Пол: {profile_data.get('gender') or 'не указано'}\n"
                 f"Дата рождения: {profile_data.get('birth_date')}\n"
@@ -611,7 +611,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             "S4",
             (
                 f"{payment_success_banner}"
-                f"Мои данные для тарифа {selected_tariff_title}.\n\n"
+                "Мои данные.\n\n"
                 "Данные ещё не заполнены. Нажмите «Заполнить данные» и следуйте шагам:\n"
                 "1) Имя\n"
                 "2) Пол (кнопки «Женский» / «Мужской»)\n"
