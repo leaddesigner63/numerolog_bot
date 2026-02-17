@@ -21,6 +21,7 @@ class QuestionnaireDoneRefreshTests(unittest.IsolatedAsyncioTestCase):
                 "selected_tariff": None,
                 "order_id": None,
                 "questionnaire": {"status": "in_progress"},
+                "personal_data_consent_accepted": True,
             }
         )
 
@@ -42,11 +43,13 @@ class QuestionnaireDoneRefreshTests(unittest.IsolatedAsyncioTestCase):
             patch.object(screens, "_get_or_create_user", return_value=SimpleNamespace(id=9)),
             patch.object(screens, "get_session", return_value=_SessionContext()),
             patch.object(screens, "_refresh_questionnaire_state") as refresh_questionnaire_state,
+            patch.object(screens, "_refresh_profile_state") as refresh_profile_state,
             patch.object(screens.screen_manager, "update_state", return_value=state_snapshot),
         ):
             await screens.handle_callbacks(callback, state)
 
         refresh_questionnaire_state.assert_called_once_with(fake_session, 7)
+        refresh_profile_state.assert_called_once_with(fake_session, 7)
 
 
 if __name__ == "__main__":
