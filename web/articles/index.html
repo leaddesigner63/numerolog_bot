@@ -19,11 +19,15 @@
   <meta name="yandex-verification" content="[PLACEHOLDER: YANDEX_VERIFICATION]">
 </head>
 <body>
+<a class="skip-link" href="#main-content">Перейти к основному контенту</a>
 
 <header>
   <div class="container nav-container">
     <a href="/" class="logo"><svg width="24" height="24"><use href="/assets/svg/sprite.svg#icon-logo"></use></svg>Нумерология-бот</a>
-    <nav class="nav-links">
+    <button class="mobile-toggle" type="button" aria-label="Меню" aria-expanded="false" aria-controls="primary-navigation">
+      <svg width="24" height="24"><use href="/assets/svg/sprite.svg#icon-menu"></use></svg>
+    </button>
+    <nav class="nav-links" id="primary-navigation">
       <a href="/prices/">Цены</a>
       <a href="/articles/">Статьи</a>
       <a href="/faq/">FAQ</a>
@@ -33,7 +37,7 @@
   </div>
 </header>
 
-<main class="container">
+<main id="main-content" class="container">
   <h1 class="mt-4">Полезные материалы (Скоро)</h1>
   <p>Мы готовим базу знаний. Здесь будут разделы:</p>
 

@@ -19,10 +19,14 @@
   <meta name="yandex-verification" content="[PLACEHOLDER: YANDEX_VERIFICATION]">
 </head>
 <body>
+<a class="skip-link" href="#main-content">Перейти к основному контенту</a>
 <header>
   <div class="container nav-container">
     <a href="/" class="logo"><svg width="24" height="24"><use href="/assets/svg/sprite.svg#icon-logo"></use></svg></a>
-    <nav class="nav-links">
+    <button class="mobile-toggle" type="button" aria-label="Меню" aria-expanded="false" aria-controls="primary-navigation">
+      <svg width="24" height="24"><use href="/assets/svg/sprite.svg#icon-menu"></use></svg>
+    </button>
+    <nav class="nav-links" id="primary-navigation">
       <a href="/prices/">Цены</a>
       <a href="/articles/">Статьи</a>
       <a href="/faq/">FAQ</a>
@@ -31,7 +35,7 @@
     </nav>
   </div>
 </header>
-<main class="container mt-4">
+<main id="main-content" class="container mt-4">
   <h1>Контакты</h1>
   <p>Мы на связи в Telegram. Это самый быстрый способ получить ответ.</p>
   <div class="card mt-4">

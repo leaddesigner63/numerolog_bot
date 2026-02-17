@@ -16,6 +16,7 @@
   <meta name="yandex-verification" content="[PLACEHOLDER: YANDEX_VERIFICATION]">
 </head>
 <body>
+<a class="skip-link" href="#main-content">Перейти к основному контенту</a>
 
 <svg style="display: none;"><use href="/assets/svg/sprite.svg#icon-tg"></use></svg>
 
@@ -25,10 +26,10 @@
       <svg width="24" height="24"><use href="/assets/svg/sprite.svg#icon-logo"></use></svg>
       Нумерология-бот
     </a>
-    <button class="mobile-toggle" aria-label="Меню">
+    <button class="mobile-toggle" type="button" aria-label="Меню" aria-expanded="false" aria-controls="primary-navigation">
       <svg width="24" height="24"><use href="/assets/svg/sprite.svg#icon-menu"></use></svg>
     </button>
-    <nav class="nav-links">
+    <nav class="nav-links" id="primary-navigation">
       <a href="/prices/">Цены</a>
       <a href="/articles/">Статьи</a>
       <a href="/faq/">FAQ</a>
@@ -38,7 +39,7 @@
   </div>
 </header>
 
-<main>
+<main id="main-content">
   <article class="container hero">
     <h1>Нумерология онлайн расчет по дате рождения — Нумерология-бот в Telegram</h1>
     <div class="hero-content">
