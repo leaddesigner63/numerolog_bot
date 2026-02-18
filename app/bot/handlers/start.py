@@ -37,7 +37,11 @@ async def handle_start(message: Message) -> None:
 
     payload = _extract_start_payload(message)
     try:
-        save_user_first_touch_attribution(message.from_user.id, payload)
+        save_user_first_touch_attribution(
+            message.from_user.id,
+            payload,
+            telegram_username=getattr(message.from_user, "username", None),
+        )
     except Exception:
         pass
 

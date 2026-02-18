@@ -25,6 +25,7 @@
    - `GET /admin/api/analytics/traffic/by-source?period=7d&top_n=10`
    - `GET /admin/api/analytics/traffic/by-campaign?period=7d&top_n=20&page=1&page_size=20`
 10. Убедитесь, что блоки traffic в админке показывают непустые данные (или корректный пустой state без ошибок), а API-ответы содержат ключи `data`, `filters_applied`, `warnings`.
+11. Проверьте deep-link first-touch: откройте `https://t.me/AIreadUbot?start=site_seo_cta`, нажмите **Start**, затем убедитесь, что в `GET /admin/api/analytics/traffic/by-source?period=7d&top_n=10` появился источник `site` (для нового пользователя).
 11. Проверьте финальные CTA-блоки с кнопкой **«Открыть в Telegram»** на страницах `/prices/`, `/articles/`, `/faq/`, `/contacts/`, `/404.html`, `/legal/privacy/`, `/legal/consent/`, `/legal/offer/` (кнопка должна вести на актуальный `https://t.me/AIreadUbot`).
 9. Проверьте, что после деплоя открываются новые SEO-статьи: `/articles/numerology-date-of-birth/`, `/articles/destiny-number-and-purpose/`, `/articles/money-and-career-by-date-of-birth/`, `/articles/ai-natal-chart-and-personality-analysis/`.
 10. Откройте `/legal/privacy/` и убедитесь, что опубликованы актуальные реквизиты оператора, email и телефон для обращений по персональным данным.
