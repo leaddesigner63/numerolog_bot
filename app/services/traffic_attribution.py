@@ -3,7 +3,7 @@ from typing import Any
 
 from sqlalchemy import select
 
-from app.db.models import UserFirstTouchAttribution
+from app.db.models import User, UserFirstTouchAttribution
 from app.db.session import get_session
 
 
@@ -41,10 +41,23 @@ def parse_first_touch_payload(payload: str | None) -> dict[str, Any]:
     }
 
 
-def save_user_first_touch_attribution(telegram_user_id: int, payload: str | None) -> bool:
+def save_user_first_touch_attribution(
+    telegram_user_id: int,
+    payload: str | None,
+    telegram_username: str | None = None,
+) -> bool:
     parsed_payload = parse_first_touch_payload(payload)
 
     with get_session() as session:
+        user = session.execute(
+            select(User).where(User.telegram_user_id == telegram_user_id)
+        ).scalar_one_or_none()
+        if user is None:
+            session.add(User(telegram_user_id=telegram_user_id, telegram_username=telegram_username))
+            session.flush()
+        elif telegram_username is not None:
+            user.telegram_username = telegram_username
+
         existing = session.execute(
             select(UserFirstTouchAttribution.id).where(
                 UserFirstTouchAttribution.telegram_user_id == telegram_user_id
