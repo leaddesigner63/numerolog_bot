@@ -39,7 +39,8 @@ app/
   db/                 # модели и подключение к БД
     models.py         # включает report_jobs, support_dialog_messages, screen_transition_events и user_first_touch_attribution (first-touch атрибуция /start-пейлоада)
   services/           # сервисы бизнес-логики API/бота
-    admin_analytics.py # агрегации аналитики переходов + финансовый слой (provider-confirmed funnel/revenue/timeseries)
+    admin_analytics.py # агрегации аналитики переходов + финансы + traffic first-touch (source/campaign/conversion)
+    traffic_attribution.py # парсинг /start payload и сохранение first-touch атрибуции в user_first_touch_attribution
     marketing_messaging.py # единый сервис отправки маркетинговых сообщений (consent-check, ссылка отписки, campaign-логирование)
   payments/           # платёжные провайдеры и проверки webhook
 scripts/              # вспомогательные скрипты
@@ -456,6 +457,25 @@ python scripts/check_landing_content.py
 - `traffic/by-source` поддерживает `top_n`;
 - `traffic/by-campaign` поддерживает `top_n` и пагинацию (`page`, `page_size`);
 - при частичных сбоях БД traffic-эндпоинты возвращают безопасный fallback с `warnings`, а не HTTP 500.
+
+
+### First-touch атрибуция `/start`
+
+- При первом входе пользователя команда `/start` сохраняет payload в таблицу `user_first_touch_attribution`.
+- Сохраняется только **первое касание**: повторные `/start` не перезаписывают исходный источник.
+- Для payload поддерживаются как структурные маркеры (`src_`, `cmp_`, `pl_`), так и fallback по частям через `_`.
+- Админ-аналитика traffic использует эти данные для срезов `source`, `source+campaign` и воронки конверсий до оплаты.
+
+### Как читать метрики эффективности каналов
+
+- `users_started_total` — уникальные пользователи с first-touch в выбранном периоде/фильтре.
+- `users_by_source[].conversion_to_paid` — доля пользователей источника, которые дошли до provider-confirmed оплаты.
+- `users_by_source_campaign[].conversion` — конверсия конкретной кампании внутри источника.
+- `conversions` в `traffic/summary`:
+  - `started` — база расчёта;
+  - `reached_tariff` — пользователи, дошедшие до тарифных экранов (S3/S4);
+  - `paid` — пользователи с подтверждённой оплатой провайдером.
+- Для корректного сравнения каналов фиксируйте одинаковые фильтры `period`, `from/to` и `tariff` во всех трёх traffic endpoints.
 
 ## Автодеплой
 

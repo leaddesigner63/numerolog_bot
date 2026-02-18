@@ -959,6 +959,105 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertIn("conversion", by_campaign_payload["data"]["by_campaign"][0])
         self.assertEqual(by_campaign_payload["filters_applied"]["top_n"], 2)
 
+
+    def test_traffic_analytics_endpoints_include_conversion_metrics(self) -> None:
+        base_time = datetime(2026, 3, 1, tzinfo=timezone.utc)
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    User(id=801, telegram_user_id=9801),
+                    User(id=802, telegram_user_id=9802),
+                    User(id=803, telegram_user_id=9803),
+                ]
+            )
+            session.add_all(
+                [
+                    UserFirstTouchAttribution(
+                        telegram_user_id=9801,
+                        source="vk",
+                        campaign="retarget",
+                        start_payload="src_vk_cmp_retarget",
+                        captured_at=base_time,
+                    ),
+                    UserFirstTouchAttribution(
+                        telegram_user_id=9802,
+                        source="vk",
+                        campaign="retarget",
+                        start_payload="src_vk_cmp_retarget",
+                        captured_at=base_time + timedelta(minutes=1),
+                    ),
+                    UserFirstTouchAttribution(
+                        telegram_user_id=9803,
+                        source="tg",
+                        campaign="blogger",
+                        start_payload="src_tg_cmp_blogger",
+                        captured_at=base_time + timedelta(minutes=2),
+                    ),
+                ]
+            )
+            session.add_all(
+                [
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=9801,
+                        from_screen_id="S1",
+                        to_screen_id="S3",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T2"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=9802,
+                        from_screen_id="S1",
+                        to_screen_id="S3",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T2"},
+                    ),
+                ]
+            )
+            session.add(
+                Order(
+                    user_id=801,
+                    tariff=Tariff.T2,
+                    amount=1990,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    payment_confirmed=True,
+                    payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                    payment_confirmed_at=base_time + timedelta(hours=2),
+                )
+            )
+            session.flush()
+            for idx, event in enumerate(session.query(ScreenTransitionEvent).order_by(ScreenTransitionEvent.id.asc()).all()):
+                event.created_at = base_time + timedelta(minutes=idx)
+            session.commit()
+
+        summary = self.client.get("/admin/api/analytics/traffic/summary", params={"tariff": "T2", "period": "all"})
+        self.assertEqual(summary.status_code, 200)
+        summary_payload = summary.json()
+        self.assertEqual(summary_payload["filters_applied"]["tariff"], "T2")
+        self.assertEqual(summary_payload["filters_applied"]["period"], "all")
+        self.assertEqual(summary_payload["data"]["summary"]["users_started_total"], 2)
+        paid_step = next(item for item in summary_payload["data"]["summary"]["conversions"] if item["step"] == "paid")
+        self.assertEqual(paid_step["users"], 1)
+        self.assertEqual(paid_step["conversion_from_start"], 0.5)
+
+        by_source = self.client.get("/admin/api/analytics/traffic/by-source", params={"tariff": "T2", "top_n": 10})
+        self.assertEqual(by_source.status_code, 200)
+        source_rows = by_source.json()["data"]["by_source"]
+        self.assertEqual(source_rows, [{"source": "vk", "users": 2, "conversion_to_paid": 0.5}])
+
+        by_campaign = self.client.get(
+            "/admin/api/analytics/traffic/by-campaign",
+            params={"tariff": "T2", "top_n": 10, "page": 1, "page_size": 10},
+        )
+        self.assertEqual(by_campaign.status_code, 200)
+        campaign_payload = by_campaign.json()
+        self.assertEqual(campaign_payload["pagination"]["total_items"], 1)
+        self.assertEqual(
+            campaign_payload["data"]["by_campaign"],
+            [{"source": "vk", "campaign": "retarget", "users": 2, "conversion": 0.5}],
+        )
+
     def test_traffic_analytics_endpoints_return_safe_fallback_on_db_error(self) -> None:
         with patch.object(
             admin_routes,
