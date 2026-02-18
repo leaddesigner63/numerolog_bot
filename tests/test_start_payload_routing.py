@@ -9,6 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.bot.handlers import start as start_module
 from app.bot.handlers import screen_manager as screen_manager_module
+from app.services import traffic_attribution as traffic_attribution_module
 from app.bot.handlers.screen_manager import screen_manager
 from app.db.base import Base
 from app.db.models import (
@@ -45,8 +46,10 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
 
         self._old_get_session = start_module.get_session
         self._old_screen_manager_get_session = screen_manager_module.get_session
+        self._old_traffic_get_session = traffic_attribution_module.get_session
         start_module.get_session = _test_get_session
         screen_manager_module.get_session = _test_get_session
+        traffic_attribution_module.get_session = _test_get_session
         screen_manager._store._states.clear()
 
         with self.SessionLocal() as session:
@@ -61,6 +64,7 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self) -> None:
         start_module.get_session = self._old_get_session
         screen_manager_module.get_session = self._old_screen_manager_get_session
+        traffic_attribution_module.get_session = self._old_traffic_get_session
         screen_manager._store._states.clear()
         Base.metadata.drop_all(self.engine)
         self.engine.dispose()
@@ -172,6 +176,18 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(records[0].campaign, "only")
         self.assertIsNone(records[0].placement)
         self.assertEqual(records[0].raw_parts, ["source", "only"])
+
+
+    async def test_start_captures_structured_lnd_payload(self) -> None:
+        with patch.object(screen_manager, "show_screen", new=AsyncMock()):
+            await start_module.handle_start(self._message("/start lnd.src_vkcmp_winterpl_banner_top"))
+
+        records = self._first_touch_records()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].start_payload, "lnd.src_vkcmp_winterpl_banner_top")
+        self.assertEqual(records[0].source, "vk")
+        self.assertEqual(records[0].campaign, "winter")
+        self.assertEqual(records[0].placement, "banner_top")
 
     async def test_start_first_touch_is_recorded_only_once_per_user(self) -> None:
         with patch.object(screen_manager, "show_screen", new=AsyncMock()):
