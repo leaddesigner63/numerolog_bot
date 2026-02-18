@@ -416,8 +416,8 @@ class AdminAnalyticsTests(unittest.TestCase):
             )
 
         self.assertEqual(result["users_started_total"], 2)
-        self.assertEqual(result["users_by_source"][0], {"source": "ads", "users": 2})
-        self.assertEqual(result["users_by_source_campaign"][0], {"source": "ads", "campaign": "UNKNOWN", "users": 1})
+        self.assertEqual(result["users_by_source"][0], {"source": "ads", "users": 2, "conversion_to_paid": 0.5})
+        self.assertEqual(result["users_by_source_campaign"][0], {"source": "ads", "campaign": "UNKNOWN", "users": 1, "conversion": 0.0})
         conversion = {row["step"]: row for row in result["conversions"]}
         self.assertEqual(conversion["started"]["users"], 2)
         self.assertEqual(conversion["reached_tariff"]["users"], 2)

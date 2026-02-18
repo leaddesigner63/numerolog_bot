@@ -944,6 +944,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         by_source_payload = by_source.json()
         self.assertEqual(len(by_source_payload["data"]["by_source"]), 1)
         self.assertEqual(by_source_payload["data"]["by_source"][0]["source"], "instagram")
+        self.assertIn("conversion_to_paid", by_source_payload["data"]["by_source"][0])
         self.assertEqual(by_source_payload["filters_applied"]["top_n"], 1)
 
         by_campaign = self.client.get(
@@ -955,6 +956,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(len(by_campaign_payload["data"]["by_campaign"]), 1)
         self.assertEqual(by_campaign_payload["pagination"]["total_items"], 2)
         self.assertEqual(by_campaign_payload["pagination"]["total_pages"], 2)
+        self.assertIn("conversion", by_campaign_payload["data"]["by_campaign"][0])
         self.assertEqual(by_campaign_payload["filters_applied"]["top_n"], 2)
 
     def test_traffic_analytics_endpoints_return_safe_fallback_on_db_error(self) -> None:
@@ -994,6 +996,9 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         html = response.text
         self.assertIn("analyticsPeriod", html)
         self.assertIn("analyticsFinanceSummary", html)
+        self.assertIn("analyticsTrafficKpi", html)
+        self.assertIn("analyticsTrafficSource", html)
+        self.assertIn("analyticsTrafficCampaign", html)
         self.assertIn("analyticsFinanceByTariff", html)
         self.assertIn("analyticsFinanceChart", html)
         self.assertIn("provider-confirmed only", html)

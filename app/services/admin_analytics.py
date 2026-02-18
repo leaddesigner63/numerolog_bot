@@ -166,9 +166,10 @@ def build_traffic_analytics(session: Session, filters: TrafficAnalyticsFilters) 
         }
 
     base_user_ids = {item.telegram_user_id for item in first_touch}
-    users_by_source = _build_users_by_source(first_touch)
-    users_by_source_campaign = _build_users_by_source_campaign(first_touch)
-    conversions = _build_first_touch_conversions(session, filters, base_user_ids)
+    paid_telegram_user_ids = _load_paid_telegram_user_ids(session, filters, base_user_ids)
+    users_by_source = _build_users_by_source(first_touch, paid_telegram_user_ids)
+    users_by_source_campaign = _build_users_by_source_campaign(first_touch, paid_telegram_user_ids)
+    conversions = _build_first_touch_conversions(session, filters, base_user_ids, paid_telegram_user_ids)
     return {
         "users_started_total": len(base_user_ids),
         "users_by_source": users_by_source,
@@ -222,25 +223,49 @@ def _normalize_traffic_value(value: str | None) -> str:
     return candidate if candidate else "UNKNOWN"
 
 
-def _build_users_by_source(items: list[UserFirstTouchAttribution]) -> list[dict]:
+def _load_paid_telegram_user_ids(
+    session: Session,
+    filters: TrafficAnalyticsFilters,
+    base_user_ids: set[int],
+) -> set[int]:
+    order_filters = FinanceAnalyticsFilters(from_dt=filters.from_dt, to_dt=filters.to_dt, tariff=filters.tariff)
+    paid_orders = _load_provider_confirmed_orders(session, order_filters)
+    paid_user_ids = {item.user_id for item in paid_orders}
+    if not paid_user_ids:
+        return set()
+
+    users = session.execute(select(User).where(User.id.in_(paid_user_ids))).scalars().all()
+    return {user.telegram_user_id for user in users if user.telegram_user_id in base_user_ids}
+
+
+def _build_users_by_source(items: list[UserFirstTouchAttribution], paid_telegram_user_ids: set[int]) -> list[dict]:
     grouped: dict[str, set[int]] = {}
     for item in items:
         source = _normalize_traffic_value(item.source)
         grouped.setdefault(source, set()).add(item.telegram_user_id)
     return [
-        {"source": source, "users": len(user_ids)}
+        {
+            "source": source,
+            "users": len(user_ids),
+            "conversion_to_paid": round((len(user_ids & paid_telegram_user_ids) / len(user_ids)) if user_ids else 0.0, 6),
+        }
         for source, user_ids in sorted(grouped.items(), key=lambda pair: (-len(pair[1]), pair[0]))
     ]
 
 
-def _build_users_by_source_campaign(items: list[UserFirstTouchAttribution]) -> list[dict]:
+def _build_users_by_source_campaign(items: list[UserFirstTouchAttribution], paid_telegram_user_ids: set[int]) -> list[dict]:
     grouped: dict[tuple[str, str], set[int]] = {}
     for item in items:
         source = _normalize_traffic_value(item.source)
         campaign = _normalize_traffic_value(item.campaign)
         grouped.setdefault((source, campaign), set()).add(item.telegram_user_id)
     return [
-        {"source": source, "campaign": campaign, "users": len(user_ids)}
+        {
+            "source": source,
+            "campaign": campaign,
+            "users": len(user_ids),
+            "conversion": round((len(user_ids & paid_telegram_user_ids) / len(user_ids)) if user_ids else 0.0, 6),
+        }
         for (source, campaign), user_ids in sorted(grouped.items(), key=lambda pair: (-len(pair[1]), pair[0][0], pair[0][1]))
     ]
 
@@ -249,6 +274,7 @@ def _build_first_touch_conversions(
     session: Session,
     filters: TrafficAnalyticsFilters,
     base_user_ids: set[int],
+    paid_users: set[int],
 ) -> list[dict]:
     total = len(base_user_ids)
     if total == 0:
@@ -261,14 +287,6 @@ def _build_first_touch_conversions(
         for event in events
         if event.user_id in base_user_ids and (event.from_screen in _FINANCE_ENTRY_SCREENS or event.to_screen in _FINANCE_ENTRY_SCREENS)
     }
-
-    order_filters = FinanceAnalyticsFilters(from_dt=filters.from_dt, to_dt=filters.to_dt, tariff=filters.tariff)
-    paid_orders = _load_provider_confirmed_orders(session, order_filters)
-    paid_user_ids = {item.user_id for item in paid_orders}
-    paid_users: set[int] = set()
-    if paid_user_ids:
-        users = session.execute(select(User).where(User.id.in_(paid_user_ids))).scalars().all()
-        paid_users = {user.telegram_user_id for user in users if user.telegram_user_id in base_user_ids}
 
     rows: list[dict] = []
     steps = [
