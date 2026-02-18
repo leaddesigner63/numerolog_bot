@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app.bot.handlers.screen_manager import screen_manager
 from app.bot.handlers.screens import ensure_payment_waiter
-from app.db.models import Order, OrderStatus, User
+from app.db.models import Order, OrderStatus, User, UserFirstTouchAttribution
 from app.db.session import get_session
 
 router = Router()
@@ -29,12 +29,56 @@ def _extract_paywait_order_id(payload: str) -> int | None:
         return None
 
 
+def _parse_first_touch_payload(payload: str | None) -> dict[str, object]:
+    raw_payload = payload or ""
+    raw_parts = raw_payload.split("_") if raw_payload else []
+    source = raw_parts[0] if len(raw_parts) > 0 and raw_parts[0] else None
+    campaign = raw_parts[1] if len(raw_parts) > 1 and raw_parts[1] else None
+    placement = "_".join(raw_parts[2:]) if len(raw_parts) > 2 else None
+    if placement == "":
+        placement = None
+    return {
+        "start_payload": raw_payload,
+        "source": source,
+        "campaign": campaign,
+        "placement": placement,
+        "raw_parts": raw_parts,
+    }
+
+
+def _capture_first_touch_attribution(telegram_user_id: int, payload: str | None) -> None:
+    parsed_payload = _parse_first_touch_payload(payload)
+    with get_session() as session:
+        existing = session.execute(
+            select(UserFirstTouchAttribution.id).where(
+                UserFirstTouchAttribution.telegram_user_id == telegram_user_id
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return
+        session.add(
+            UserFirstTouchAttribution(
+                telegram_user_id=telegram_user_id,
+                start_payload=str(parsed_payload.get("start_payload") or ""),
+                source=parsed_payload.get("source"),
+                campaign=parsed_payload.get("campaign"),
+                placement=parsed_payload.get("placement"),
+                raw_parts=parsed_payload.get("raw_parts"),
+            )
+        )
+
+
 @router.message(CommandStart())
 async def handle_start(message: Message) -> None:
     if not message.from_user:
         return
 
     payload = _extract_start_payload(message)
+    try:
+        _capture_first_touch_attribution(message.from_user.id, payload)
+    except Exception:
+        pass
+
     if payload:
         order_id = _extract_paywait_order_id(payload)
         if order_id is not None:
