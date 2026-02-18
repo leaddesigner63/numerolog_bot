@@ -18,6 +18,8 @@ from app.db.models import (
     PaymentConfirmationSource,
     ScreenTransitionEvent,
     ScreenTransitionTriggerType,
+    User,
+    UserFirstTouchAttribution,
     UserProfile,
 )
 
@@ -83,6 +85,13 @@ class MarketingAnalyticsFilters:
     to_dt: datetime | None = None
 
 
+@dataclass(frozen=True)
+class TrafficAnalyticsFilters:
+    from_dt: datetime | None = None
+    to_dt: datetime | None = None
+    tariff: str | None = None
+
+
 def build_screen_transition_analytics(session: Session, filters: AnalyticsFilters) -> dict:
     events = _load_events(session, filters)
     if not events:
@@ -144,6 +153,142 @@ def build_marketing_subscription_analytics(session: Session, filters: MarketingA
         "prompted_users_per_period": prompted_users,
         "subscribed_from_prompt_per_period": prompt_subscribes,
     }
+
+
+def build_traffic_analytics(session: Session, filters: TrafficAnalyticsFilters) -> dict:
+    first_touch = _load_first_touch_entries(session, filters)
+    if not first_touch:
+        return {
+            "users_started_total": 0,
+            "users_by_source": [],
+            "users_by_source_campaign": [],
+            "conversions": [],
+        }
+
+    base_user_ids = {item.telegram_user_id for item in first_touch}
+    users_by_source = _build_users_by_source(first_touch)
+    users_by_source_campaign = _build_users_by_source_campaign(first_touch)
+    conversions = _build_first_touch_conversions(session, filters, base_user_ids)
+    return {
+        "users_started_total": len(base_user_ids),
+        "users_by_source": users_by_source,
+        "users_by_source_campaign": users_by_source_campaign,
+        "conversions": conversions,
+    }
+
+
+def _load_first_touch_entries(session: Session, filters: TrafficAnalyticsFilters) -> list[UserFirstTouchAttribution]:
+    query: Select[tuple[UserFirstTouchAttribution]] = select(UserFirstTouchAttribution)
+    if filters.from_dt:
+        query = query.where(UserFirstTouchAttribution.captured_at >= filters.from_dt)
+    if filters.to_dt:
+        query = query.where(UserFirstTouchAttribution.captured_at <= filters.to_dt)
+    query = query.order_by(UserFirstTouchAttribution.captured_at.asc(), UserFirstTouchAttribution.id.asc())
+
+    items = session.execute(query).scalars().all()
+    if not items:
+        return []
+
+    admin_ids = _parse_admin_ids(settings.admin_ids)
+    filtered = [item for item in items if item.telegram_user_id not in admin_ids]
+    if not filters.tariff:
+        return filtered
+
+    allowed_user_ids = _load_user_ids_by_tariff(session, filters)
+    if not allowed_user_ids:
+        return []
+    return [item for item in filtered if item.telegram_user_id in allowed_user_ids]
+
+
+def _load_user_ids_by_tariff(session: Session, filters: TrafficAnalyticsFilters) -> set[int]:
+    tariff_value = str(filters.tariff or "").upper()
+    if not tariff_value:
+        return set()
+
+    event_filters = AnalyticsFilters(from_dt=filters.from_dt, to_dt=filters.to_dt, tariff=tariff_value)
+    traffic_user_ids = {item.user_id for item in _load_events(session, event_filters)}
+
+    order_filters = FinanceAnalyticsFilters(from_dt=filters.from_dt, to_dt=filters.to_dt, tariff=tariff_value)
+    order_points = _load_provider_confirmed_orders(session, order_filters)
+    if order_points:
+        user_rows = session.execute(select(User).where(User.id.in_({item.user_id for item in order_points}))).scalars().all()
+        traffic_user_ids.update({user.telegram_user_id for user in user_rows})
+
+    return traffic_user_ids
+
+
+def _normalize_traffic_value(value: str | None) -> str:
+    candidate = str(value or "").strip()
+    return candidate if candidate else "UNKNOWN"
+
+
+def _build_users_by_source(items: list[UserFirstTouchAttribution]) -> list[dict]:
+    grouped: dict[str, set[int]] = {}
+    for item in items:
+        source = _normalize_traffic_value(item.source)
+        grouped.setdefault(source, set()).add(item.telegram_user_id)
+    return [
+        {"source": source, "users": len(user_ids)}
+        for source, user_ids in sorted(grouped.items(), key=lambda pair: (-len(pair[1]), pair[0]))
+    ]
+
+
+def _build_users_by_source_campaign(items: list[UserFirstTouchAttribution]) -> list[dict]:
+    grouped: dict[tuple[str, str], set[int]] = {}
+    for item in items:
+        source = _normalize_traffic_value(item.source)
+        campaign = _normalize_traffic_value(item.campaign)
+        grouped.setdefault((source, campaign), set()).add(item.telegram_user_id)
+    return [
+        {"source": source, "campaign": campaign, "users": len(user_ids)}
+        for (source, campaign), user_ids in sorted(grouped.items(), key=lambda pair: (-len(pair[1]), pair[0][0], pair[0][1]))
+    ]
+
+
+def _build_first_touch_conversions(
+    session: Session,
+    filters: TrafficAnalyticsFilters,
+    base_user_ids: set[int],
+) -> list[dict]:
+    total = len(base_user_ids)
+    if total == 0:
+        return []
+
+    event_filters = AnalyticsFilters(from_dt=filters.from_dt, to_dt=filters.to_dt, tariff=filters.tariff)
+    events = _load_events(session, event_filters)
+    reached_tariff_users = {
+        event.user_id
+        for event in events
+        if event.user_id in base_user_ids and (event.from_screen in _FINANCE_ENTRY_SCREENS or event.to_screen in _FINANCE_ENTRY_SCREENS)
+    }
+
+    order_filters = FinanceAnalyticsFilters(from_dt=filters.from_dt, to_dt=filters.to_dt, tariff=filters.tariff)
+    paid_orders = _load_provider_confirmed_orders(session, order_filters)
+    paid_user_ids = {item.user_id for item in paid_orders}
+    paid_users: set[int] = set()
+    if paid_user_ids:
+        users = session.execute(select(User).where(User.id.in_(paid_user_ids))).scalars().all()
+        paid_users = {user.telegram_user_id for user in users if user.telegram_user_id in base_user_ids}
+
+    rows: list[dict] = []
+    steps = [
+        ("started", base_user_ids),
+        ("reached_tariff", reached_tariff_users),
+        ("paid", paid_users),
+    ]
+    prev_users = total
+    for step_name, user_ids in steps:
+        count = len(user_ids)
+        rows.append(
+            {
+                "step": step_name,
+                "users": count,
+                "conversion_from_start": round((count / total) if total else 0.0, 6),
+                "conversion_from_previous": round((count / prev_users) if prev_users else 0.0, 6),
+            }
+        )
+        prev_users = count
+    return rows
 
 
 def _count_total_subscribed(session: Session) -> int:

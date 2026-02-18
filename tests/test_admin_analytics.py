@@ -12,6 +12,8 @@ from app.services.admin_analytics import (
     build_finance_analytics,
     build_marketing_subscription_analytics,
     build_screen_transition_analytics,
+    build_traffic_analytics,
+    TrafficAnalyticsFilters,
 )
 from app.db.base import Base
 from app.db.models import ScreenTransitionEvent, ScreenTransitionTriggerType
@@ -318,6 +320,109 @@ class AdminAnalyticsTests(unittest.TestCase):
                 result = build_finance_analytics(session, FinanceAnalyticsFilters())
 
         self.assertEqual(result["summary"]["entry_users"], 1)
+
+
+    def test_traffic_analytics_empty_is_safe(self) -> None:
+        with self.Session() as session:
+            result = build_traffic_analytics(session, TrafficAnalyticsFilters())
+
+        self.assertEqual(result["users_started_total"], 0)
+        self.assertEqual(result["users_by_source"], [])
+        self.assertEqual(result["users_by_source_campaign"], [])
+        self.assertEqual(result["conversions"], [])
+
+    def test_traffic_analytics_first_touch_breakdown_and_conversion(self) -> None:
+        base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        from app.db.models import (
+            Order,
+            OrderStatus,
+            PaymentConfirmationSource,
+            PaymentProvider,
+            Tariff,
+            User,
+            UserFirstTouchAttribution,
+        )
+
+        with self.Session() as session:
+            session.add_all([
+                User(id=1, telegram_user_id=1001),
+                User(id=2, telegram_user_id=1002),
+                User(id=3, telegram_user_id=1003),
+            ])
+            session.add_all([
+                UserFirstTouchAttribution(
+                    telegram_user_id=1001,
+                    start_payload="src=ads",
+                    source="ads",
+                    campaign="winter",
+                    captured_at=base_time,
+                ),
+                UserFirstTouchAttribution(
+                    telegram_user_id=1002,
+                    start_payload="src=ads",
+                    source="ads",
+                    campaign=None,
+                    captured_at=base_time + timedelta(minutes=1),
+                ),
+                UserFirstTouchAttribution(
+                    telegram_user_id=1003,
+                    start_payload="raw",
+                    source=None,
+                    campaign="campaign-x",
+                    captured_at=base_time + timedelta(minutes=2),
+                ),
+            ])
+            session.add_all([
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=1001,
+                    from_screen_id="S1",
+                    to_screen_id="S3",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                    metadata_json={"tariff": "T1"},
+                ),
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=1002,
+                    from_screen_id="S1",
+                    to_screen_id="S4",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                    metadata_json={"tariff": "T1"},
+                ),
+            ])
+            session.add(
+                Order(
+                    user_id=1,
+                    tariff=Tariff.T1,
+                    amount=1000,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    payment_confirmed=True,
+                    payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                    payment_confirmed_at=base_time + timedelta(hours=1),
+                )
+            )
+            session.flush()
+            for idx, event in enumerate(session.query(ScreenTransitionEvent).order_by(ScreenTransitionEvent.id.asc()).all()):
+                event.created_at = base_time + timedelta(minutes=idx + 1)
+            session.commit()
+
+            result = build_traffic_analytics(
+                session,
+                TrafficAnalyticsFilters(
+                    from_dt=base_time - timedelta(days=1),
+                    to_dt=base_time + timedelta(days=1),
+                    tariff="T1",
+                ),
+            )
+
+        self.assertEqual(result["users_started_total"], 2)
+        self.assertEqual(result["users_by_source"][0], {"source": "ads", "users": 2})
+        self.assertEqual(result["users_by_source_campaign"][0], {"source": "ads", "campaign": "UNKNOWN", "users": 1})
+        conversion = {row["step"]: row for row in result["conversions"]}
+        self.assertEqual(conversion["started"]["users"], 2)
+        self.assertEqual(conversion["reached_tariff"]["users"], 2)
+        self.assertEqual(conversion["paid"]["users"], 1)
+        self.assertEqual(conversion["paid"]["conversion_from_start"], 0.5)
 
 
 if __name__ == "__main__":
