@@ -1048,6 +1048,13 @@ def admin_ui(request: Request) -> HTMLResponse:
         <div id="analyticsState" class="analytics-state">Загрузка...</div>
         <div id="analyticsKpi" class="kpi-grid"></div>
         <div class="analytics-block">
+          <div class="analytics-title">Каналы трафика</div>
+          <div id="analyticsTrafficKpi" class="kpi-grid"></div>
+          <div id="analyticsTrafficSource" class="muted">Нет данных</div>
+          <div style="height: 12px;"></div>
+          <div id="analyticsTrafficCampaign" class="muted">Нет данных</div>
+        </div>
+        <div class="analytics-block">
           <div class="analytics-title">Воронка по шагам</div>
           <div id="analyticsFunnel" class="muted">Нет данных</div>
         </div>
@@ -2859,6 +2866,53 @@ def admin_ui(request: Request) -> HTMLResponse:
       `;
     }
 
+
+    function renderTrafficKpis(summary, sourceRows) {
+      const target = document.getElementById("analyticsTrafficKpi");
+      if (!target) {
+        return;
+      }
+      const firstStarts = Number(summary?.users_started_total) || 0;
+      if (!firstStarts) {
+        target.innerHTML = '<div class="muted">Нет данных</div>';
+        return;
+      }
+      const topSource = sourceRows[0] || null;
+      const topShare = topSource && firstStarts ? (Number(topSource.users) || 0) / firstStarts : 0;
+      target.innerHTML = `
+        <div class="kpi-card">
+          <h3>Всего first starts</h3>
+          <div class="value">${firstStarts}</div>
+        </div>
+        <div class="kpi-card">
+          <h3>Доля top source</h3>
+          <div class="value">${formatPercent(topShare)}</div>
+          <div class="muted">${topSource ? `${topSource.source} (${Number(topSource.users) || 0})` : "Нет данных"}</div>
+        </div>
+      `;
+    }
+
+    function renderTrafficTables(sourceRows, campaignRows) {
+      renderAnalyticsTable(
+        "analyticsTrafficSource",
+        ["Источник", "Пользователи", "Конверсия в оплату"],
+        sourceRows.map((row) => [
+          {value: row.source || "UNKNOWN"},
+          {value: Number(row.users) || 0},
+          {value: formatPercent(row.conversion_to_paid)},
+        ])
+      );
+      renderAnalyticsTable(
+        "analyticsTrafficCampaign",
+        ["Источник / кампания", "Пользователи", "Конверсия"],
+        campaignRows.map((row) => [
+          {value: `${row.source || "UNKNOWN"} / ${row.campaign || "UNKNOWN"}`},
+          {value: Number(row.users) || 0},
+          {value: formatPercent(row.conversion)},
+        ])
+      );
+    }
+
     function syncAnalyticsPeriodToInputs(period) {
       const fromInput = document.getElementById("analyticsFrom");
       const toInput = document.getElementById("analyticsTo");
@@ -2963,7 +3017,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       stateNode.textContent = "Загрузка аналитики...";
       try {
         const query = buildAnalyticsQuery();
-        const [summaryRes, matrixRes, funnelRes, timingRes, fullRes, financeSummaryRes, financeTariffRes, financeTimeseriesRes] = await Promise.all([
+        const [summaryRes, matrixRes, funnelRes, timingRes, fullRes, financeSummaryRes, financeTariffRes, financeTimeseriesRes, trafficSummaryRes, trafficSourceRes, trafficCampaignRes] = await Promise.all([
           fetchJson(`/analytics/transitions/summary?${query}`),
           fetchJson(`/analytics/transitions/matrix?${query}`),
           fetchJson(`/analytics/transitions/funnel?${query}`),
@@ -2972,6 +3026,9 @@ def admin_ui(request: Request) -> HTMLResponse:
           fetchJson(`/analytics/finance/summary?${query}`),
           fetchJson(`/analytics/finance/by-tariff?${query}`),
           fetchJson(`/analytics/finance/timeseries?${query}`),
+          fetchJson(`/analytics/traffic/summary?${query}`),
+          fetchJson(`/analytics/traffic/by-source?${query}`),
+          fetchJson(`/analytics/traffic/by-campaign?${query}&page=1&page_size=100`),
         ]);
 
         const summary = summaryRes?.data?.summary || {};
@@ -2982,11 +3039,16 @@ def admin_ui(request: Request) -> HTMLResponse:
         const financeSummary = financeSummaryRes?.data?.summary || {};
         const financeByTariff = financeTariffRes?.data?.by_tariff || [];
         const financeTimeseries = financeTimeseriesRes?.data?.timeseries || [];
+        const trafficSummary = trafficSummaryRes?.data?.summary || {};
+        const trafficBySource = trafficSourceRes?.data?.by_source || [];
+        const trafficByCampaign = trafficCampaignRes?.data?.by_campaign || [];
 
         const isEmpty = !matrixRows.length && !funnelRows.length && !dropoffRows.length;
         if (isEmpty) {
           stateNode.textContent = "Нет данных за выбранный период.";
           renderKpis({}, [], []);
+          renderTrafficKpis({}, []);
+          renderTrafficTables([], []);
           renderFunnelChart([]);
           renderAnalyticsTable("analyticsMatrix", ["from", "to", "count", "share"], []);
           renderAnalyticsTable("analyticsBottlenecks", ["Переход", "CR", "Drop-off", "Медиана времени"], []);
@@ -2998,6 +3060,8 @@ def admin_ui(request: Request) -> HTMLResponse:
         }
 
         renderKpis(summary, funnelRows, dropoffRows);
+        renderTrafficKpis(trafficSummary, trafficBySource);
+        renderTrafficTables(trafficBySource, trafficByCampaign);
         renderFunnelChart(funnelRows);
         renderFinanceSummary(financeSummary);
         renderAnalyticsTable(
@@ -3426,12 +3490,14 @@ class TrafficSummaryItem(BaseModel):
 class TrafficSourceItem(BaseModel):
     source: str
     users: int
+    conversion_to_paid: float
 
 
 class TrafficSourceCampaignItem(BaseModel):
     source: str
     campaign: str
     users: int
+    conversion: float
 
 
 _TRANSITION_SCREEN_WHITELIST: frozenset[str] = frozenset(
