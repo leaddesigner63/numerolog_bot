@@ -428,7 +428,10 @@ python scripts/check_landing_content.py
 - `GET /admin/api/analytics/transitions/summary`,
 - `GET /admin/api/analytics/transitions/matrix`,
 - `GET /admin/api/analytics/transitions/funnel`,
-- `GET /admin/api/analytics/transitions/timing`.
+- `GET /admin/api/analytics/transitions/timing`,
+- `GET /admin/api/analytics/traffic/summary`,
+- `GET /admin/api/analytics/traffic/by-source`,
+- `GET /admin/api/analytics/traffic/by-campaign`.
 
 Общие query-параметры и ограничения:
 - `from`, `to` — период (ISO datetime),
@@ -447,6 +450,12 @@ python scripts/check_landing_content.py
 - `warnings` (например, при малом объёме данных).
 
 Неизвестные экраны нормализуются в `UNKNOWN`, пустые выборки возвращаются как корректные пустые JSON-массивы.
+
+Для traffic-срезов:
+- `traffic/summary` возвращает общее число стартов и воронку `started -> reached_tariff -> paid`;
+- `traffic/by-source` поддерживает `top_n`;
+- `traffic/by-campaign` поддерживает `top_n` и пагинацию (`page`, `page_size`);
+- при частичных сбоях БД traffic-эндпоинты возвращают безопасный fallback с `warnings`, а не HTTP 500.
 
 ## Автодеплой
 
@@ -707,7 +716,10 @@ sudo systemctl restart numerolog.target
 - `GET /admin/api/analytics/transitions/summary`,
 - `GET /admin/api/analytics/transitions/matrix`,
 - `GET /admin/api/analytics/transitions/funnel`,
-- `GET /admin/api/analytics/transitions/timing`.
+- `GET /admin/api/analytics/transitions/timing`,
+- `GET /admin/api/analytics/traffic/summary`,
+- `GET /admin/api/analytics/traffic/by-source`,
+- `GET /admin/api/analytics/traffic/by-campaign`.
 
 Общие query-параметры и ограничения:
 - `from`, `to` — период (ISO datetime),
@@ -726,6 +738,12 @@ sudo systemctl restart numerolog.target
 - `warnings` (например, при малом объёме данных).
 
 Неизвестные экраны нормализуются в `UNKNOWN`, пустые выборки возвращаются как корректные пустые JSON-массивы.
+
+Для traffic-срезов:
+- `traffic/summary` возвращает общее число стартов и воронку `started -> reached_tariff -> paid`;
+- `traffic/by-source` поддерживает `top_n`;
+- `traffic/by-campaign` поддерживает `top_n` и пагинацию (`page`, `page_size`);
+- при частичных сбоях БД traffic-эндпоинты возвращают безопасный fallback с `warnings`, а не HTTP 500.
 
 ## Автодеплой
 

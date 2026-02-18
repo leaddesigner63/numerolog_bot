@@ -20,7 +20,9 @@ from app.services.admin_analytics import (
     AnalyticsFilters,
     FinanceAnalyticsFilters,
     MarketingAnalyticsFilters,
+    TrafficAnalyticsFilters,
     build_finance_analytics,
+    build_traffic_analytics,
     build_marketing_subscription_analytics,
     build_screen_transition_analytics,
     parse_trigger_type,
@@ -3416,6 +3418,22 @@ class FinanceTimeseriesItem(BaseModel):
     data_source: str
 
 
+class TrafficSummaryItem(BaseModel):
+    users_started_total: int
+    conversions: list[dict]
+
+
+class TrafficSourceItem(BaseModel):
+    source: str
+    users: int
+
+
+class TrafficSourceCampaignItem(BaseModel):
+    source: str
+    campaign: str
+    users: int
+
+
 _TRANSITION_SCREEN_WHITELIST: frozenset[str] = frozenset(
     {
         "S0",
@@ -3563,6 +3581,23 @@ def _safe_build_marketing_subscription_analytics(session: Session, filters: Mark
             status_code=503,
             detail="База данных временно перегружена. Попробуйте повторить запрос позже.",
         ) from exc
+
+
+def _safe_build_traffic_analytics(session: Session, filters: TrafficAnalyticsFilters) -> tuple[dict, list[str]]:
+    fallback_data = {
+        "users_started_total": 0,
+        "users_by_source": [],
+        "users_by_source_campaign": [],
+        "conversions": [],
+    }
+    try:
+        return build_traffic_analytics(session, filters), []
+    except (OperationalError, SQLAlchemyTimeoutError):
+        logger.exception("admin_traffic_analytics_db_unavailable")
+        return fallback_data, ["Часть аналитики недоступна: база данных временно перегружена."]
+    except Exception:
+        logger.exception("admin_traffic_analytics_unexpected_error")
+        return fallback_data, ["Часть аналитики недоступна: используется безопасный fallback-ответ."]
 
 
 def _transition_analytics_cache_key(filters: AnalyticsFilters) -> tuple:
@@ -3803,6 +3838,38 @@ def _build_marketing_filters(
     return MarketingAnalyticsFilters(from_dt=from_dt, to_dt=to_dt)
 
 
+def _build_traffic_filters(
+    *,
+    from_dt: datetime | None,
+    to_dt: datetime | None,
+    period: str | None,
+    tariff: str | None,
+) -> tuple[TrafficAnalyticsFilters, dict]:
+    from_dt, to_dt, normalized_period = _resolve_period_bounds(period, from_dt, to_dt)
+    if from_dt and to_dt and from_dt > to_dt:
+        raise HTTPException(status_code=422, detail="Parameter 'from' must be less than or equal to 'to'")
+    filters = TrafficAnalyticsFilters(from_dt=from_dt, to_dt=to_dt, tariff=tariff)
+    return filters, {
+        "from_dt": from_dt.isoformat() if from_dt else None,
+        "to_dt": to_dt.isoformat() if to_dt else None,
+        "period": normalized_period,
+        "tariff": tariff,
+    }
+
+
+def _paginate_items(items: list[dict], *, page: int, page_size: int) -> tuple[list[dict], dict]:
+    total_items = len(items)
+    total_pages = (total_items + page_size - 1) // page_size if total_items else 0
+    offset = (page - 1) * page_size
+    page_items = items[offset : offset + page_size]
+    return page_items, {
+        "page": page,
+        "page_size": page_size,
+        "total_items": total_items,
+        "total_pages": total_pages,
+    }
+
+
 @router.get("/api/analytics/finance/summary")
 def admin_finance_summary(
     from_dt: datetime | None = Query(default=None, alias="from"),
@@ -3865,6 +3932,78 @@ def admin_marketing_subscriptions_summary(
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "data": {"summary": result},
+    }
+
+
+@router.get("/api/analytics/traffic/summary")
+def admin_traffic_summary(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
+    tariff: str | None = Query(default=None),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
+    result, warnings = _safe_build_traffic_analytics(session, filters)
+    summary = TrafficSummaryItem.model_validate(
+        {
+            "users_started_total": result.get("users_started_total", 0),
+            "conversions": result.get("conversions", []),
+        }
+    ).model_dump(mode="json")
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "filters_applied": filters_applied,
+        "data": {"summary": summary},
+        "warnings": warnings,
+    }
+
+
+@router.get("/api/analytics/traffic/by-source")
+def admin_traffic_by_source(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
+    tariff: str | None = Query(default=None),
+    top_n: int = Query(default=20, ge=1, le=500),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
+    result, warnings = _safe_build_traffic_analytics(session, filters)
+    rows = [
+        TrafficSourceItem.model_validate(item).model_dump(mode="json")
+        for item in _slice_top_n(result.get("users_by_source", []), top_n)
+    ]
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "filters_applied": {**filters_applied, "top_n": top_n},
+        "data": {"by_source": rows},
+        "warnings": warnings,
+    }
+
+
+@router.get("/api/analytics/traffic/by-campaign")
+def admin_traffic_by_campaign(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
+    tariff: str | None = Query(default=None),
+    top_n: int = Query(default=200, ge=1, le=5000),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=500),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
+    result, warnings = _safe_build_traffic_analytics(session, filters)
+    top_rows = _slice_top_n(result.get("users_by_source_campaign", []), top_n)
+    paged_rows, pagination = _paginate_items(top_rows, page=page, page_size=page_size)
+    rows = [TrafficSourceCampaignItem.model_validate(item).model_dump(mode="json") for item in paged_rows]
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "filters_applied": {**filters_applied, "top_n": top_n},
+        "pagination": pagination,
+        "data": {"by_campaign": rows},
+        "warnings": warnings,
     }
 
 
