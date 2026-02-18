@@ -37,7 +37,7 @@ app/
     report_safety.py  # фильтрация запрещённых слов, гарантий и красных зон
     report_service.py # сервис генерации отчёта и каркаса T0-T3
   db/                 # модели и подключение к БД
-    models.py         # включает report_jobs, support_dialog_messages и screen_transition_events (аналитика переходов экранов)
+    models.py         # включает report_jobs, support_dialog_messages, screen_transition_events и user_first_touch_attribution (first-touch атрибуция /start-пейлоада)
   services/           # сервисы бизнес-логики API/бота
     admin_analytics.py # агрегации аналитики переходов + финансовый слой (provider-confirmed funnel/revenue/timeseries)
     marketing_messaging.py # единый сервис отправки маркетинговых сообщений (consent-check, ссылка отписки, campaign-логирование)

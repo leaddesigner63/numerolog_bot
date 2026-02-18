@@ -17,6 +17,7 @@ from app.db.models import (
     PaymentProvider,
     Tariff,
     User,
+    UserFirstTouchAttribution,
 )
 
 
@@ -79,6 +80,15 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
             order_id = order.id
             session.commit()
         return order_id
+
+
+    def _first_touch_records(self, user_id: int = 1001) -> list[UserFirstTouchAttribution]:
+        with self.SessionLocal() as session:
+            return list(
+                session.query(UserFirstTouchAttribution)
+                .filter(UserFirstTouchAttribution.telegram_user_id == user_id)
+                .all()
+            )
 
     def _message(self, text: str, user_id: int = 1001):
         return SimpleNamespace(
@@ -149,6 +159,40 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(snapshot.data.get("order_id"))
         self.assertIsNone(snapshot.data.get("selected_tariff"))
         self.assertFalse(snapshot.data.get("payment_processing_notice"))
+
+
+    async def test_start_captures_first_touch_with_partial_payload_without_failures(self) -> None:
+        with patch.object(screen_manager, "show_screen", new=AsyncMock()):
+            await start_module.handle_start(self._message("/start source_only"))
+
+        records = self._first_touch_records()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].start_payload, "source_only")
+        self.assertEqual(records[0].source, "source")
+        self.assertEqual(records[0].campaign, "only")
+        self.assertIsNone(records[0].placement)
+        self.assertEqual(records[0].raw_parts, ["source", "only"])
+
+    async def test_start_first_touch_is_recorded_only_once_per_user(self) -> None:
+        with patch.object(screen_manager, "show_screen", new=AsyncMock()):
+            await start_module.handle_start(self._message("/start alpha_beta"))
+            await start_module.handle_start(self._message("/start gamma_delta"))
+
+        records = self._first_touch_records()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].start_payload, "alpha_beta")
+
+    async def test_start_captures_empty_payload_with_safe_defaults(self) -> None:
+        with patch.object(screen_manager, "show_screen", new=AsyncMock()):
+            await start_module.handle_start(self._message("/start"))
+
+        records = self._first_touch_records()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].start_payload, "")
+        self.assertIsNone(records[0].source)
+        self.assertIsNone(records[0].campaign)
+        self.assertIsNone(records[0].placement)
+        self.assertEqual(records[0].raw_parts, [])
 
     async def test_start_ignores_paid_history_without_payload(self) -> None:
         self._create_order(1, OrderStatus.PAID)

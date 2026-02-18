@@ -139,6 +139,44 @@ class User(Base):
     marketing_consent_events: Mapped[list["MarketingConsentEvent"]] = relationship(
         back_populates="user"
     )
+    first_touch_attribution: Mapped["UserFirstTouchAttribution"] = relationship(
+        back_populates="user",
+        uselist=False,
+    )
+
+
+class UserFirstTouchAttribution(Base):
+    __tablename__ = "user_first_touch_attribution"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    telegram_user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.telegram_user_id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+        index=True,
+    )
+    start_payload: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    campaign: Mapped[str | None] = mapped_column(Text, nullable=True)
+    placement: Mapped[str | None] = mapped_column(Text, nullable=True)
+    raw_parts: Mapped[dict[str, Any] | list[Any] | None] = mapped_column(JSON, nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    user: Mapped[User] = relationship(back_populates="first_touch_attribution")
 
 
 class UserProfile(Base):
