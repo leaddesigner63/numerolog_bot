@@ -424,6 +424,144 @@ class AdminAnalyticsTests(unittest.TestCase):
         self.assertEqual(conversion["paid"]["users"], 1)
         self.assertEqual(conversion["paid"]["conversion_from_start"], 0.5)
 
+    def test_traffic_analytics_aggregates_source_campaign_and_conversion_rates(self) -> None:
+        base_time = datetime(2026, 2, 1, tzinfo=timezone.utc)
+        from app.db.models import (
+            Order,
+            OrderStatus,
+            PaymentConfirmationSource,
+            PaymentProvider,
+            Tariff,
+            User,
+            UserFirstTouchAttribution,
+        )
+
+        with self.Session() as session:
+            session.add_all(
+                [
+                    User(id=11, telegram_user_id=5011),
+                    User(id=12, telegram_user_id=5012),
+                    User(id=13, telegram_user_id=5013),
+                    User(id=14, telegram_user_id=5014),
+                ]
+            )
+            session.add_all(
+                [
+                    UserFirstTouchAttribution(
+                        telegram_user_id=5011,
+                        start_payload="src_vk_cmp_winter",
+                        source="vk",
+                        campaign="winter",
+                        captured_at=base_time,
+                    ),
+                    UserFirstTouchAttribution(
+                        telegram_user_id=5012,
+                        start_payload="src_vk_cmp_winter",
+                        source="vk",
+                        campaign="winter",
+                        captured_at=base_time + timedelta(minutes=1),
+                    ),
+                    UserFirstTouchAttribution(
+                        telegram_user_id=5013,
+                        start_payload="src_vk_cmp_spring",
+                        source="vk",
+                        campaign="spring",
+                        captured_at=base_time + timedelta(minutes=2),
+                    ),
+                    UserFirstTouchAttribution(
+                        telegram_user_id=5014,
+                        start_payload="direct",
+                        source=None,
+                        campaign=None,
+                        captured_at=base_time + timedelta(minutes=3),
+                    ),
+                ]
+            )
+            session.add_all(
+                [
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=5011,
+                        from_screen_id="S1",
+                        to_screen_id="S3",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T2"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=5012,
+                        from_screen_id="S1",
+                        to_screen_id="S4",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T2"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=5013,
+                        from_screen_id="S1",
+                        to_screen_id="S3",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T2"},
+                    ),
+                ]
+            )
+            session.add_all(
+                [
+                    Order(
+                        user_id=11,
+                        tariff=Tariff.T2,
+                        amount=1200,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=base_time + timedelta(hours=2),
+                    ),
+                    Order(
+                        user_id=13,
+                        tariff=Tariff.T2,
+                        amount=1200,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=base_time + timedelta(hours=3),
+                    ),
+                ]
+            )
+            session.flush()
+            for idx, event in enumerate(session.query(ScreenTransitionEvent).order_by(ScreenTransitionEvent.id.asc()).all()):
+                event.created_at = base_time + timedelta(minutes=idx)
+            session.commit()
+
+            result = build_traffic_analytics(
+                session,
+                TrafficAnalyticsFilters(
+                    from_dt=base_time - timedelta(days=1),
+                    to_dt=base_time + timedelta(days=1),
+                    tariff="T2",
+                ),
+            )
+
+        self.assertEqual(result["users_started_total"], 3)
+        self.assertEqual(
+            result["users_by_source"],
+            [
+                {"source": "vk", "users": 3, "conversion_to_paid": 0.666667},
+            ],
+        )
+        self.assertEqual(
+            result["users_by_source_campaign"],
+            [
+                {"source": "vk", "campaign": "winter", "users": 2, "conversion": 0.5},
+                {"source": "vk", "campaign": "spring", "users": 1, "conversion": 1.0},
+            ],
+        )
+        conversion = {row["step"]: row for row in result["conversions"]}
+        self.assertEqual(conversion["started"]["users"], 3)
+        self.assertEqual(conversion["reached_tariff"]["users"], 3)
+        self.assertEqual(conversion["paid"]["users"], 2)
+        self.assertEqual(conversion["paid"]["conversion_from_start"], 0.666667)
+
 
 if __name__ == "__main__":
     unittest.main()

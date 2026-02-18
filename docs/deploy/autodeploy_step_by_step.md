@@ -93,6 +93,28 @@
    journalctl -u <service_name> -n 200 --no-pager
    ```
 
+5. Сразу после деплоя проверьте Alembic-ревизию first-touch атрибуции:
+   ```bash
+   cd /opt/numerolog_bot
+   alembic current
+   ```
+   В выводе должна присутствовать `0029_add_user_first_touch_attribution`.
+
+
+5. Проверьте traffic analytics endpoint после деплоя:
+   ```bash
+   curl -sS -u "$ADMIN_LOGIN:$ADMIN_PASSWORD" "https://<домен>/admin/api/analytics/traffic/summary?period=7d"
+   ```
+   Ожидается HTTP 200 и JSON с `data.summary.users_started_total` и `data.summary.conversions`.
+
+6. Проверьте детальные срезы traffic:
+   ```bash
+   curl -sS -u "$ADMIN_LOGIN:$ADMIN_PASSWORD" "https://<домен>/admin/api/analytics/traffic/by-source?period=7d&top_n=10"
+   curl -sS -u "$ADMIN_LOGIN:$ADMIN_PASSWORD" "https://<домен>/admin/api/analytics/traffic/by-campaign?period=7d&top_n=20&page=1&page_size=20"
+   ```
+
+7. В админке откройте блок Analytics → Traffic и убедитесь, что карточки/таблицы отрисованы без ошибок.
+
 ## 7) Рекомендации по эксплуатации
 
 - Используйте отдельный SSH-ключ только для деплоя.
@@ -117,3 +139,9 @@
    curl -I "http://<домен>/?utm_source=test&utm_campaign=test"
    ```
    В `Location` должны остаться `utm_source` и `utm_campaign`.
+
+## Короткий post-deploy чек-лист
+
+- [ ] Миграция `0029_add_user_first_touch_attribution` применена.
+- [ ] `/admin/api/analytics/traffic/summary` отвечает `200` и возвращает `data.summary`.
+- [ ] В админке блок Traffic показывает данные (или корректный empty-state).

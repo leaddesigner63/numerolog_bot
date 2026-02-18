@@ -3,23 +3,29 @@
 Ниже — пошаговая инструкция настройки автодеплоя через GitHub Actions с деплоем по SSH на ваш сервер.
 
 ## Проверка после автодеплоя (обязательно)
-1. Откройте админку `/admin` и авторизуйтесь.
+1. Проверьте миграции Alembic: `alembic current` должен включать ревизию `0029_add_user_first_touch_attribution`.
+2. Откройте админку `/admin` и авторизуйтесь.
 2. Перейдите в раздел **«Пользователи»** и убедитесь, что видны колонки:
    - `Подтв. заказов`,
    - `Подтв. выручка`,
    - `Ручных paid (подтв.)`.
-3. Нажмите кнопку **«Открыть заказы пользователя с фин-фильтром»** в любой строке пользователя — должен открыться раздел **«Заказы»** с подтверждёнными оплатами выбранного пользователя.
-4. Проверьте API-фильтрацию:
+4. Нажмите кнопку **«Открыть заказы пользователя с фин-фильтром»** в любой строке пользователя — должен открыться раздел **«Заказы»** с подтверждёнными оплатами выбранного пользователя.
+5. Проверьте API-фильтрацию:
    - `GET /admin/api/orders?user_id=<ID>&payment_confirmed=true`
    - `GET /admin/api/users?sort_by=confirmed_revenue_total&sort_dir=desc`
    - `GET /api/public/tariffs` (цены для страницы `/prices/` должны совпадать с тарифами бота).
-5. Откройте страницу `/prices/` и убедитесь, что отображаемые цены совпадают с ответом `GET /api/public/tariffs` (страница берет цены из API бота).
-6. Перейдите в раздел **Analytics** и убедитесь, что отображаются блоки «Финансовая воронка» и «Выручка по тарифам» с пометкой `provider-confirmed only`, а также мини-график выручки по дням.
-7. Проверьте новые финансовые endpoints:
+6. Откройте страницу `/prices/` и убедитесь, что отображаемые цены совпадают с ответом `GET /api/public/tariffs` (страница берет цены из API бота).
+7. Перейдите в раздел **Analytics** и убедитесь, что отображаются блоки «Финансовая воронка», «Traffic KPI/источники/кампании» и «Выручка по тарифам» с пометкой `provider-confirmed only`.
+8. Проверьте новые финансовые endpoints:
    - `GET /admin/api/analytics/finance/summary?period=7d`
    - `GET /admin/api/analytics/finance/by-tariff?period=7d`
    - `GET /admin/api/analytics/finance/timeseries?period=7d`
-8. Проверьте финальные CTA-блоки с кнопкой **«Открыть в Telegram»** на страницах `/prices/`, `/articles/`, `/faq/`, `/contacts/`, `/404.html`, `/legal/privacy/`, `/legal/consent/`, `/legal/offer/` (кнопка должна вести на актуальный `https://t.me/AIreadUbot`).
+9. Выполните smoke-check traffic analytics endpoints:
+   - `GET /admin/api/analytics/traffic/summary?period=7d`
+   - `GET /admin/api/analytics/traffic/by-source?period=7d&top_n=10`
+   - `GET /admin/api/analytics/traffic/by-campaign?period=7d&top_n=20&page=1&page_size=20`
+10. Убедитесь, что блоки traffic в админке показывают непустые данные (или корректный пустой state без ошибок), а API-ответы содержат ключи `data`, `filters_applied`, `warnings`.
+11. Проверьте финальные CTA-блоки с кнопкой **«Открыть в Telegram»** на страницах `/prices/`, `/articles/`, `/faq/`, `/contacts/`, `/404.html`, `/legal/privacy/`, `/legal/consent/`, `/legal/offer/` (кнопка должна вести на актуальный `https://t.me/AIreadUbot`).
 9. Проверьте, что после деплоя открываются новые SEO-статьи: `/articles/numerology-date-of-birth/`, `/articles/destiny-number-and-purpose/`, `/articles/money-and-career-by-date-of-birth/`, `/articles/ai-natal-chart-and-personality-analysis/`.
 10. Откройте `/legal/privacy/` и убедитесь, что опубликованы актуальные реквизиты оператора, email и телефон для обращений по персональным данным.
 11. Откройте `/legal/consent/` и убедитесь, что текст согласия на обработку ПДн содержит актуальные реквизиты оператора и контакт для отзыва согласия.
@@ -272,3 +278,9 @@ server {
 8. Откройте `/admin` и проверьте блок «Сводка»: карточки «Подтверждено провайдером» и «Отмечено вручную» должны отображаться раздельно.
 9. В разделе «Отчёты» проверьте колонку «Фин. основание», фильтры «Только provider-confirmed» и «Только без подтверждённой оплаты»; убедитесь, что алерт появляется только для кейсов `report exists + payment not confirmed` и кнопка «Показать только проблемные» работает.
 10. Проверьте контракт API отчётов после деплоя: `curl -s "https://<ваш-домен>/admin/api/reports?financial_basis=provider_confirmed"` и `curl -s "https://<ваш-домен>/admin/api/reports?payment_not_confirmed_only=true"`.
+
+## Короткий post-deploy чек-лист (traffic attribution)
+
+- [ ] Миграция `0029_add_user_first_touch_attribution` применена (`alembic current`).
+- [ ] Endpoint `/admin/api/analytics/traffic/summary` отвечает `200` и возвращает `data.summary`.
+- [ ] В админке в блоке Traffic отображаются KPI/таблицы источников и кампаний (или корректный пустой state без JS-ошибок).
