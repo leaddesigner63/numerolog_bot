@@ -25,6 +25,7 @@ from app.db.models import (
     UserProfile,
     MarketingConsentEvent,
     MarketingConsentEventType,
+    UserFirstTouchAttribution,
 )
 from app.main import create_app
 
@@ -890,6 +891,96 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertIn("временно перегружена", response.json()["detail"])
+
+    def test_traffic_analytics_endpoints_return_summary_and_breakdowns(self) -> None:
+        base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    User(id=701, telegram_user_id=9701),
+                    User(id=702, telegram_user_id=9702),
+                    User(id=703, telegram_user_id=9703),
+                ]
+            )
+            session.add_all(
+                [
+                    UserFirstTouchAttribution(
+                        telegram_user_id=9701,
+                        source="instagram",
+                        campaign="new-year",
+                        start_payload="src=instagram",
+                        raw_parts={"src": "instagram"},
+                        captured_at=base_time,
+                    ),
+                    UserFirstTouchAttribution(
+                        telegram_user_id=9702,
+                        source="instagram",
+                        campaign="new-year",
+                        start_payload="src=instagram",
+                        raw_parts={"src": "instagram"},
+                        captured_at=base_time + timedelta(minutes=1),
+                    ),
+                    UserFirstTouchAttribution(
+                        telegram_user_id=9703,
+                        source="google",
+                        campaign="search-brand",
+                        start_payload="src=google",
+                        raw_parts={"src": "google"},
+                        captured_at=base_time + timedelta(minutes=2),
+                    ),
+                ]
+            )
+            session.commit()
+
+        summary = self.client.get("/admin/api/analytics/traffic/summary")
+        self.assertEqual(summary.status_code, 200)
+        summary_payload = summary.json()
+        self.assertEqual(summary_payload["data"]["summary"]["users_started_total"], 3)
+        self.assertIn("conversions", summary_payload["data"]["summary"])
+        self.assertEqual(summary_payload["warnings"], [])
+
+        by_source = self.client.get("/admin/api/analytics/traffic/by-source", params={"top_n": 1})
+        self.assertEqual(by_source.status_code, 200)
+        by_source_payload = by_source.json()
+        self.assertEqual(len(by_source_payload["data"]["by_source"]), 1)
+        self.assertEqual(by_source_payload["data"]["by_source"][0]["source"], "instagram")
+        self.assertEqual(by_source_payload["filters_applied"]["top_n"], 1)
+
+        by_campaign = self.client.get(
+            "/admin/api/analytics/traffic/by-campaign",
+            params={"top_n": 2, "page": 1, "page_size": 1},
+        )
+        self.assertEqual(by_campaign.status_code, 200)
+        by_campaign_payload = by_campaign.json()
+        self.assertEqual(len(by_campaign_payload["data"]["by_campaign"]), 1)
+        self.assertEqual(by_campaign_payload["pagination"]["total_items"], 2)
+        self.assertEqual(by_campaign_payload["pagination"]["total_pages"], 2)
+        self.assertEqual(by_campaign_payload["filters_applied"]["top_n"], 2)
+
+    def test_traffic_analytics_endpoints_return_safe_fallback_on_db_error(self) -> None:
+        with patch.object(
+            admin_routes,
+            "build_traffic_analytics",
+            side_effect=OperationalError("SELECT 1", {}, Exception("db overloaded")),
+        ):
+            summary = self.client.get("/admin/api/analytics/traffic/summary")
+            by_source = self.client.get("/admin/api/analytics/traffic/by-source")
+            by_campaign = self.client.get("/admin/api/analytics/traffic/by-campaign")
+
+        self.assertEqual(summary.status_code, 200)
+        summary_payload = summary.json()
+        self.assertEqual(summary_payload["data"]["summary"]["users_started_total"], 0)
+        self.assertTrue(summary_payload["warnings"])
+
+        self.assertEqual(by_source.status_code, 200)
+        self.assertEqual(by_source.json()["data"]["by_source"], [])
+        self.assertTrue(by_source.json()["warnings"])
+
+        self.assertEqual(by_campaign.status_code, 200)
+        campaign_payload = by_campaign.json()
+        self.assertEqual(campaign_payload["data"]["by_campaign"], [])
+        self.assertEqual(campaign_payload["pagination"]["total_items"], 0)
+        self.assertTrue(campaign_payload["warnings"])
 
     def test_admin_ui_contains_finance_blocks_and_period_filter(self) -> None:
         with patch.object(admin_routes, "_admin_credentials_ready", return_value=True), patch.object(
