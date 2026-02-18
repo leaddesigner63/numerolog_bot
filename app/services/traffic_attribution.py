@@ -1,5 +1,6 @@
 import re
 from typing import Any
+from urllib.parse import parse_qs, unquote_plus, urlparse
 
 from sqlalchemy import select
 
@@ -21,6 +22,20 @@ def _extract_marker_value(payload: str, marker: str, next_markers: tuple[str, ..
 
 def parse_first_touch_payload(payload: str | None) -> dict[str, Any]:
     raw_payload = payload or ""
+    parsed_query_payload = ""
+    if raw_payload:
+        decoded_payload = unquote_plus(raw_payload)
+        if "?" in decoded_payload:
+            query = urlparse(decoded_payload).query
+            if query:
+                parsed_query_payload = (parse_qs(query).get("start") or [""])[0]
+        if not parsed_query_payload and decoded_payload.startswith("start="):
+            parsed_query_payload = decoded_payload.split("start=", maxsplit=1)[-1]
+        if parsed_query_payload:
+            raw_payload = parsed_query_payload
+        else:
+            raw_payload = decoded_payload
+
     raw_parts = raw_payload.split("_") if raw_payload else []
 
     source = _extract_marker_value(raw_payload, "src_", ("cmp_", "pl_"))

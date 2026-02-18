@@ -61,6 +61,21 @@ class TrafficAttributionUserBootstrapTests(unittest.TestCase):
         self.assertEqual(record.campaign, "seo")
         self.assertEqual(record.placement, "cta")
 
+    def test_parse_first_touch_payload_supports_tme_links_and_start_prefix(self) -> None:
+        parsed_from_link = traffic_attribution_module.parse_first_touch_payload(
+            "https://t.me/AIreadUbot?start=site_seo_cta"
+        )
+        self.assertEqual(parsed_from_link["start_payload"], "site_seo_cta")
+        self.assertEqual(parsed_from_link["source"], "site")
+        self.assertEqual(parsed_from_link["campaign"], "seo")
+        self.assertEqual(parsed_from_link["placement"], "cta")
+
+        parsed_from_prefix = traffic_attribution_module.parse_first_touch_payload("start=site_seo_cta")
+        self.assertEqual(parsed_from_prefix["start_payload"], "site_seo_cta")
+        self.assertEqual(parsed_from_prefix["source"], "site")
+        self.assertEqual(parsed_from_prefix["campaign"], "seo")
+        self.assertEqual(parsed_from_prefix["placement"], "cta")
+
 
 if __name__ == "__main__":
     unittest.main()
