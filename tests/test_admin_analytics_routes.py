@@ -767,6 +767,21 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertIn("reportsAlerts", html)
         self.assertIn("showProblemReportsFromAlert", html)
         self.assertIn("Фин. основание", html)
+
+    def test_admin_ui_contains_human_friendly_unknown_transition_labels(self) -> None:
+        with patch.object(admin_routes, "_admin_credentials_ready", return_value=True), patch.object(
+            admin_routes,
+            "_admin_session_token",
+            return_value="token",
+        ):
+            response = self.client.get("/admin", cookies={"admin_session": "token"})
+
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn('ENTRY: "Вход в сценарий"', html)
+        self.assertIn('EXIT: "Выход из сценария"', html)
+        self.assertIn("screenLabelInTransition", html)
+
     def test_finance_analytics_endpoints_return_provider_confirmed_metrics(self) -> None:
         base_time = datetime.now(timezone.utc)
         with self.SessionLocal() as session:

@@ -2754,7 +2754,10 @@ def admin_ui(request: Request) -> HTMLResponse:
       S12: "Повторная оплата/проверка",
       S13: "Поддержка: список диалогов",
       S14: "Поддержка: диалог с пользователем",
+      S15: "Поддержка: закрытие диалога",
       UNKNOWN: "Неизвестный экран",
+      ENTRY: "Вход в сценарий",
+      EXIT: "Выход из сценария",
     };
 
     function screenLabel(screenId) {
@@ -2771,6 +2774,16 @@ def admin_ui(request: Request) -> HTMLResponse:
         return `${raw} — ${description}`;
       }
       return `${raw} — ${description} (${baseId})`;
+    }
+
+    function screenLabelInTransition(screenId, oppositeScreenId, isFromColumn) {
+      const current = (screenId || "").toString().trim().toUpperCase();
+      const opposite = (oppositeScreenId || "").toString().trim().toUpperCase();
+      const oppositeKnown = Boolean(opposite && opposite !== "UNKNOWN");
+      if (current === "UNKNOWN" && oppositeKnown) {
+        return screenLabel(isFromColumn ? "ENTRY" : "EXIT");
+      }
+      return screenLabel(current);
     }
 
     function toIsoFromLocal(value) {
@@ -3092,8 +3105,8 @@ def admin_ui(request: Request) -> HTMLResponse:
           "analyticsMatrix",
           ["From", "To", "Переходов", "Доля"],
           matrixRows.map((row) => [
-            {value: screenLabel(row.from_screen)},
-            {value: screenLabel(row.to_screen)},
+            {value: screenLabelInTransition(row.from_screen, row.to_screen, true)},
+            {value: screenLabelInTransition(row.to_screen, row.from_screen, false)},
             {value: Number(row.count) || 0},
             {value: formatPercent(row.share)},
           ])
@@ -3110,7 +3123,7 @@ def admin_ui(request: Request) -> HTMLResponse:
           const medianSec = Number(timing?.median_seconds) || 0;
           const isProblem = cr < analyticsThresholds.lowCr || dropoffShare > analyticsThresholds.highDropoff || medianSec > analyticsThresholds.longDurationSec;
           return {
-            transition: `${screenLabel(row.from_screen)} → ${screenLabel(row.to_screen)}`,
+            transition: `${screenLabelInTransition(row.from_screen, row.to_screen, true)} → ${screenLabelInTransition(row.to_screen, row.from_screen, false)}`,
             cr,
             dropoffShare,
             medianSec,
