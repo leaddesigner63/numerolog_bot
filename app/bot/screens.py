@@ -686,9 +686,15 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 )
             ]
         )
+    show_paid_tariff_continue = (
+        has_profile
+        and selected_tariff_raw in {"T1", "T2", "T3"}
+        and not requires_payment
+    )
     show_profile_flow_compact_keyboard = profile_flow and has_profile and not requires_payment
+    show_continue_button = show_profile_flow_compact_keyboard or show_paid_tariff_continue
 
-    if show_profile_flow_compact_keyboard:
+    if show_continue_button:
         rows.append(
             [
                 InlineKeyboardButton(
