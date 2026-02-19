@@ -691,8 +691,17 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         and selected_tariff_raw in {"T1", "T2", "T3"}
         and not requires_payment
     )
+    show_t0_continue = has_profile and is_t0
+    show_paid_order_continue_without_tariff = (
+        has_profile and order_status == "paid" and not requires_payment
+    )
     show_profile_flow_compact_keyboard = profile_flow and has_profile and not requires_payment
-    show_continue_button = show_profile_flow_compact_keyboard or show_paid_tariff_continue
+    show_continue_button = (
+        show_profile_flow_compact_keyboard
+        or show_paid_tariff_continue
+        or show_t0_continue
+        or show_paid_order_continue_without_tariff
+    )
 
     if show_continue_button:
         rows.append(

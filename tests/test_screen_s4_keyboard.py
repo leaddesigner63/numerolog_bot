@@ -141,6 +141,31 @@ class ScreenS4KeyboardTests(unittest.TestCase):
         self.assertIn("👤 Кабинет", labels)
         self.assertIn("➡️ Тарифы", labels)
 
+    def test_t0_with_profile_shows_continue_button(self) -> None:
+        content = screen_s4(
+            {
+                "selected_tariff": "T0",
+                "profile": {
+                    "name": "Тест",
+                    "gender": "Мужской",
+                    "birth_date": "31.12.1988",
+                    "birth_time": "21:30",
+                    "birth_place": {
+                        "city": "Макеевка",
+                        "region": "Донецкая область",
+                        "country": "СССР",
+                    },
+                },
+            }
+        )
+
+        self.assertIsNotNone(content.keyboard)
+        labels = [button.text for row in content.keyboard.inline_keyboard for button in row]
+
+        self.assertIn("✅ Продолжить", labels)
+        self.assertIn("👤 Кабинет", labels)
+        self.assertIn("➡️ Тарифы", labels)
+
 
 if __name__ == "__main__":
     unittest.main()
