@@ -1,5 +1,71 @@
 # Автодеплой (GitHub Actions + SSH)
 
+## Короткий чеклист автодеплоя для текущего релиза (этап 1 флоу оплаты)
+1. В GitHub Secrets проверьте: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY`, `SERVICE_NAMES`.
+2. Убедитесь, что `.github/workflows/deploy.yml` запускается на push в рабочую ветку и вызывает `scripts/deploy.sh`.
+3. После push дождитесь успешного job `deploy` в GitHub Actions.
+4. На сервере выполните:
+   - `systemctl status numerolog-api.service numerolog-bot.service`
+   - `journalctl -u numerolog-bot.service -n 200 --no-pager`
+5. Смоук-проверка пользовательского флоу после деплоя:
+   - T1: `S1 -> S2 -> S4 -> S3 -> S6 -> S7`.
+   - T2/T3: `S1 -> S2 -> S4 -> S5 -> S3 -> S6 -> S7`.
+   - T0: старый путь без изменений.
+   - Проверка цены: на S2 цены нет, на S3 цена есть и совпадает с заказом/настройками.
+   - Проверка заказа: до финального checkout (S3) в state нет нового `order_id`; заказ появляется только при переходе к финальной оплате.
+   - Проверка доступа: профиль (S4) и анкета T2/T3 (S5) открываются до оплаты; проверка paid происходит только перед генерацией отчёта.
+   - Проверка `/start paywait_<order_id>`: unpaid заказ открывает S3 (ожидание оплаты), paid заказ открывает S6/S7 (post-payment генерация).
+6. Если откат обязателен: на сервере `git -C <DEPLOY_PATH> checkout <stable_commit>` и `sudo systemctl restart numerolog.target`.
+
+## CI/CD pipeline (пошагово, воспроизводимо)
+
+1. Push в `main` запускает `.github/workflows/deploy.yml`:
+   - `build_and_check`: установка зависимостей, compileall, `bash scripts/test.sh`;
+   - `smoke_checkout_flow`: целевой регрессионный прогон `bash scripts/smoke_check_checkout_flow.sh`;
+   - `deploy_production`: SSH-деплой на сервер и запуск `scripts/deploy.sh`.
+2. На GitHub должны быть настроены secrets:
+   - `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `DEPLOY_PATH`;
+   - `SERVICE_NAME` или `SERVICE_NAMES`;
+   - `ENV_FILE`, `PRESERVE_PATHS` (опционально);
+   - `LANDING_URL`, `LANDING_EXPECTED_CTA`, `LANDING_ASSET_URLS` (для landing smoke-check).
+3. На сервере заранее должны быть:
+   - рабочая копия репозитория в `DEPLOY_PATH`;
+   - systemd unit'ы API/бота;
+   - `.env` с обязательными `BOT_TOKEN`, `DATABASE_URL`.
+
+### Переменные окружения для нового checkout-at-end
+
+- Базовые: `BOT_TOKEN`, `DATABASE_URL`, `PAYMENT_ENABLED`, `PAYMENT_PROVIDER`.
+- Prodamus: `PRODAMUS_FORM_URL` (+ webhook secret/key по выбранной схеме).
+- CloudPayments: `CLOUDPAYMENTS_PUBLIC_ID` (+ API secret при использовании status API).
+- Если платёжные переменные не заданы, бот не должен падать: пользователь получает уведомление о недоступной ссылке оплаты.
+
+### Rollback plan
+
+1. Остановить автопрогон/вкатку при аварии.
+2. На сервере выполнить:
+   - `git -C <DEPLOY_PATH> fetch --all`
+   - `git -C <DEPLOY_PATH> checkout <stable_commit>`
+   - `sudo systemctl restart <services>`
+3. Проверить:
+   - `systemctl status <services>`
+   - `journalctl -u <service> -n 200 --no-pager`
+4. Выполнить smoke-check checkout-at-end:
+   - `bash scripts/smoke_check_checkout_flow.sh`
+
+Полный чеклист релиза: `docs/deploy/checkout_flow_release_checklist.md`.
+
+## Быстрый регрессионный прогон перед релизом
+```bash
+pytest -q \
+  tests/test_payment_screen_transitions.py \
+  tests/test_payment_screen_s3.py \
+  tests/test_report_job_requires_paid_order.py \
+  tests/test_profile_questionnaire_access_guards.py \
+  tests/test_start_payload_routing.py \
+  tests/test_payment_waiter_restore.py
+```
+
 Ниже — пошаговая инструкция настройки автодеплоя через GitHub Actions с деплоем по SSH на ваш сервер.
 
 ## Проверка после автодеплоя (обязательно)

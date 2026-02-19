@@ -150,7 +150,7 @@ class QuestionnaireDoneButtonEditModeTests(unittest.IsolatedAsyncioTestCase):
         ensure_paid_access = AsyncMock(return_value=False)
 
         with (
-            patch.object(questionnaire, "_ensure_paid_access", new=ensure_paid_access),
+            patch.object(questionnaire, "_ensure_questionnaire_access", new=ensure_paid_access),
             patch.object(questionnaire, "_ensure_profile_ready", new=AsyncMock(return_value=True)),
             patch.object(questionnaire.screen_manager, "send_ephemeral_message", new=AsyncMock()) as send_ephemeral_message,
             patch.object(questionnaire, "load_questionnaire_config") as load_questionnaire_config,

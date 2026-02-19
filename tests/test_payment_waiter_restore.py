@@ -100,6 +100,16 @@ class PaymentWaiterRestoreTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(restored, 0)
         ensure_waiter.assert_not_awaited()
 
+    async def test_restore_payment_waiters_ignores_non_checkout_screens(self) -> None:
+        order_id = self._create_order(OrderStatus.CREATED)
+        self._create_screen_state(order_id, screen_id="S4")
+
+        with patch.object(screens, "ensure_payment_waiter", new=AsyncMock()) as ensure_waiter:
+            restored = await screens.restore_payment_waiters(SimpleNamespace())
+
+        self.assertEqual(restored, 0)
+        ensure_waiter.assert_not_awaited()
+
 
 if __name__ == "__main__":
     unittest.main()

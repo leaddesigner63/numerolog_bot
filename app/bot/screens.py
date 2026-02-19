@@ -24,10 +24,19 @@ class ScreenContent:
 
 
 # Единый справочник тарифов (чтобы UI не расходился с логикой оплаты)
+def _tariff_price_from_settings(tariff: str) -> int:
+    prices = getattr(settings, "tariff_prices_rub", {}) or {}
+    raw_value = prices.get(tariff)
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError):
+        return 0
+
+
 TARIFF_META: dict[str, dict[str, Any]] = {
     "T0": {
         "title": "Твоё новое начало",
-        "price": settings.tariff_prices_rub["T0"],
+        "price": _tariff_price_from_settings("T0"),
         "bullets": [
             "структура полного отчёта (витрина)",
             "краткое резюме (5–7 пунктов)",
@@ -39,7 +48,7 @@ TARIFF_META: dict[str, dict[str, Any]] = {
     },
     "T1": {
         "title": "В чём твоя сила?",
-        "price": settings.tariff_prices_rub["T1"],
+        "price": _tariff_price_from_settings("T1"),
         "bullets": [
             "А ты уже знаешь в чём твоя сила? Ты ярче, чем думаешь. ИИ уже видит твой потенциал. "
             "Он раскроет твои предрасположенности, таланты и зоны роста. "
@@ -50,7 +59,7 @@ TARIFF_META: dict[str, dict[str, Any]] = {
     },
     "T2": {
         "title": "Где твои деньги?",
-        "price": settings.tariff_prices_rub["T2"],
+        "price": _tariff_price_from_settings("T2"),
         "bullets": [
             "Беспокоишься о деньгах и будущем? Остынь!😏\n"
             "Здесь ИИ копает намного глубже: Анализирует тебя с упором на доход и моделирует сценарии "
@@ -62,7 +71,7 @@ TARIFF_META: dict[str, dict[str, Any]] = {
     },
     "T3": {
         "title": "Твой путь к себе!",
-        "price": settings.tariff_prices_rub["T3"],
+        "price": _tariff_price_from_settings("T3"),
         "bullets": [
             "А ты знаешь, что можешь достичь большего, но не представляешь, с чего начать? Хватит действовать вслепую — "
             "тебе нужен чёткий план!🗓\n"
@@ -299,7 +308,7 @@ def screen_s1(_: dict[str, Any]) -> ScreenContent:
 def screen_s2(state: dict[str, Any]) -> ScreenContent:
     """
     S2 выполняет две роли:
-    - Если selected_tariff = T1/T2/T3: экран описания выбранного тарифа + переход к оплате.
+    - Если selected_tariff = T1/T2/T3: экран описания выбранного тарифа + переход к заполнению данных.
     - Если тариф не выбран: экран оферты/правил (доступен из меню).
     """
     selected_tariff_raw = state.get("selected_tariff")
@@ -330,7 +339,6 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
         return ScreenContent(messages=[text], keyboard=keyboard)
 
     # 2) Тариф выбран (T1/T2/T3) — показываем описание тарифа
-    price = _format_price(state, selected_tariff_raw)
     bullets = meta.get("bullets") or []
     bullets_text = "\n".join([f"• {item}" for item in bullets])
 
@@ -339,20 +347,16 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
     text = _with_screen_prefix(
         "S2",
         (
-            f"{meta['title']}\n"
-            f"Стоимость: {price}\n\n"
+            f"{meta['title']}\n\n"
             "──────────\n"
             f"{bullets_text}"
             f"{note_text}"
             "\n\n"
             "──────────\n"
-            "Перед переходом к оплате:\n"
+            "Перед следующим шагом:\n"
             "• Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
         ),
     )
-    if price and price in text:
-        text = _apply_spoiler_markdown(text, price)
-
     rows: list[list[InlineKeyboardButton]] = []
     rows.append(
         [
@@ -361,8 +365,8 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
                 callback_data="screen:S1",
             ),
             InlineKeyboardButton(
-                text=_with_button_icons("Старт", "🚀"),
-                callback_data="screen:S3",
+                text=_with_button_icons("Продолжить", "➡️"),
+                callback_data="screen:S4",
             ),
         ]
     )
@@ -372,20 +376,16 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s3(state: dict[str, Any]) -> ScreenContent:
-    selected_tariff = _format_tariff_label(state.get("selected_tariff", "T1–T3"))
+    selected_tariff_raw = state.get("selected_tariff", "T1")
+    selected_tariff = _format_tariff_label(selected_tariff_raw)
     order_id = state.get("order_id")
     order_status = state.get("order_status")
-    order_amount = state.get("order_amount")
-    order_currency = state.get("order_currency", "RUB")
+    price_label = _format_price(state, str(selected_tariff_raw)) or "не указана"
     payment_url = state.get("payment_url") or settings.prodamus_form_url
 
     order_block = ""
     if order_id and order_status:
-        order_block = (
-            f"\n\nЗаказ №{order_id}. "
-            f"Статус: {order_status}. "
-            f"Сумма: {order_amount} {order_currency}."
-        )
+        order_block = f"\n\nЗаказ №{order_id}. Статус: {order_status}."
 
     offer_url = settings.offer_url
     offer_link = f"[офертой]({offer_url})" if offer_url else "офертой"
@@ -396,9 +396,10 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
         text_parts.append("Платеж обрабатывается, пожалуйста подождите.")
     else:
         text_parts.append(
-            f"Оплата тарифа {selected_tariff}.\n\n"
-            "Перед оплатой: сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
-            "\n"
+            "Финальный шаг перед генерацией отчёта.\n\n"
+            f"Тариф: {selected_tariff}.\n"
+            f"Стоимость: {price_label}.\n\n"
+            "Короткий дисклеймер: сервис носит информационно-аналитический характер и не является персональной рекомендацией к действию.\n"
             f"Оплачивая, вы подтверждаете согласие с {offer_link}.\n"
             "После оплаты бот автоматически проверит статус и переведёт вас к следующему шагу."
             f"{order_block}"

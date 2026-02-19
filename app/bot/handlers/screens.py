@@ -351,15 +351,39 @@ async def _run_payment_waiter(bot: Bot, chat_id: int, user_id: int) -> None:
             screen_manager.update_state(user_id, **_refresh_order_state(order))
             if order.status == OrderStatus.PAID:
                 _refresh_profile_state(session, user_id)
-                screen_manager.update_state(user_id, profile_flow="report")
+                _refresh_questionnaire_state(session, user_id)
+                state_snapshot = screen_manager.update_state(user_id)
+                selected_tariff = state_snapshot.data.get("selected_tariff")
+                questionnaire = state_snapshot.data.get("questionnaire") or {}
+
+                target_screen_id = "S6"
+                if selected_tariff in {Tariff.T2.value, Tariff.T3.value} and (
+                    questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value
+                ):
+                    target_screen_id = "S5"
+                elif selected_tariff in PAID_TARIFFS:
+                    user = _get_or_create_user(session, user_id)
+                    _create_report_job(
+                        session,
+                        user=user,
+                        tariff_value=selected_tariff,
+                        order_id=order.id,
+                        chat_id=chat_id,
+                    )
                 await screen_manager.show_screen(
                     bot=bot,
                     chat_id=chat_id,
                     user_id=user_id,
-                    screen_id="S4",
+                    screen_id=target_screen_id,
                     trigger_type="auto",
                     trigger_value="payment_confirmed",
                 )
+                if target_screen_id == "S6" and settings.report_delay_seconds > 0:
+                    running_task = _report_wait_tasks.get(user_id)
+                    if not running_task or running_task.done():
+                        _report_wait_tasks[user_id] = asyncio.create_task(
+                            _run_report_delay(bot=bot, chat_id=chat_id, user_id=user_id)
+                        )
                 return
         await asyncio.sleep(poll_interval)
 
@@ -1337,6 +1361,107 @@ def _safe_create_payment_link(provider, order: Order, user: User | None):
         return None
 
 
+async def _prepare_checkout_order(
+    callback: CallbackQuery,
+    *,
+    tariff_value: str | None,
+    force_new_order: bool = False,
+) -> Order | None:
+    if tariff_value not in PAID_TARIFFS:
+        return None
+    try:
+        tariff = Tariff(tariff_value)
+    except ValueError:
+        return None
+
+    state_snapshot = screen_manager.update_state(callback.from_user.id)
+    with get_session() as session:
+        user = _get_or_create_user(
+            session,
+            callback.from_user.id,
+            callback.from_user.username,
+        )
+        order: Order | None = None
+        if not force_new_order:
+            order_id = _safe_int(state_snapshot.data.get("order_id"))
+            if order_id:
+                order = session.get(Order, order_id)
+                if order and order.tariff != tariff:
+                    order = None
+                    screen_manager.update_state(
+                        callback.from_user.id,
+                        order_id=None,
+                        order_status=None,
+                        order_amount=None,
+                        order_currency=None,
+                        order_provider=None,
+                        payment_url=None,
+                    )
+
+        if not order and not force_new_order:
+            order = _get_reusable_paid_order(session, callback.from_user.id, tariff_value)
+
+        if not order:
+            order = _create_order(session, user, tariff)
+
+        payment_link = None
+        if settings.payment_enabled and order.status != OrderStatus.PAID:
+            provider = get_payment_provider(order.provider.value)
+            payment_link = _safe_create_payment_link(
+                provider,
+                order,
+                user,
+            )
+            if not payment_link and order.provider == PaymentProviderEnum.PRODAMUS:
+                fallback_provider = get_payment_provider(
+                    PaymentProviderEnum.CLOUDPAYMENTS.value
+                )
+                payment_link = _safe_create_payment_link(
+                    fallback_provider,
+                    order,
+                    user,
+                )
+                if payment_link:
+                    order.provider = PaymentProviderEnum.CLOUDPAYMENTS
+                    session.add(order)
+            if not payment_link:
+                missing_primary = _missing_payment_link_config(order.provider)
+                fallback_provider_enum = (
+                    PaymentProviderEnum.CLOUDPAYMENTS
+                    if order.provider == PaymentProviderEnum.PRODAMUS
+                    else PaymentProviderEnum.PRODAMUS
+                )
+                missing_fallback = _missing_payment_link_config(
+                    fallback_provider_enum
+                )
+                logger.warning(
+                    "payment_link_unavailable",
+                    extra={
+                        "order_id": order.id,
+                        "primary_provider": order.provider.value,
+                        "missing_primary": missing_primary,
+                        "missing_fallback": missing_fallback,
+                    },
+                )
+                missing_vars = (
+                    ", ".join(missing_primary + missing_fallback)
+                    or "секреты провайдера"
+                )
+                await _send_notice(
+                    callback,
+                    "Платёжная ссылка недоступна: не настроены ключи оплаты. "
+                    f"Проверьте переменные {missing_vars}.",
+                )
+
+        screen_manager.update_state(
+            callback.from_user.id,
+            payment_url=payment_link.url if payment_link else None,
+            payment_processing_notice=False,
+            **_refresh_order_state(order),
+        )
+        return order
+
+
 @router.callback_query()
 async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data:
@@ -1367,24 +1492,6 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     )
                     await _safe_callback_answer(callback)
                     return
-                if selected_tariff in PAID_TARIFFS and not profile:
-                    order_id = _safe_int(state_snapshot.data.get("order_id"))
-                    order = session.get(Order, order_id) if order_id else None
-                    if order:
-                        screen_manager.update_state(
-                            callback.from_user.id, **_refresh_order_state(order)
-                        )
-                    if not order or order.status != OrderStatus.PAID:
-                        await _send_notice(
-                            callback,
-                            "Сначала подтвердите оплату, чтобы заполнить «Мои данные».",
-                        )
-                        await _show_screen_for_callback(
-                            callback,
-                            screen_id="S3",
-                        )
-                        await _safe_callback_answer(callback)
-                        return
                 if selected_tariff == Tariff.T0.value and not profile:
                     t0_allowed, next_available = _t0_cooldown_status(
                         session, callback.from_user.id
@@ -1445,6 +1552,29 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 )
                 await _safe_callback_answer(callback)
                 return
+            with get_session() as session:
+                _refresh_profile_state(session, callback.from_user.id)
+                _refresh_questionnaire_state(session, callback.from_user.id)
+            state_snapshot = screen_manager.update_state(callback.from_user.id)
+            if not state_snapshot.data.get("profile"):
+                await _send_notice(callback, "Сначала заполните «Мои данные».")
+                await _show_screen_for_callback(
+                    callback,
+                    screen_id="S4",
+                )
+                await start_profile_wizard(callback.message, state, callback.from_user.id)
+                await _safe_callback_answer(callback)
+                return
+            if selected_tariff in {Tariff.T2.value, Tariff.T3.value}:
+                questionnaire = state_snapshot.data.get("questionnaire") or {}
+                if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
+                    await _send_notice(callback, "Сначала заполните анкету.")
+                    await _show_screen_for_callback(
+                        callback,
+                        screen_id="S5",
+                    )
+                await _safe_callback_answer(callback)
+                return
             if state_snapshot.data.get("existing_tariff_report_found") and not state_snapshot.data.get("existing_report_warning_seen"):
                 await _show_screen_for_callback(
                     callback,
@@ -1454,99 +1584,23 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 return
             with get_session() as session:
                 order_id = _safe_int(state_snapshot.data.get("order_id"))
-                if not order_id:
-                    reusable_order = _get_reusable_paid_order(
-                        session,
-                        callback.from_user.id,
-                        selected_tariff,
-                    )
-                    if reusable_order:
-                        order_id = reusable_order.id
-                        screen_manager.update_state(
-                            callback.from_user.id,
-                            payment_url=None,
-                            **_refresh_order_state(reusable_order),
-                        )
-                if not order_id:
-                    user = _get_or_create_user(
-                        session,
-                        callback.from_user.id,
-                        callback.from_user.username,
-                    )
-                    order = _create_order(session, user, Tariff(selected_tariff))
-                    payment_link = None
-                    if settings.payment_enabled:
-                        provider = get_payment_provider(order.provider.value)
-                        payment_link = _safe_create_payment_link(
-                            provider,
-                            order,
-                            user,
-                        )
-                        if (
-                            not payment_link
-                            and order.provider == PaymentProviderEnum.PRODAMUS
-                        ):
-                            fallback_provider = get_payment_provider(
-                                PaymentProviderEnum.CLOUDPAYMENTS.value
-                            )
-                            payment_link = _safe_create_payment_link(
-                                fallback_provider,
-                                order,
-                                user,
-                            )
-                            if payment_link:
-                                order.provider = PaymentProviderEnum.CLOUDPAYMENTS
-                                session.add(order)
-                        if not payment_link:
-                            missing_primary = _missing_payment_link_config(
-                                order.provider
-                            )
-                            fallback_provider_enum = (
-                                PaymentProviderEnum.CLOUDPAYMENTS
-                                if order.provider == PaymentProviderEnum.PRODAMUS
-                                else PaymentProviderEnum.PRODAMUS
-                            )
-                            missing_fallback = _missing_payment_link_config(
-                                fallback_provider_enum
-                            )
-                            logger.warning(
-                                "payment_link_unavailable",
-                                extra={
-                                    "order_id": order.id,
-                                    "primary_provider": order.provider.value,
-                                    "missing_primary": missing_primary,
-                                    "missing_fallback": missing_fallback,
-                                },
-                            )
-                            missing_vars = (
-                                ", ".join(missing_primary + missing_fallback)
-                                or "секреты провайдера"
-                            )
-                            await _send_notice(
-                                callback,
-                                "Платёжная ссылка недоступна: не настроены ключи оплаты. "
-                                f"Проверьте переменные {missing_vars}.",
-                            )
-                    screen_manager.update_state(
-                        callback.from_user.id,
-                        payment_url=payment_link.url if payment_link else None,
-                        **_refresh_order_state(order),
-                    )
-                    order_id = order.id
                 order = session.get(Order, order_id) if order_id else None
-                if order:
-                    screen_manager.update_state(
-                        callback.from_user.id, **_refresh_order_state(order)
-                    )
-                if order and order.status == OrderStatus.PAID:
-                    _refresh_profile_state(session, callback.from_user.id)
-                    screen_manager.update_state(callback.from_user.id, profile_flow="report")
-                    await _show_screen_for_callback(
+                if not order:
+                    await _send_notice(
                         callback,
-                        screen_id="S4",
+                        "Перейдите к финальной оплате через шаг сохранения данных.",
                     )
+                    target_screen_id = (
+                        "S5"
+                        if selected_tariff in {Tariff.T2.value, Tariff.T3.value}
+                        else "S4"
+                    )
+                    await _show_screen_for_callback(callback, screen_id=target_screen_id)
                     await _safe_callback_answer(callback)
                     return
+                screen_manager.update_state(
+                    callback.from_user.id, **_refresh_order_state(order)
+                )
         if screen_id == "S5":
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             selected_tariff = state_snapshot.data.get("selected_tariff")
@@ -1561,32 +1615,6 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await _safe_callback_answer(callback)
                 return
             with get_session() as session:
-                order_id = _safe_int(state_snapshot.data.get("order_id"))
-                if not order_id:
-                    await _send_notice(
-                        callback, "Сначала выберите тариф и завершите оплату."
-                    )
-                    await _show_screen_for_callback(
-                        callback,
-                        screen_id="S3",
-                    )
-                    await _safe_callback_answer(callback)
-                    return
-                order = session.get(Order, order_id)
-                if order:
-                    screen_manager.update_state(
-                        callback.from_user.id, **_refresh_order_state(order)
-                    )
-                if not order or order.status != OrderStatus.PAID:
-                    await _send_notice(
-                        callback, "Сначала подтвердите оплату, чтобы перейти к анкете."
-                    )
-                    await _show_screen_for_callback(
-                        callback,
-                        screen_id="S3",
-                    )
-                    await _safe_callback_answer(callback)
-                    return
                 _refresh_profile_state(session, callback.from_user.id)
                 state_snapshot = screen_manager.update_state(callback.from_user.id)
                 if not state_snapshot.data.get("profile"):
@@ -1639,7 +1667,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             callback,
             screen_id=screen_id,
         )
-        if screen_id == "S3":
+        if screen_id == "S3" and _safe_int(screen_manager.update_state(callback.from_user.id).data.get("order_id")):
             await _maybe_run_payment_waiter(callback)
         if screen_id == "S2":
             screen_manager.update_state(callback.from_user.id, offer_seen=True)
@@ -1667,69 +1695,23 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             await _show_screen_for_callback(callback, screen_id="S1")
             await _safe_callback_answer(callback)
             return
-        with get_session() as session:
-            user = _get_or_create_user(
-                session, callback.from_user.id, callback.from_user.username
-            )
-            order = _create_order(session, user, Tariff(tariff))
-            payment_link = None
-            if settings.payment_enabled:
-                provider = get_payment_provider(order.provider.value)
-                payment_link = _safe_create_payment_link(
-                    provider,
-                    order,
-                    user,
-                )
-                if not payment_link and order.provider == PaymentProviderEnum.PRODAMUS:
-                    fallback_provider = get_payment_provider(
-                        PaymentProviderEnum.CLOUDPAYMENTS.value
-                    )
-                    payment_link = _safe_create_payment_link(
-                        fallback_provider,
-                        order,
-                        user,
-                    )
-                    if payment_link:
-                        order.provider = PaymentProviderEnum.CLOUDPAYMENTS
-                        session.add(order)
-                if not payment_link:
-                    missing_primary = _missing_payment_link_config(order.provider)
-                    fallback_provider_enum = (
-                        PaymentProviderEnum.CLOUDPAYMENTS
-                        if order.provider == PaymentProviderEnum.PRODAMUS
-                        else PaymentProviderEnum.PRODAMUS
-                    )
-                    missing_fallback = _missing_payment_link_config(
-                        fallback_provider_enum
-                    )
-                    logger.warning(
-                        "payment_link_unavailable",
-                        extra={
-                            "order_id": order.id,
-                            "primary_provider": order.provider.value,
-                            "missing_primary": missing_primary,
-                            "missing_fallback": missing_fallback,
-                        },
-                    )
-                    missing_vars = (
-                        ", ".join(missing_primary + missing_fallback)
-                        or "секреты провайдера"
-                    )
-                    await _send_notice(
-                        callback,
-                        "Платёжная ссылка недоступна: не настроены ключи оплаты. "
-                        f"Проверьте переменные {missing_vars}.",
-                    )
-            screen_manager.update_state(
-                callback.from_user.id,
-                payment_url=payment_link.url if payment_link else None,
-                existing_tariff_report_found=False,
-                existing_tariff_report_meta=None,
-                existing_report_warning_seen=True,
-                offer_seen=True,
-                payment_processing_notice=False,
-                **_refresh_order_state(order),
-            )
+        order = await _prepare_checkout_order(
+            callback,
+            tariff_value=tariff,
+            force_new_order=True,
+        )
+        if not order:
+            await _send_notice(callback, "Не удалось подготовить заказ для оплаты.")
+            await _safe_callback_answer(callback)
+            return
+        screen_manager.update_state(
+            callback.from_user.id,
+            existing_tariff_report_found=False,
+            existing_tariff_report_meta=None,
+            existing_report_warning_seen=True,
+            offer_seen=True,
+            payment_processing_notice=False,
+        )
         await _show_screen_for_callback(callback, screen_id="S3")
         await _safe_callback_answer(callback)
         return
@@ -1871,78 +1853,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             await _send_notice(callback, "Сначала заполните «Мои данные».")
             await _safe_callback_answer(callback)
             return
+
         tariff = state_snapshot.data.get("selected_tariff")
-        if tariff in {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}:
-            order_id = _safe_int(state_snapshot.data.get("order_id"))
-            if not order_id:
-                await _send_notice(
-                    callback, "Сначала выберите тариф и завершите оплату."
-                )
-                await _safe_callback_answer(callback)
-                return
-            with get_session() as session:
-                order = session.get(Order, order_id)
-                if order and order.tariff.value != tariff:
-                    screen_manager.update_state(
-                        callback.from_user.id,
-                        order_id=None,
-                        order_status=None,
-                        payment_url=None,
-                    )
-                    await _send_notice(
-                        callback,
-                        "Для выбранного тарифа нужен новый заказ. Пожалуйста, перейдите к оплате ещё раз.",
-                    )
-                    await _show_screen_for_callback(
-                        callback,
-                        screen_id="S2",
-                    )
-                    await _safe_callback_answer(callback)
-                    return
-                if not order or order.status != OrderStatus.PAID:
-                    if order:
-                        screen_manager.update_state(
-                            callback.from_user.id, **_refresh_order_state(order)
-                        )
-                    await _send_notice(
-                        callback,
-                        "Оплата ещё не подтверждена. Доступ к генерации откроется после статуса paid.",
-                    )
-                    await _show_screen_for_callback(
-                        callback,
-                        screen_id="S3",
-                    )
-                    await _safe_callback_answer(callback)
-                    return
-                existing_report = _get_report_for_order(session, order_id)
-                if existing_report:
-                    screen_manager.update_state(
-                        callback.from_user.id,
-                        report_text=existing_report.report_text,
-                        report_model=(
-                            existing_report.model_used.value
-                            if existing_report.model_used
-                            else None
-                        ),
-                    )
-                    await _ensure_report_delivery(callback, "S7")
-                    report_meta = _get_report_pdf_meta(existing_report)
-                    pdf_bytes = _get_report_pdf_bytes(session, existing_report)
-                    if not await _send_report_pdf(
-                        callback.bot,
-                        callback.message.chat.id,
-                        report_meta,
-                        pdf_bytes=pdf_bytes,
-                        username=callback.from_user.username,
-                        user_id=callback.from_user.id,
-                    ):
-                        await _send_notice(
-                            callback,
-                            "PDF уже сформирован ранее. "
-                            "Вы можете попробовать кнопку «Выгрузить PDF».",
-                        )
-                    await _safe_callback_answer(callback)
-                    return
         if tariff == Tariff.T0.value:
             with get_session() as session:
                 t0_allowed, next_available = _t0_cooldown_status(
@@ -1964,56 +1876,70 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 if user.free_limit:
                     user.free_limit.last_t0_at = now_app_timezone()
 
-        if not state_snapshot.data.get("personal_data_consent_accepted"):
-            await _send_notice(callback, "Нужно согласие на обработку данных.")
-            await _show_screen_for_callback(
-                callback,
-                screen_id="S4_CONSENT",
-            )
-            await _safe_callback_answer(callback)
-            return
+            if not state_snapshot.data.get("personal_data_consent_accepted"):
+                await _send_notice(callback, "Нужно согласие на обработку данных.")
+                await _show_screen_for_callback(
+                    callback,
+                    screen_id="S4_CONSENT",
+                )
+                await _safe_callback_answer(callback)
+                return
 
-        screen_manager.update_state(callback.from_user.id, profile_flow=None)
-        next_screen = "S5" if tariff in {Tariff.T2.value, Tariff.T3.value} else "S6"
-        if next_screen == "S6":
             screen_manager.update_state(
                 callback.from_user.id,
                 report_text=None,
                 report_model=None,
                 report_meta=None,
+                profile_flow=None,
             )
             with get_session() as session:
                 user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
-                order_id = _safe_int(
-                    screen_manager.update_state(callback.from_user.id).data.get(
-                        "order_id"
-                    )
-                )
                 job = _create_report_job(
                     session,
                     user=user,
                     tariff_value=tariff,
-                    order_id=order_id,
+                    order_id=None,
                     chat_id=callback.message.chat.id if callback.message else None,
                 )
                 if not job:
-                    await _send_notice(
-                        callback, "Не удалось создать задание на генерацию."
-                    )
+                    await _send_notice(callback, "Не удалось создать задание на генерацию.")
                     await _safe_callback_answer(callback)
                     return
-            await _show_screen_for_callback(
-                callback,
-                screen_id="S6",
-            )
+            await _show_screen_for_callback(callback, screen_id="S6")
             await _maybe_run_report_delay(callback)
-        else:
-            with get_session() as session:
-                _refresh_questionnaire_state(session, callback.from_user.id)
-            await _show_screen_for_callback(
-                callback,
-                screen_id=next_screen,
-            )
+            await _safe_callback_answer(callback)
+            return
+
+        if tariff in {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}:
+            if not state_snapshot.data.get("personal_data_consent_accepted"):
+                await _send_notice(callback, "Нужно согласие на обработку данных.")
+                await _show_screen_for_callback(
+                    callback,
+                    screen_id="S4_CONSENT",
+                )
+                await _safe_callback_answer(callback)
+                return
+
+            screen_manager.update_state(callback.from_user.id, profile_flow=None)
+            if tariff in {Tariff.T2.value, Tariff.T3.value}:
+                with get_session() as session:
+                    _refresh_questionnaire_state(session, callback.from_user.id)
+                await _show_screen_for_callback(callback, screen_id="S5")
+            else:
+                order = await _prepare_checkout_order(
+                    callback,
+                    tariff_value=tariff,
+                )
+                if not order:
+                    await _send_notice(callback, "Не удалось подготовить заказ для оплаты.")
+                    await _safe_callback_answer(callback)
+                    return
+                await _show_screen_for_callback(callback, screen_id="S3")
+            await _safe_callback_answer(callback)
+            return
+
+        await _send_notice(callback, "Сначала выберите тариф.")
+        await _show_screen_for_callback(callback, screen_id="S1")
         await _safe_callback_answer(callback)
         return
 
@@ -2044,76 +1970,6 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 )
                 await _safe_callback_answer(callback)
                 return
-            order_id = _safe_int(state_snapshot.data.get("order_id"))
-            if not order_id:
-                await _send_notice(
-                    callback, "Сначала выберите тариф и завершите оплату."
-                )
-                await _safe_callback_answer(callback)
-                return
-            with get_session() as session:
-                order = session.get(Order, order_id)
-                if order and order.tariff.value != tariff:
-                    screen_manager.update_state(
-                        callback.from_user.id,
-                        order_id=None,
-                        order_status=None,
-                        payment_url=None,
-                    )
-                    await _send_notice(
-                        callback,
-                        "Для выбранного тарифа нужен новый заказ. Пожалуйста, перейдите к оплате ещё раз.",
-                    )
-                    await _show_screen_for_callback(
-                        callback,
-                        screen_id="S2",
-                    )
-                    await _safe_callback_answer(callback)
-                    return
-                if not order or order.status != OrderStatus.PAID:
-                    if order:
-                        screen_manager.update_state(
-                            callback.from_user.id, **_refresh_order_state(order)
-                        )
-                    await _send_notice(
-                        callback,
-                        "Оплата ещё не подтверждена. Генерация будет доступна после статуса paid.",
-                    )
-                    await _show_screen_for_callback(
-                        callback,
-                        screen_id="S3",
-                    )
-                    await _safe_callback_answer(callback)
-                    return
-                existing_report = _get_report_for_order(session, order_id)
-                if existing_report:
-                    screen_manager.update_state(
-                        callback.from_user.id,
-                        report_text=existing_report.report_text,
-                        report_model=(
-                            existing_report.model_used.value
-                            if existing_report.model_used
-                            else None
-                        ),
-                    )
-                    await _ensure_report_delivery(callback, "S7")
-                    report_meta = _get_report_pdf_meta(existing_report)
-                    pdf_bytes = _get_report_pdf_bytes(session, existing_report)
-                    if not await _send_report_pdf(
-                        callback.bot,
-                        callback.message.chat.id,
-                        report_meta,
-                        pdf_bytes=pdf_bytes,
-                        username=callback.from_user.username,
-                        user_id=callback.from_user.id,
-                    ):
-                        await _send_notice(
-                            callback,
-                            "PDF уже сформирован ранее. "
-                            "Вы можете попробовать кнопку «Выгрузить PDF».",
-                        )
-                    await _safe_callback_answer(callback)
-                    return
             questionnaire = state_snapshot.data.get("questionnaire") or {}
             if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
                 await _send_notice(
@@ -2121,31 +1977,26 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 )
                 await _safe_callback_answer(callback)
                 return
-        screen_manager.update_state(
-            callback.from_user.id,
-            report_text=None,
-            report_model=None,
-            report_meta=None,
-        )
-        with get_session() as session:
-            user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
-            order_id = _safe_int(state_snapshot.data.get("order_id"))
-            job = _create_report_job(
-                session,
-                user=user,
+            order = await _prepare_checkout_order(
+                callback,
                 tariff_value=tariff,
-                order_id=order_id,
-                chat_id=callback.message.chat.id if callback.message else None,
             )
-            if not job:
-                await _send_notice(callback, "Не удалось создать задание на генерацию.")
+            if not order:
+                await _send_notice(callback, "Не удалось подготовить заказ для оплаты.")
                 await _safe_callback_answer(callback)
                 return
-        await _show_screen_for_callback(
-            callback,
-            screen_id="S6",
-        )
-        await _maybe_run_report_delay(callback)
+            await _show_screen_for_callback(callback, screen_id="S3")
+            await _safe_callback_answer(callback)
+            return
+
+        if tariff == Tariff.T0.value:
+            await _send_notice(callback, "Для бесплатного тарифа анкета не требуется.")
+            await _show_screen_for_callback(callback, screen_id="S4")
+            await _safe_callback_answer(callback)
+            return
+
+        await _send_notice(callback, "Сначала выберите тариф.")
+        await _show_screen_for_callback(callback, screen_id="S1")
         await _safe_callback_answer(callback)
         return
 
@@ -2176,8 +2027,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         callback,
                         screen_id="S3",
                     )
-                    await _safe_callback_answer(callback)
-                    return
+                await _safe_callback_answer(callback)
+                return
         if tariff in {Tariff.T2.value, Tariff.T3.value}:
             questionnaire = state_snapshot.data.get("questionnaire") or {}
             if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:

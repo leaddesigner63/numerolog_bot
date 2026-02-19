@@ -44,7 +44,7 @@ class QuestionnaireEditExistingAnswerTests(unittest.IsolatedAsyncioTestCase):
                 return False
 
         with (
-            patch.object(questionnaire, "_ensure_paid_access", new=AsyncMock(return_value=True)),
+            patch.object(questionnaire, "_ensure_questionnaire_access", new=AsyncMock(return_value=True)),
             patch.object(questionnaire, "_ensure_profile_ready", new=AsyncMock(return_value=True)),
             patch.object(questionnaire, "load_questionnaire_config", return_value=config),
             patch.object(questionnaire, "get_session", return_value=_SessionContext()),

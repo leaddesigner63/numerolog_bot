@@ -16,6 +16,8 @@ from app.db.models import (
     Order,
     OrderStatus,
     PaymentProvider,
+    ReportJob,
+    ReportJobStatus,
     Tariff,
     User,
     UserFirstTouchAttribution,
@@ -85,6 +87,21 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
             session.commit()
         return order_id
 
+    def _create_report_job(self, user_id: int, order_id: int, status: ReportJobStatus) -> int:
+        with self.SessionLocal() as session:
+            job = ReportJob(
+                user_id=user_id,
+                order_id=order_id,
+                tariff=Tariff.T2,
+                status=status,
+                attempts=0,
+            )
+            session.add(job)
+            session.flush()
+            job_id = job.id
+            session.commit()
+        return job_id
+
 
     def _first_touch_records(self, user_id: int = 1001) -> list[UserFirstTouchAttribution]:
         with self.SessionLocal() as session:
@@ -105,7 +122,10 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
     async def test_start_routes_to_s3_for_existing_unpaid_order(self) -> None:
         order_id = self._create_order(1, OrderStatus.CREATED)
 
-        with patch.object(screen_manager, "show_screen", new=AsyncMock()) as show_screen:
+        with (
+            patch.object(screen_manager, "show_screen", new=AsyncMock()) as show_screen,
+            patch.object(start_module, "ensure_payment_waiter", new=AsyncMock()) as ensure_waiter,
+        ):
             await start_module.handle_start(self._message(f"/start paywait_{order_id}"))
 
         show_screen.assert_awaited_with(
@@ -121,18 +141,29 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(snapshot.data.get("order_status"), OrderStatus.CREATED.value)
         self.assertEqual(snapshot.data.get("selected_tariff"), Tariff.T2.value)
         self.assertTrue(snapshot.data.get("payment_processing_notice"))
+        ensure_waiter.assert_awaited_once()
 
-    async def test_start_routes_to_s4_when_order_is_paid(self) -> None:
+    async def test_start_routes_to_s6_when_order_is_paid_but_report_not_completed(self) -> None:
         order_id = self._create_order(1, OrderStatus.PAID)
+        self._create_report_job(1, order_id, ReportJobStatus.PENDING)
 
         with patch.object(screen_manager, "show_screen", new=AsyncMock()) as show_screen:
             await start_module.handle_start(self._message(f"/start paywait_{order_id}"))
 
-        self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S4")
+        self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S6")
         snapshot = screen_manager.update_state(1001)
         self.assertFalse(snapshot.data.get("s4_no_inline_keyboard"))
         self.assertEqual(snapshot.data.get("profile_flow"), "report")
         self.assertFalse(snapshot.data.get("payment_processing_notice"))
+
+    async def test_start_routes_to_s7_when_order_is_paid_and_report_completed(self) -> None:
+        order_id = self._create_order(1, OrderStatus.PAID)
+        self._create_report_job(1, order_id, ReportJobStatus.COMPLETED)
+
+        with patch.object(screen_manager, "show_screen", new=AsyncMock()) as show_screen:
+            await start_module.handle_start(self._message(f"/start paywait_{order_id}"))
+
+        self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S7")
 
     async def test_start_falls_back_to_s0_for_foreign_order(self) -> None:
         order_id = self._create_order(2, OrderStatus.CREATED)

@@ -17,7 +17,7 @@ class QuestionnaireLkAccessTests(unittest.IsolatedAsyncioTestCase):
         ensure_paid_access = AsyncMock(return_value=False)
 
         with (
-            patch.object(questionnaire, "_ensure_paid_access", new=ensure_paid_access),
+            patch.object(questionnaire, "_ensure_questionnaire_access", new=ensure_paid_access),
             patch.object(questionnaire, "_ensure_profile_ready", new=AsyncMock(return_value=True)),
             patch.object(questionnaire, "_start_edit_questionnaire", new=AsyncMock()) as start_edit,
         ):
