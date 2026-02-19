@@ -9,7 +9,16 @@ from sqlalchemy.pool import StaticPool
 
 from app.bot.handlers import profile
 from app.db.base import Base
-from app.db.models import Tariff, User, UserProfile
+from app.db.models import (
+    Order,
+    OrderStatus,
+    PaymentProvider,
+    ReportJob,
+    ReportJobStatus,
+    Tariff,
+    User,
+    UserProfile,
+)
 
 
 class ProfileConsentAcceptTests(unittest.IsolatedAsyncioTestCase):
@@ -67,15 +76,35 @@ class ProfileConsentAcceptTests(unittest.IsolatedAsyncioTestCase):
             answer=AsyncMock(),
         )
 
-        for tariff_value, expected_screen in ((Tariff.T1.value, "S6"), (Tariff.T2.value, "S5")):
+        for tariff_value, expected_screen in (
+            (Tariff.T0.value, "S6"),
+            (Tariff.T1.value, "S6"),
+            (Tariff.T2.value, "S5"),
+        ):
             with self.subTest(tariff=tariff_value):
                 with self.SessionLocal() as session:
                     db_profile = session.execute(select(UserProfile).where(UserProfile.user_id == 1)).scalar_one()
                     db_profile.personal_data_consent_accepted_at = None
                     db_profile.personal_data_consent_source = None
+                    session.query(ReportJob).delete()
+                    session.query(Order).delete()
+                    if tariff_value == Tariff.T1.value:
+                        order = Order(
+                            user_id=1,
+                            tariff=Tariff.T1,
+                            amount=990.0,
+                            provider=PaymentProvider.NONE,
+                            status=OrderStatus.PAID,
+                        )
+                        session.add(order)
+                        session.flush()
+                        state_data = {
+                            "selected_tariff": tariff_value,
+                            "order_id": str(order.id),
+                        }
+                    else:
+                        state_data = {"selected_tariff": tariff_value}
                     session.commit()
-
-                state_data = {"selected_tariff": tariff_value}
 
                 def _update_state(_user_id: int, **kwargs):
                     if kwargs:
@@ -94,6 +123,16 @@ class ProfileConsentAcceptTests(unittest.IsolatedAsyncioTestCase):
                     db_profile = session.execute(select(UserProfile).where(UserProfile.user_id == 1)).scalar_one()
                     self.assertIsNotNone(db_profile.personal_data_consent_accepted_at)
                     self.assertEqual(db_profile.personal_data_consent_source, "profile_flow")
+                    active_jobs = session.execute(
+                        select(ReportJob).where(ReportJob.user_id == 1)
+                    ).scalars().all()
+
+                if tariff_value in {Tariff.T0.value, Tariff.T1.value}:
+                    self.assertEqual(len(active_jobs), 1)
+                    self.assertEqual(active_jobs[0].tariff.value, tariff_value)
+                    self.assertEqual(active_jobs[0].status, ReportJobStatus.PENDING)
+                else:
+                    self.assertEqual(active_jobs, [])
 
                 send_ephemeral.assert_awaited_once()
                 show_screen.assert_awaited_with(
