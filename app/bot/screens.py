@@ -686,10 +686,8 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 )
             ]
         )
-    show_paid_tariff_continue = (
-        has_profile
-        and selected_tariff_raw in {"T1", "T2", "T3"}
-        and not requires_payment
+    show_paid_tariff_continue = has_profile and selected_tariff_raw in {"T1", "T2", "T3"} and (
+        order_status == "paid" or not order_status
     )
     show_t0_continue = has_profile and is_t0
     show_paid_order_continue_without_tariff = (
