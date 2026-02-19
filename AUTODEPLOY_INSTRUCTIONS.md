@@ -22,6 +22,7 @@
 1. Push в `main` запускает `.github/workflows/deploy.yml`:
    - `build_and_check`: установка зависимостей, compileall, `bash scripts/test.sh`;
    - `smoke_checkout_flow`: целевой регрессионный прогон `bash scripts/smoke_check_checkout_flow.sh`;
+     - Скрипт сам пытается поднять `pytest` через `pip` при «чистом» окружении, чтобы не падать с `exit code 127` при отсутствии бинаря.
    - `deploy_production`: SSH-деплой на сервер и запуск `scripts/deploy.sh`.
 2. На GitHub должны быть настроены secrets:
    - `SSH_PRIVATE_KEY`, `SSH_HOST`, `SSH_PORT`, `SSH_USER`, `DEPLOY_PATH`;
