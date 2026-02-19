@@ -5,7 +5,7 @@ from sqlalchemy import select
 
 from app.bot.handlers.screen_manager import screen_manager
 from app.bot.handlers.screens import ensure_payment_waiter
-from app.db.models import Order, OrderStatus, User
+from app.db.models import Order, OrderStatus, ReportJob, ReportJobStatus, User
 from app.db.session import get_session
 from app.services.traffic_attribution import save_user_first_touch_attribution
 
@@ -61,9 +61,28 @@ async def handle_start(message: Message) -> None:
                     if order:
                         state_snapshot = screen_manager.update_state(message.from_user.id)
                         should_resume_report_flow = order.status == OrderStatus.PAID
+                        target_screen = "S3"
+                        if should_resume_report_flow:
+                            latest_job = session.execute(
+                                select(ReportJob)
+                                .where(
+                                    ReportJob.user_id == order.user_id,
+                                    ReportJob.order_id == order.id,
+                                )
+                                .order_by(ReportJob.id.desc())
+                                .limit(1)
+                            ).scalar_one_or_none()
+                            target_screen = (
+                                "S7"
+                                if latest_job
+                                and latest_job.status == ReportJobStatus.COMPLETED
+                                else "S6"
+                            )
                         state_update = {
                             "order_id": str(order.id),
                             "order_status": order.status.value,
+                            "order_amount": str(order.amount),
+                            "order_currency": order.currency,
                             "selected_tariff": order.tariff.value,
                             "s4_no_inline_keyboard": False,
                             "payment_processing_notice": order.status != OrderStatus.PAID,
@@ -72,7 +91,6 @@ async def handle_start(message: Message) -> None:
                         if state_snapshot.data.get("payment_url") is not None:
                             state_update["payment_url"] = state_snapshot.data.get("payment_url")
                         screen_manager.update_state(message.from_user.id, **state_update)
-                        target_screen = "S4" if order.status == OrderStatus.PAID else "S3"
                         await screen_manager.show_screen(
                             bot=message.bot,
                             chat_id=message.chat.id,

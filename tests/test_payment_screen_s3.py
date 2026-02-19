@@ -1,9 +1,36 @@
 import unittest
 
 from app.bot.screens import screen_s15, screen_s3
+from app.core.config import settings
 
 
 class PaymentScreenS3Tests(unittest.TestCase):
+    def test_s3_shows_tariff_price_disclaimer_and_payment_button(self) -> None:
+        content = screen_s3(
+            {
+                "selected_tariff": "T1",
+                "order_amount": "560",
+                "order_currency": "RUB",
+                "payment_url": "https://example.com/pay",
+            }
+        )
+
+        message = content.messages[0]
+        self.assertIn("Финальный шаг перед генерацией отчёта", message)
+        self.assertIn("Тариф:", message)
+        self.assertIn("Стоимость: 560 RUB", message)
+        self.assertIn("Короткий дисклеймер", message)
+        self.assertIn("Оплачивая, вы подтверждаете согласие", message)
+
+        keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
+        self.assertGreaterEqual(len(keyboard_rows), 1)
+        self.assertEqual(keyboard_rows[0][0].url, "https://example.com/pay")
+
+    def test_s3_falls_back_to_settings_price_when_order_amount_missing(self) -> None:
+        content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
+        expected_price = settings.tariff_prices_rub.get("T1")
+        self.assertIn(f"Стоимость: {expected_price} RUB", content.messages[0])
+
     def test_s3_has_no_manual_payment_confirmation_button(self) -> None:
         content = screen_s3(
             {
@@ -40,8 +67,8 @@ class PaymentScreenS3Tests(unittest.TestCase):
         )
 
         self.assertIn("Платеж обрабатывается, пожалуйста подождите.", content.messages[0])
-        self.assertNotIn("Оплата тарифа", content.messages[0])
-        self.assertNotIn("Перед оплатой", content.messages[0])
+        self.assertNotIn("Стоимость:", content.messages[0])
+        self.assertNotIn("Короткий дисклеймер", content.messages[0])
         self.assertIsNone(content.keyboard)
 
 

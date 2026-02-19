@@ -38,6 +38,7 @@ class QuestionnaireDoneRefreshTests(unittest.IsolatedAsyncioTestCase):
             patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
             patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
             patch.object(screens, "_show_screen_for_callback", new=AsyncMock(return_value=True)),
+            patch.object(screens, "_send_notice", new=AsyncMock()),
             patch.object(screens, "_maybe_run_report_delay", new=AsyncMock()),
             patch.object(screens, "_create_report_job", return_value=SimpleNamespace(id=1)),
             patch.object(screens, "_get_or_create_user", return_value=SimpleNamespace(id=9)),

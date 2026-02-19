@@ -109,6 +109,39 @@ class ReportJobRequiresPaidOrderTests(unittest.TestCase):
             self.assertIsNotNone(job)
             self.assertEqual(session.query(ReportJob).count(), 1)
 
+    def test_create_report_job_rejects_paid_tariff_without_order_id(self) -> None:
+        with self.SessionLocal() as session:
+            user = session.get(User, 1)
+            with patch("app.bot.handlers.screens.screen_manager.update_state"):
+                job = _create_report_job(
+                    session,
+                    user=user,
+                    tariff_value=Tariff.T1.value,
+                    order_id=None,
+                    chat_id=1001,
+                )
+            session.commit()
+
+            self.assertIsNone(job)
+            self.assertEqual(session.query(ReportJob).count(), 0)
+
+    def test_create_report_job_allows_t0_without_order(self) -> None:
+        with self.SessionLocal() as session:
+            user = session.get(User, 1)
+            with patch("app.bot.handlers.screens.screen_manager.update_state"):
+                job = _create_report_job(
+                    session,
+                    user=user,
+                    tariff_value=Tariff.T0.value,
+                    order_id=None,
+                    chat_id=1001,
+                )
+            session.commit()
+
+            self.assertIsNotNone(job)
+            self.assertEqual(job.tariff, Tariff.T0)
+            self.assertEqual(session.query(ReportJob).count(), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

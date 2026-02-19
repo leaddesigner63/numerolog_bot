@@ -393,7 +393,7 @@ async def _start_profile_edit(
     )
 
 
-async def _ensure_paid_profile_access(callback: CallbackQuery) -> bool:
+async def _ensure_profile_access(callback: CallbackQuery) -> bool:
     state_snapshot = screen_manager.update_state(callback.from_user.id)
     selected_tariff = state_snapshot.data.get("selected_tariff")
     if not selected_tariff:
@@ -428,51 +428,12 @@ async def _ensure_paid_profile_access(callback: CallbackQuery) -> bool:
     if selected_tariff not in {"T1", "T2", "T3"}:
         return True
 
-    order_id = state_snapshot.data.get("order_id")
-    order_id = _safe_int(order_id)
-    if not order_id:
-        await screen_manager.send_ephemeral_message(
-            callback.message,
-            "Сначала выберите тариф и завершите оплату.",
-            user_id=callback.from_user.id,
-        )
-        await screen_manager.show_screen(
-            bot=callback.bot,
-            chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
-            screen_id="S1",
-        )
-        return False
-
-    with get_session() as session:
-        order = session.get(Order, order_id)
-        if not order or order.status != OrderStatus.PAID:
-            if order:
-                screen_manager.update_state(
-                    callback.from_user.id,
-                    order_id=str(order.id),
-                    order_status=order.status.value,
-                    order_amount=str(order.amount),
-                    order_currency=order.currency,
-                )
-            await screen_manager.send_ephemeral_message(
-                callback.message,
-                "Оплата ещё не подтверждена. Доступ к вводу данных откроется после статуса paid.",
-                user_id=callback.from_user.id,
-            )
-            await screen_manager.show_screen(
-                bot=callback.bot,
-                chat_id=callback.message.chat.id,
-                user_id=callback.from_user.id,
-                screen_id="S3",
-            )
-            return False
     return True
 
 
 @router.callback_query(F.data == "profile:start")
 async def start_profile_flow(callback: CallbackQuery, state: FSMContext) -> None:
-    if not await _ensure_paid_profile_access(callback):
+    if not await _ensure_profile_access(callback):
         await callback.answer()
         return
     await start_profile_wizard(callback.message, state, callback.from_user.id)

@@ -17,8 +17,6 @@ from app.bot.questionnaire.config import (
 from app.bot.handlers.profile import start_profile_wizard
 from app.bot.handlers.screen_manager import screen_manager
 from app.db.models import (
-    Order,
-    OrderStatus,
     QuestionnaireResponse,
     QuestionnaireStatus,
     Tariff,
@@ -344,7 +342,7 @@ def _build_actual_answers(
     return actual, current_question_id
 
 
-async def _ensure_paid_access(callback: CallbackQuery) -> bool:
+async def _ensure_questionnaire_access(callback: CallbackQuery) -> bool:
     state_snapshot = screen_manager.update_state(callback.from_user.id)
     selected_tariff = state_snapshot.data.get("selected_tariff")
     if selected_tariff not in {Tariff.T2.value, Tariff.T3.value}:
@@ -361,44 +359,6 @@ async def _ensure_paid_access(callback: CallbackQuery) -> bool:
         )
         return False
 
-    order_id = _safe_int(state_snapshot.data.get("order_id"))
-    if not order_id:
-        await screen_manager.send_ephemeral_message(
-            callback.message,
-            "Сначала выберите тариф и завершите оплату.",
-            user_id=callback.from_user.id,
-        )
-        await screen_manager.show_screen(
-            bot=callback.bot,
-            chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
-            screen_id="S3",
-        )
-        return False
-
-    with get_session() as session:
-        order = session.get(Order, order_id)
-        if order:
-            screen_manager.update_state(
-                callback.from_user.id,
-                order_id=str(order.id),
-                order_status=order.status.value,
-                order_amount=str(order.amount),
-                order_currency=order.currency,
-            )
-        if not order or order.status != OrderStatus.PAID:
-            await screen_manager.send_ephemeral_message(
-                callback.message,
-                "Оплата ещё не подтверждена. Доступ к анкете откроется после статуса paid.",
-                user_id=callback.from_user.id,
-            )
-            await screen_manager.show_screen(
-                bot=callback.bot,
-                chat_id=callback.message.chat.id,
-                user_id=callback.from_user.id,
-                screen_id="S3",
-            )
-            return False
     return True
 
 
@@ -641,7 +601,7 @@ async def _start_edit_questionnaire(
 
 @router.callback_query(F.data == "questionnaire:start")
 async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> None:
-    if not await _ensure_paid_access(callback):
+    if not await _ensure_questionnaire_access(callback):
         await callback.answer()
         return
     if not await _ensure_profile_ready(callback, state):
@@ -729,7 +689,7 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
 
 @router.callback_query(F.data == "questionnaire:restart")
 async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> None:
-    if not await _ensure_paid_access(callback):
+    if not await _ensure_questionnaire_access(callback):
         await callback.answer()
         return
     if not await _ensure_profile_ready(callback, state):
@@ -771,7 +731,7 @@ async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> N
 
 @router.callback_query(F.data == "questionnaire:edit")
 async def edit_questionnaire(callback: CallbackQuery, state: FSMContext) -> None:
-    if not await _ensure_paid_access(callback):
+    if not await _ensure_questionnaire_access(callback):
         await callback.answer()
         return
     if not await _ensure_profile_ready(callback, state):
