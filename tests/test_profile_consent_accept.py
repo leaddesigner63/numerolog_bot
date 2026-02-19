@@ -143,6 +143,37 @@ class ProfileConsentAcceptTests(unittest.IsolatedAsyncioTestCase):
                 )
                 callback.answer.assert_awaited_once()
 
+    async def test_accept_consent_handles_missing_state_snapshot_without_crash(self) -> None:
+        callback = SimpleNamespace(
+            bot=AsyncMock(),
+            message=SimpleNamespace(chat=SimpleNamespace(id=5001), answer=AsyncMock()),
+            from_user=SimpleNamespace(id=1001, username="tester"),
+            answer=AsyncMock(),
+        )
+
+        with (
+            patch.object(profile.screen_manager, "update_state", side_effect=[None, None, None]),
+            patch.object(profile.screen_manager, "send_ephemeral_message", new=AsyncMock()) as send_ephemeral,
+            patch.object(profile.screen_manager, "show_screen", new=AsyncMock()) as show_screen,
+        ):
+            await profile.accept_profile_consent(callback)
+
+        with self.SessionLocal() as session:
+            db_profile = session.execute(select(UserProfile).where(UserProfile.user_id == 1)).scalar_one()
+            self.assertIsNotNone(db_profile.personal_data_consent_accepted_at)
+            self.assertEqual(db_profile.personal_data_consent_source, "profile_flow")
+            jobs = session.execute(select(ReportJob).where(ReportJob.user_id == 1)).scalars().all()
+            self.assertEqual(jobs, [])
+
+        send_ephemeral.assert_awaited_once_with(
+            callback.message,
+            "Не удалось запустить генерацию отчёта. Попробуйте снова.",
+            user_id=1001,
+        )
+        show_screen.assert_not_awaited()
+        callback.answer.assert_awaited_once()
+
+
 
 if __name__ == "__main__":
     unittest.main()

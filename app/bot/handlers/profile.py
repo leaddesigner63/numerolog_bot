@@ -78,6 +78,13 @@ def _safe_int(value: str | int | None) -> int | None:
         return None
 
 
+def _safe_state_data(state_snapshot: Any | None) -> dict[str, Any]:
+    state_data = getattr(state_snapshot, "data", None)
+    if isinstance(state_data, dict):
+        return state_data
+    return {}
+
+
 def _get_or_create_user(
     session, telegram_user_id: int, telegram_username: str | None = None
 ) -> User:
@@ -500,9 +507,10 @@ async def accept_profile_consent(callback: CallbackQuery) -> None:
 
         if profile:
             state_snapshot = screen_manager.update_state(callback.from_user.id)
-            tariff = state_snapshot.data.get("selected_tariff")
+            state_data = _safe_state_data(state_snapshot)
+            tariff = state_data.get("selected_tariff")
             if tariff not in {Tariff.T2.value, Tariff.T3.value}:
-                order_id = _safe_int(state_snapshot.data.get("order_id"))
+                order_id = _safe_int(state_data.get("order_id"))
                 job = _create_report_job_for_consent(
                     session,
                     user=user,
@@ -522,10 +530,13 @@ async def accept_profile_consent(callback: CallbackQuery) -> None:
         await callback.answer()
         return
 
-    state_snapshot = screen_manager.update_state(callback.from_user.id)
-    tariff = state_snapshot.data.get("selected_tariff")
+    state_snapshot = screen_manager.update_state(
+        callback.from_user.id,
+        profile_flow=None,
+    )
+    state_data = _safe_state_data(state_snapshot)
+    tariff = state_data.get("selected_tariff")
     next_screen = "S5" if tariff in {"T2", "T3"} else "S6"
-    screen_manager.update_state(callback.from_user.id, profile_flow=None)
 
     if next_screen == "S6" and not report_job_ready:
         await screen_manager.send_ephemeral_message(
