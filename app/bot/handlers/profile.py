@@ -24,6 +24,9 @@ from app.db.models import (
     OrderStatus,
     QuestionnaireResponse,
     Report,
+    ReportJob,
+    ReportJobStatus,
+    Tariff,
     User,
     UserProfile,
 )
@@ -236,6 +239,77 @@ def _refresh_questionnaire_summary(session, telegram_user_id: int) -> None:
     )
 
 
+def _create_report_job_for_consent(
+    session,
+    *,
+    user: User,
+    tariff_value: str | None,
+    order_id: int | None,
+    chat_id: int | None,
+) -> ReportJob | None:
+    if not tariff_value:
+        return None
+    try:
+        tariff = Tariff(tariff_value)
+    except ValueError:
+        return None
+
+    if tariff in {Tariff.T1, Tariff.T2, Tariff.T3}:
+        if order_id is None:
+            return None
+        order = session.get(Order, order_id)
+        if not order or order.user_id != user.id or order.tariff != tariff:
+            return None
+        if order.status != OrderStatus.PAID:
+            return None
+    else:
+        order_id = None
+
+    existing_job = (
+        session.execute(
+            select(ReportJob)
+            .where(
+                ReportJob.user_id == user.id,
+                ReportJob.tariff == tariff,
+                ReportJob.status.in_([ReportJobStatus.PENDING, ReportJobStatus.IN_PROGRESS]),
+                ReportJob.order_id.is_(None) if order_id is None else ReportJob.order_id == order_id,
+            )
+            .order_by(ReportJob.created_at.desc())
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
+    if existing_job:
+        existing_job.chat_id = chat_id
+        session.add(existing_job)
+        screen_manager.update_state(
+            user.telegram_user_id,
+            report_job_id=str(existing_job.id),
+            report_job_status=existing_job.status.value,
+            report_job_attempts=existing_job.attempts,
+        )
+        return existing_job
+
+    job = ReportJob(
+        user_id=user.id,
+        order_id=order_id,
+        tariff=tariff,
+        status=ReportJobStatus.PENDING,
+        attempts=0,
+        chat_id=chat_id,
+    )
+    session.add(job)
+    session.flush()
+    screen_manager.update_state(
+        user.telegram_user_id,
+        report_job_id=str(job.id),
+        report_job_status=job.status.value,
+        report_job_attempts=job.attempts,
+    )
+    return job
+
+
 @router.message(Command("lk"))
 async def show_cabinet(message: Message) -> None:
     if not message.from_user:
@@ -405,6 +479,7 @@ async def accept_profile_consent(callback: CallbackQuery) -> None:
         return
 
     consent_saved = False
+    report_job_ready = True
     with get_session() as session:
         user = _get_or_create_user(
             session,
@@ -423,6 +498,20 @@ async def accept_profile_consent(callback: CallbackQuery) -> None:
             )
             consent_saved = True
 
+        if profile:
+            state_snapshot = screen_manager.update_state(callback.from_user.id)
+            tariff = state_snapshot.data.get("selected_tariff")
+            if tariff not in {Tariff.T2.value, Tariff.T3.value}:
+                order_id = _safe_int(state_snapshot.data.get("order_id"))
+                job = _create_report_job_for_consent(
+                    session,
+                    user=user,
+                    tariff_value=tariff,
+                    order_id=order_id,
+                    chat_id=callback.message.chat.id,
+                )
+                report_job_ready = job is not None
+
     if not consent_saved:
         await screen_manager.send_ephemeral_message(
             callback.message,
@@ -437,6 +526,15 @@ async def accept_profile_consent(callback: CallbackQuery) -> None:
     tariff = state_snapshot.data.get("selected_tariff")
     next_screen = "S5" if tariff in {"T2", "T3"} else "S6"
     screen_manager.update_state(callback.from_user.id, profile_flow=None)
+
+    if next_screen == "S6" and not report_job_ready:
+        await screen_manager.send_ephemeral_message(
+            callback.message,
+            "Не удалось запустить генерацию отчёта. Попробуйте снова.",
+            user_id=callback.from_user.id,
+        )
+        await callback.answer()
+        return
 
     await screen_manager.send_ephemeral_message(
         callback.message,
