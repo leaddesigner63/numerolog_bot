@@ -108,11 +108,14 @@ document.addEventListener('DOMContentLoaded', () => {
       event.preventDefault();
 
       const placement = cta.dataset.placement || 'na';
+      const tariff = cta.dataset.tariff || 'na';
       const { targetUrl, startPayload } = buildTelegramLink(placement);
+      const eventName = cta.hasAttribute('data-tariff') ? 'landing_tariff_click' : 'landing_cta_click';
 
       cta.setAttribute('href', targetUrl);
 
-      trackEvent('landing_cta_click', {
+      trackEvent(eventName, {
+        tariff,
         placement,
         target: targetUrl,
         start_payload: startPayload,

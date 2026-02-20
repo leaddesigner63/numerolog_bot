@@ -49,6 +49,7 @@
       "name": "Нумерология-бот"
     },
     "offers": [
+      { "@type": "Offer", "name": "Пробный старт", "price": "0", "priceCurrency": "RUB" },
       { "@type": "Offer", "name": "В чём твоя сила?", "price": "560", "priceCurrency": "RUB" },
       { "@type": "Offer", "name": "Где твои деньги?", "price": "2190", "priceCurrency": "RUB" },
       { "@type": "Offer", "name": "Твой путь к себе!", "price": "5930", "priceCurrency": "RUB" }
@@ -99,13 +100,14 @@
 
 <main id="main-content" class="container">
   <h1 class="text-center mt-4">Стоимость разборов</h1>
-  <p class="text-center">Выберите уровень глубины анализа. Нумерологический расчет даты доступен в трех вариантах.</p>
+  <p class="text-center">Выберите уровень глубины анализа. Доступны тарифы T0–T3 для разной задачи и скорости внедрения.</p>
   <p class="text-center"><small>Подробно в статье: <a href="/articles/financial-code-by-date-of-birth/">финансовый код по дате рождения</a> и <a href="/articles/money-and-career-by-date-of-birth/">нумерология денег и карьеры</a>.</small></p>
 
-  <table class="price-table" aria-label="Сравнение тарифов">
+  <table class="price-table" aria-label="Сравнение тарифов T0-T3 по результату, глубине и сроку применения">
     <thead>
       <tr>
-        <th scope="col">Функционал</th>
+        <th scope="col">Критерий</th>
+        <th scope="col">T0 «Пробный старт»</th>
         <th scope="col">«В чём твоя сила?»</th>
         <th scope="col">«Где твои деньги?»</th>
         <th scope="col">«Твой путь к себе!»</th>
@@ -113,31 +115,36 @@
     </thead>
     <tbody>
       <tr>
-        <th scope="row">Превью</th>
+        <th scope="row">Результат</th>
+        <td>Быстрый мини-разбор для первого шага и знакомства с подходом.</td>
         <td>Базовый нумерология анализ личности.</td>
         <td>Профильный разбор финансов и карьерного вектора.</td>
         <td>Полный разбор личности, финансов и предназначения.</td>
       </tr>
       <tr>
-        <th scope="row">Сильные стороны</th>
-        <td>Да</td>
-        <td>Да</td>
-        <td>Да (расширенно)</td>
+        <th scope="row">Глубина</th>
+        <td>Стартовый слой: ключевая энергия и 1-2 зоны роста.</td>
+        <td>База: сильные стороны и опорные рекомендации.</td>
+        <td>Средняя+: деньги, карьера и прикладные сценарии.</td>
+        <td>Максимальная: системный разбор по всем блокам жизни.</td>
       </tr>
       <tr>
-        <th scope="row">Финансы</th>
-        <td>Базовые рекомендации</td>
-        <td>Код денег, карьера, бизнес, финансовые сценарии</td>
-        <td>Полный финансовый блок с глубинным анализом</td>
+        <th scope="row">Срок применения</th>
+        <td>Сразу: можно внедрять в день получения.</td>
+        <td>1-3 дня на встраивание рекомендаций.</td>
+        <td>3-7 дней для проверки финансовых гипотез.</td>
+        <td>1-2 недели на полную личную стратегию.</td>
       </tr>
       <tr>
-        <th scope="row">Путь и предназначение</th>
-        <td>Краткие ориентиры</td>
-        <td>Через профессию и карьеру</td>
-        <td>Подробный путь к себе и призванию</td>
+        <th scope="row">Кому подходит</th>
+        <td>Тем, кто хочет проверить формат без риска.</td>
+        <td>Тем, кто ищет личные ориентиры и понятный старт.</td>
+        <td>Тем, кто фокусируется на доходе и карьере.</td>
+        <td>Тем, кто готов к комплексной трансформации.</td>
       </tr>
       <tr>
         <th scope="row">Стоимость</th>
+        <td><strong data-tariff-price="T0">0 ₽</strong></td>
         <td><strong data-tariff-price="T1">560 ₽</strong></td>
         <td><strong data-tariff-price="T2">2 190 ₽</strong></td>
         <td><strong data-tariff-price="T3">5 930 ₽</strong></td>
@@ -147,6 +154,18 @@
 
   <div class="grid-3 mt-4">
     <div class="card">
+      <h3>T0 «Пробный старт»</h3>
+      <div style="font-size: 2rem; color: var(--accent); margin: 1rem 0;" data-tariff-price="T0">0 ₽</div>
+      <p>Короткий формат для первого знакомства с нумерологией и ИИ-разбором.</p>
+      <ul>
+        <li>• Базовый вектор по дате рождения</li>
+        <li>• 1-2 практичных подсказки</li>
+        <li>• Быстрый запуск без оплаты</li>
+      </ul>
+      <a href="https://t.me/AIreadUbot?start=lnd.src_na.cmp_na.pl_tariff_t0" class="btn mt-4" style="width:100%" data-telegram-cta data-tariff="T0" data-placement="tariff_t0">Начать</a>
+    </div>
+
+    <div class="card">
       <h3>«В чём твоя сила?»</h3>
       <div style="font-size: 2rem; color: var(--accent); margin: 1rem 0;" data-tariff-price="T1">560 ₽</div>
       <p>Базовый нумерология анализ личности. Узнайте свои опорные точки.</p>
@@ -155,10 +174,11 @@
         <li>• Энергия по дате рождения нумерология</li>
         <li>• Базовые рекомендации</li>
       </ul>
-      <a href="https://t.me/AIreadUbot?start=site" class="btn mt-4" style="width:100%">Купить</a>
+      <a href="https://t.me/AIreadUbot?start=lnd.src_na.cmp_na.pl_tariff_t1" class="btn mt-4" style="width:100%" data-telegram-cta data-tariff="T1" data-placement="tariff_t1">Купить</a>
     </div>
 
     <div class="card" style="border-color: var(--accent);">
+      <p style="display:inline-block; margin:0 0 0.5rem; padding:0.2rem 0.6rem; border-radius:999px; background:rgba(212,175,55,0.16); color:var(--accent); font-size:0.75rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase;">Рекомендуем</p>
       <h3>«Где твои деньги?»</h3>
       <div style="font-size: 2rem; color: var(--accent); margin: 1rem 0;" data-tariff-price="T2">2 190 ₽</div>
       <p>Профильный разбор финансов. Нумерология денег по дате рождения.</p>
@@ -168,7 +188,7 @@
         <li>• Бизнес по дате рождения</li>
         <li>• Финансовая нумерология по дате рождения</li>
       </ul>
-      <a href="https://t.me/AIreadUbot?start=site" class="btn mt-4" style="width:100%">Выбрать</a>
+      <a href="https://t.me/AIreadUbot?start=lnd.src_na.cmp_na.pl_tariff_t2" class="btn mt-4" style="width:100%" data-telegram-cta data-tariff="T2" data-placement="tariff_t2">Выбрать</a>
     </div>
 
     <div class="card">
@@ -181,7 +201,7 @@
         <li>• Глубинные сценарии</li>
         <li>• Нумерология по дате рождения финансовый код онлайн</li>
       </ul>
-      <a href="https://t.me/AIreadUbot?start=site" class="btn mt-4" style="width:100%">Полный доступ</a>
+      <a href="https://t.me/AIreadUbot?start=lnd.src_na.cmp_na.pl_tariff_t3" class="btn mt-4" style="width:100%" data-telegram-cta data-tariff="T3" data-placement="tariff_t3">Полный доступ</a>
     </div>
   </div>
 
@@ -207,7 +227,7 @@
 
   <section class="card final-cta text-center">
     <p class="final-cta-offer">Готовы получить персональный разбор? Запустите бота и начните прямо сейчас.</p>
-    <a href="https://t.me/AIreadUbot?start=site" class="btn">Открыть в Telegram</a>
+    <a href="https://t.me/AIreadUbot?start=lnd.src_na.cmp_na.pl_prices_final" class="btn" data-telegram-cta data-placement="prices_final">Открыть в Telegram</a>
   </section>
 
 </main>
@@ -244,6 +264,7 @@
         var schema = JSON.parse(schemaNode.textContent);
         var offers = Array.isArray(schema.offers) ? schema.offers : [];
         var byName = {
+          'Пробный старт': 'T0',
           'В чём твоя сила?': 'T1',
           'Где твои деньги?': 'T2',
           'Твой путь к себе!': 'T3'
@@ -283,5 +304,6 @@
     syncTariffsFromBotApi();
   })();
 </script>
+<script src="/assets/js/script.js"></script>
 </body>
 </html>

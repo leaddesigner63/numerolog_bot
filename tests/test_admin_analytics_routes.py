@@ -1064,6 +1064,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
                         source="vk",
                         campaign="retarget",
                         start_payload="src_vk_cmp_retarget",
+                        placement="tariff_t2",
                         captured_at=base_time,
                     ),
                     UserFirstTouchAttribution(
@@ -1071,6 +1072,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
                         source="vk",
                         campaign="retarget",
                         start_payload="src_vk_cmp_retarget",
+                        placement="tariff_t2",
                         captured_at=base_time + timedelta(minutes=1),
                     ),
                     UserFirstTouchAttribution(
@@ -1127,6 +1129,10 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         paid_step = next(item for item in summary_payload["data"]["summary"]["conversions"] if item["step"] == "paid")
         self.assertEqual(paid_step["users"], 1)
         self.assertEqual(paid_step["conversion_from_start"], 0.5)
+        by_tariff_click = {item["tariff"]: item for item in summary_payload["data"]["summary"]["paid_per_tariff_click"]}
+        self.assertEqual(by_tariff_click["T2"]["tariff_click_users"], 2)
+        self.assertEqual(by_tariff_click["T2"]["paid_users"], 1)
+        self.assertEqual(by_tariff_click["T2"]["paid_per_tariff_click"], 0.5)
 
         by_source = self.client.get("/admin/api/analytics/traffic/by-source", params={"tariff": "T2", "top_n": 10})
         self.assertEqual(by_source.status_code, 200)
@@ -1183,6 +1189,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertIn("analyticsPeriod", html)
         self.assertIn("analyticsFinanceSummary", html)
         self.assertIn("analyticsTrafficKpi", html)
+        self.assertIn("analyticsTrafficTariff", html)
         self.assertIn("analyticsTrafficSource", html)
         self.assertIn("analyticsTrafficCampaign", html)
         self.assertIn("analyticsFinanceByTariff", html)

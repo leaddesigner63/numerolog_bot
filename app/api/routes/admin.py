@@ -27,7 +27,7 @@ from app.services.admin_analytics import (
     build_screen_transition_analytics,
     parse_trigger_type,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.db.models import (
     AdminFinanceEvent,
     AdminNote,
@@ -1140,6 +1140,8 @@ def admin_ui(request: Request) -> HTMLResponse:
           <div id="analyticsTrafficSource" class="muted">Нет данных</div>
           <div style="height: 12px;"></div>
           <div id="analyticsTrafficCampaign" class="muted">Нет данных</div>
+          <div style="height: 12px;"></div>
+          <div id="analyticsTrafficTariff" class="muted">Нет данных</div>
         </div>
         <div class="analytics-block">
           <div class="analytics-title">Воронка по шагам (агрегат + тарифы)</div>
@@ -3033,7 +3035,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       `;
     }
 
-    function renderTrafficTables(sourceRows, campaignRows) {
+    function renderTrafficTables(sourceRows, campaignRows, tariffRows) {
       renderAnalyticsTable(
         "analyticsTrafficSource",
         ["Источник", "Пользователи", "Конверсия в оплату"],
@@ -3050,6 +3052,16 @@ def admin_ui(request: Request) -> HTMLResponse:
           {value: `${row.source || "UNKNOWN"} / ${row.campaign || "UNKNOWN"}`},
           {value: Number(row.users) || 0},
           {value: formatPercent(row.conversion)},
+        ])
+      );
+      renderAnalyticsTable(
+        "analyticsTrafficTariff",
+        ["Тариф", "Tariff click (users)", "Paid (users)", "Paid / tariff_click"],
+        (tariffRows || []).map((row) => [
+          {value: row.tariff || "—"},
+          {value: Number(row.tariff_click_users) || 0},
+          {value: Number(row.paid_users) || 0},
+          {value: formatPercent(row.paid_per_tariff_click)},
         ])
       );
     }
@@ -3185,13 +3197,14 @@ def admin_ui(request: Request) -> HTMLResponse:
         const trafficSummary = trafficSummaryRes?.data?.summary || {};
         const trafficBySource = trafficSourceRes?.data?.by_source || [];
         const trafficByCampaign = trafficCampaignRes?.data?.by_campaign || [];
+        const trafficByTariffClick = trafficSummary?.paid_per_tariff_click || [];
 
         const isEmpty = !matrixRows.length && !funnelRows.length && !dropoffRows.length;
         if (isEmpty) {
           stateNode.textContent = "Нет данных за выбранный период.";
           renderKpis({}, [], []);
           renderTrafficKpis({}, []);
-          renderTrafficTables([], []);
+          renderTrafficTables([], [], []);
           renderFunnelChart([], {});
           renderAnalyticsTable("analyticsMatrix", ["from", "to", "count", "share"], []);
           renderAnalyticsTable("analyticsBottlenecks", ["Переход", "CR", "Drop-off", "Медиана времени"], []);
@@ -3204,7 +3217,7 @@ def admin_ui(request: Request) -> HTMLResponse:
 
         renderKpis(summary, funnelRows, dropoffRows);
         renderTrafficKpis(trafficSummary, trafficBySource);
-        renderTrafficTables(trafficBySource, trafficByCampaign);
+        renderTrafficTables(trafficBySource, trafficByCampaign, trafficByTariffClick);
         renderFunnelChart(funnelAggregateRows, funnelByTariff);
         renderFinanceSummary(financeSummary);
         renderAnalyticsTable(
@@ -3644,6 +3657,7 @@ class FinanceTimeseriesItem(BaseModel):
 class TrafficSummaryItem(BaseModel):
     users_started_total: int
     conversions: list[dict]
+    paid_per_tariff_click: list[dict] = Field(default_factory=list)
 
 
 class TrafficSourceItem(BaseModel):
@@ -3814,6 +3828,7 @@ def _safe_build_traffic_analytics(session: Session, filters: TrafficAnalyticsFil
         "users_by_source": [],
         "users_by_source_campaign": [],
         "conversions": [],
+        "paid_per_tariff_click": [],
     }
     try:
         return build_traffic_analytics(session, filters), []
@@ -4187,6 +4202,7 @@ def admin_traffic_summary(
         {
             "users_started_total": result.get("users_started_total", 0),
             "conversions": result.get("conversions", []),
+            "paid_per_tariff_click": result.get("paid_per_tariff_click", []),
         }
     ).model_dump(mode="json")
     return {
