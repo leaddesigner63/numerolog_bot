@@ -1601,6 +1601,23 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 screen_manager.update_state(
                     callback.from_user.id, **_refresh_order_state(order)
                 )
+                if order.status == OrderStatus.PAID:
+                    target_screen_id = "S4"
+                    if selected_tariff in {Tariff.T2.value, Tariff.T3.value}:
+                        questionnaire = state_snapshot.data.get("questionnaire") or {}
+                        if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
+                            target_screen_id = "S5"
+                    screen_manager.update_state(
+                        callback.from_user.id,
+                        profile_flow="report",
+                        payment_processing_notice=False,
+                    )
+                    await _show_screen_for_callback(
+                        callback,
+                        screen_id=target_screen_id,
+                    )
+                    await _safe_callback_answer(callback)
+                    return
         if screen_id == "S5":
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             selected_tariff = state_snapshot.data.get("selected_tariff")

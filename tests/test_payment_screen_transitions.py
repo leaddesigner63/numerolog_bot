@@ -177,6 +177,30 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
 
         show_screen.assert_awaited_with(callback, screen_id="S4")
 
+    async def test_s3_paid_order_with_profile_skips_repeated_checkout_screen(self) -> None:
+        order_id = self._create_order(OrderStatus.PAID)
+        self._create_profile(consent_accepted=True)
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T1.value,
+            order_id=str(order_id),
+            order_status=OrderStatus.PAID.value,
+            offer_seen=True,
+        )
+        callback = _DummyCallback("screen:S3")
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+            patch.object(screens, "_maybe_run_payment_waiter", new=AsyncMock()) as run_waiter,
+            patch.object(screens, "_send_notice", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=AsyncMock())
+
+        show_screen.assert_awaited_once_with(callback, screen_id="S4")
+        run_waiter.assert_not_awaited()
+
     async def test_profile_save_generates_report_for_paid_t1_order(self) -> None:
         order_id = self._create_order(OrderStatus.PAID)
         self._create_profile(consent_accepted=True)

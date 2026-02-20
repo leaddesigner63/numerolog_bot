@@ -17,6 +17,12 @@
    - Проверка `/start paywait_<order_id>`: unpaid заказ открывает S3 (ожидание оплаты), paid заказ открывает S6/S7 (post-payment генерация).
 6. Если откат обязателен: на сервере `git -C <DEPLOY_PATH> checkout <stable_commit>` и `sudo systemctl restart numerolog.target`.
 
+## Проверка отсутствия циклического перехода S3 -> S4
+1. Пройдите оплату тарифа T1/T2/T3 до статуса `paid`.
+2. На экране `S3` нажмите «Продолжить» и убедитесь, что открывается `S4` (или `S5` для T2/T3 при незавершённой анкете).
+3. Повторно вызовите `screen:S3` (через старое сообщение/кнопку) — бот должен сразу перенаправить на следующий шаг, без возврата в цикл `S3 <-> S4`.
+4. Зафиксируйте результат в release checklist: `docs/deploy/checkout_flow_release_checklist.md`.
+
 ## CI/CD pipeline (пошагово, воспроизводимо)
 
 1. Push в `main` запускает `.github/workflows/deploy.yml`:
