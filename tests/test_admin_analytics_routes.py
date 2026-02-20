@@ -1040,6 +1040,20 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertIn('EXIT: "Выход из сценария"', html)
         self.assertIn("screenLabelInTransition", html)
 
+    def test_admin_ui_uses_timeout_and_partial_analytics_refresh(self) -> None:
+        with patch.object(admin_routes, "_admin_credentials_ready", return_value=True), patch.object(
+            admin_routes,
+            "_admin_session_token",
+            return_value="token",
+        ):
+            response = self.client.get("/admin", cookies={"admin_session": "token"})
+
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertIn("const adminRequestTimeoutMs = 15000", html)
+        self.assertIn("Promise.allSettled(endpointRequests)", html)
+        self.assertIn("Обновлено частично", html)
+
     def test_finance_analytics_endpoints_return_provider_confirmed_metrics(self) -> None:
         base_time = datetime.now(timezone.utc)
         with self.SessionLocal() as session:
