@@ -1471,6 +1471,31 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     await _safe_callback_processing(callback)
     screen_manager.update_state(callback.from_user.id, s4_no_inline_keyboard=False)
 
+    if callback.data == "s2:details":
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        tariff = state_snapshot.data.get("selected_tariff")
+        if tariff not in PAID_TARIFFS:
+            await _show_screen_for_callback(callback, screen_id="S2")
+            await _safe_callback_answer(callback)
+            return
+        await _show_screen_for_callback(callback, screen_id="S2_MORE")
+        await _safe_callback_answer(callback)
+        return
+
+    if callback.data == "s2:details:back":
+        await _show_screen_for_callback(callback, screen_id="S2")
+        screen_manager.update_state(callback.from_user.id, offer_seen=True)
+        await _safe_callback_answer(callback)
+        return
+
+    if callback.data == "s2:details:continue":
+        await _show_marketing_consent_or_target_screen(
+            callback,
+            screen_id="S4",
+        )
+        await _safe_callback_answer(callback)
+        return
+
     if callback.data.startswith("screen:"):
         screen_id = callback.data.split("screen:")[-1]
         if screen_id == "S3":
