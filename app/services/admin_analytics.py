@@ -26,13 +26,26 @@ from app.db.models import (
 
 _UNKNOWN_SCREEN = "UNKNOWN"
 _SCREEN_ID_PATTERN = re.compile(r"^S\d+(?:_T[0-3])?$")
-_FUNNEL_STEPS: list[tuple[str, set[str]]] = [
+_FUNNEL_TARIFFS = ("T0", "T1", "T2", "T3")
+_FUNNEL_TEMPLATE_T0_T1: list[tuple[str, set[str]]] = [
     ("S0", {"S0"}),
     ("S1", {"S1"}),
     ("S3", {"S3"}),
-    ("S5", {"S5"}),
     ("S6_OR_S7", {"S6", "S7"}),
 ]
+_FUNNEL_TEMPLATE_T2_T3: list[tuple[str, set[str]]] = [
+    ("S0", {"S0"}),
+    ("S1", {"S1"}),
+    ("S5", {"S5"}),
+    ("S3", {"S3"}),
+    ("S6_OR_S7", {"S6", "S7"}),
+]
+_FUNNEL_TEMPLATES_BY_TARIFF: dict[str, list[tuple[str, set[str]]]] = {
+    "T0": _FUNNEL_TEMPLATE_T0_T1,
+    "T1": _FUNNEL_TEMPLATE_T0_T1,
+    "T2": _FUNNEL_TEMPLATE_T2_T3,
+    "T3": _FUNNEL_TEMPLATE_T2_T3,
+}
 _FINANCE_ENTRY_SCREENS = {"S3", "S4"}
 _S3_REPORT_DETAILS_TRIGGER = "s3:report_details"
 _PROVIDER_CONFIRMATION_SOURCES = {
@@ -100,6 +113,7 @@ def build_screen_transition_analytics(session: Session, filters: AnalyticsFilter
             "summary": {"events": 0, "users": 0},
             "transition_matrix": [],
             "funnel": [],
+            "funnel_by_tariff": {tariff: [] for tariff in _FUNNEL_TARIFFS},
             "dropoff": [],
             "transition_durations": [],
         }
@@ -112,6 +126,7 @@ def build_screen_transition_analytics(session: Session, filters: AnalyticsFilter
         },
         "transition_matrix": _build_transition_matrix(events, filters.unique_users_only),
         "funnel": _build_funnel(events_by_user),
+        "funnel_by_tariff": _build_funnel_by_tariff(events_by_user),
         "dropoff": _build_dropoff(events_by_user, filters),
         "transition_durations": _build_transition_durations(events_by_user),
     }
@@ -609,20 +624,45 @@ def _build_transition_matrix(events: list[EventPoint], unique_users_only: bool) 
 
 
 def _build_funnel(events_by_user: dict[int, list[EventPoint]]) -> list[dict]:
+    return _build_funnel_with_template(events_by_user, _FUNNEL_TEMPLATE_T0_T1)
+
+
+def _build_funnel_by_tariff(events_by_user: dict[int, list[EventPoint]]) -> dict[str, list[dict]]:
+    grouped_events: dict[str, dict[int, list[EventPoint]]] = {tariff: {} for tariff in _FUNNEL_TARIFFS}
+
+    for user_id, user_events in events_by_user.items():
+        user_tariff = _resolve_user_tariff(user_events)
+        if user_tariff not in grouped_events:
+            continue
+        grouped_events[user_tariff][user_id] = user_events
+
+    return {
+        tariff: _build_funnel_with_template(
+            grouped_events[tariff],
+            _FUNNEL_TEMPLATES_BY_TARIFF[tariff],
+        )
+        for tariff in _FUNNEL_TARIFFS
+    }
+
+
+def _build_funnel_with_template(
+    events_by_user: dict[int, list[EventPoint]],
+    template: list[tuple[str, set[str]]],
+) -> list[dict]:
     total_users = len(events_by_user)
     if total_users == 0:
         return []
 
-    step_users: dict[str, int] = {step_name: 0 for step_name, _ in _FUNNEL_STEPS}
+    step_users: dict[str, int] = {step_name: 0 for step_name, _ in template}
     for user_events in events_by_user.values():
-        user_progress = _resolve_user_funnel_progress(user_events)
+        user_progress = _resolve_user_funnel_progress(user_events, template)
         for step_name, reached in user_progress.items():
             if reached:
                 step_users[step_name] += 1
 
     rows: list[dict] = []
     previous_count = total_users
-    for step_name, _ in _FUNNEL_STEPS:
+    for step_name, _ in template:
         count = step_users.get(step_name, 0)
         rows.append(
             {
@@ -636,7 +676,23 @@ def _build_funnel(events_by_user: dict[int, list[EventPoint]]) -> list[dict]:
     return rows
 
 
-def _resolve_user_funnel_progress(events: list[EventPoint]) -> dict[str, bool]:
+def _resolve_user_tariff(events: list[EventPoint]) -> str | None:
+    for event in events:
+        tariff_value = str(event.tariff or "").strip().upper()
+        if tariff_value:
+            return tariff_value
+    return None
+
+
+def _resolve_user_funnel_progress(
+    events: list[EventPoint],
+    template: list[tuple[str, set[str]]] | None = None,
+) -> dict[str, bool]:
+    resolved_template = template
+    if resolved_template is None:
+        user_tariff = _resolve_user_tariff(events)
+        resolved_template = _FUNNEL_TEMPLATES_BY_TARIFF.get(user_tariff or "", _FUNNEL_TEMPLATE_T0_T1)
+
     flat_screens: list[str] = []
     for event in events:
         flat_screens.append(event.from_screen)
@@ -644,7 +700,7 @@ def _resolve_user_funnel_progress(events: list[EventPoint]) -> dict[str, bool]:
 
     progress: dict[str, bool] = {}
     search_index = 0
-    for step_index, (step_name, accepted_screens) in enumerate(_FUNNEL_STEPS):
+    for step_index, (step_name, accepted_screens) in enumerate(resolved_template):
         reached = False
         for idx in range(search_index, len(flat_screens)):
             if flat_screens[idx] in accepted_screens:
@@ -653,10 +709,10 @@ def _resolve_user_funnel_progress(events: list[EventPoint]) -> dict[str, bool]:
                 break
         progress[step_name] = reached
         if not reached:
-            for remaining_name, _ in _FUNNEL_STEPS[step_index + 1 :]:
+            for remaining_name, _ in resolved_template[step_index + 1 :]:
                 progress[remaining_name] = False
             break
-    for step_name, _ in _FUNNEL_STEPS:
+    for step_name, _ in resolved_template:
         progress.setdefault(step_name, False)
     return progress
 

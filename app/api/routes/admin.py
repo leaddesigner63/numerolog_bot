@@ -700,6 +700,22 @@ def admin_ui(request: Request) -> HTMLResponse:
       flex-direction: column;
       gap: 8px;
     }
+    .funnel-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 10px;
+    }
+    .funnel-card {
+      border: 1px solid #2a2f3a;
+      border-radius: 10px;
+      padding: 10px;
+      background: #0f1115;
+    }
+    .funnel-card-title {
+      font-size: 12px;
+      margin-bottom: 8px;
+      color: #cbd5e1;
+    }
     .funnel-step {
       display: grid;
       grid-template-columns: 110px 1fr 55px;
@@ -1055,8 +1071,10 @@ def admin_ui(request: Request) -> HTMLResponse:
           <div id="analyticsTrafficCampaign" class="muted">Нет данных</div>
         </div>
         <div class="analytics-block">
-          <div class="analytics-title">Воронка по шагам</div>
-          <div id="analyticsFunnel" class="muted">Нет данных</div>
+          <div class="analytics-title">Воронка по шагам (агрегат + тарифы)</div>
+          <div id="analyticsFunnel" class="funnel-grid">
+            <div class="muted">Нет данных</div>
+          </div>
         </div>
         <div class="analytics-block">
           <div class="analytics-title">Матрица переходов</div>
@@ -2823,31 +2841,44 @@ def admin_ui(request: Request) -> HTMLResponse:
       `;
     }
 
-    function renderFunnelChart(funnelRows) {
+    function renderSingleFunnelChart(title, funnelRows) {
+      if (!funnelRows.length) {
+        return `<div class="funnel-card"><div class="funnel-card-title">${title}</div><div class="muted">Нет данных по воронке.</div></div>`;
+      }
+      return `
+        <div class="funnel-card">
+          <div class="funnel-card-title">${title}</div>
+          <div class="funnel-chart">
+            ${funnelRows.map((row) => {
+              const width = Math.max(0, Math.min(100, (Number(row.conversion_from_start) || 0) * 100));
+              const stepCr = Number(row.conversion_from_previous) || 0;
+              const isProblem = stepCr > 0 && stepCr < analyticsThresholds.lowCr;
+              return `
+                <div class="funnel-step ${isProblem ? "problem-cell" : ""}">
+                  <div>${screenLabel(row.step)}</div>
+                  <div class="funnel-bar-wrap"><div class="funnel-bar" style="width: ${width}%;"></div></div>
+                  <div>${formatPercent(stepCr)}</div>
+                </div>
+              `;
+            }).join("")}
+          </div>
+        </div>
+      `;
+    }
+
+    function renderFunnelChart(funnelAggregateRows, funnelByTariff) {
       const target = document.getElementById("analyticsFunnel");
       if (!target) {
         return;
       }
-      if (!funnelRows.length) {
-        target.innerHTML = '<div class="muted">Нет данных по воронке.</div>';
-        return;
-      }
-      target.innerHTML = `
-        <div class="funnel-chart">
-          ${funnelRows.map((row) => {
-            const width = Math.max(0, Math.min(100, (Number(row.conversion_from_start) || 0) * 100));
-            const stepCr = Number(row.conversion_from_previous) || 0;
-            const isProblem = stepCr > 0 && stepCr < analyticsThresholds.lowCr;
-            return `
-              <div class="funnel-step ${isProblem ? "problem-cell" : ""}">
-                <div>${screenLabel(row.step)}</div>
-                <div class="funnel-bar-wrap"><div class="funnel-bar" style="width: ${width}%;"></div></div>
-                <div>${formatPercent(stepCr)}</div>
-              </div>
-            `;
-          }).join("")}
-        </div>
-      `;
+      const byTariff = funnelByTariff || {};
+      target.innerHTML = [
+        renderSingleFunnelChart("Общий агрегат", funnelAggregateRows || []),
+        renderSingleFunnelChart("Тариф T0", byTariff.T0 || []),
+        renderSingleFunnelChart("Тариф T1", byTariff.T1 || []),
+        renderSingleFunnelChart("Тариф T2", byTariff.T2 || []),
+        renderSingleFunnelChart("Тариф T3", byTariff.T3 || []),
+      ].join("");
     }
 
     function renderKpis(summary, funnelRows, dropoffRows) {
@@ -3047,6 +3078,8 @@ def admin_ui(request: Request) -> HTMLResponse:
         const summary = summaryRes?.data?.summary || {};
         const matrixRows = matrixRes?.data?.transition_matrix || [];
         const funnelRows = funnelRes?.data?.funnel || [];
+        const funnelAggregateRows = funnelRes?.data?.funnel_aggregate || funnelRows;
+        const funnelByTariff = funnelRes?.data?.funnel_by_tariff || {};
         const timingRows = timingRes?.data?.transition_timing || [];
         const dropoffRows = fullRes?.data?.dropoff || [];
         const financeSummary = financeSummaryRes?.data?.summary || {};
@@ -3062,7 +3095,7 @@ def admin_ui(request: Request) -> HTMLResponse:
           renderKpis({}, [], []);
           renderTrafficKpis({}, []);
           renderTrafficTables([], []);
-          renderFunnelChart([]);
+          renderFunnelChart([], {});
           renderAnalyticsTable("analyticsMatrix", ["from", "to", "count", "share"], []);
           renderAnalyticsTable("analyticsBottlenecks", ["Переход", "CR", "Drop-off", "Медиана времени"], []);
           renderFinanceSummary({});
@@ -3075,7 +3108,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         renderKpis(summary, funnelRows, dropoffRows);
         renderTrafficKpis(trafficSummary, trafficBySource);
         renderTrafficTables(trafficBySource, trafficByCampaign);
-        renderFunnelChart(funnelRows);
+        renderFunnelChart(funnelAggregateRows, funnelByTariff);
         renderFinanceSummary(financeSummary);
         renderAnalyticsTable(
           "analyticsFinanceByTariff",
@@ -3754,6 +3787,11 @@ def admin_screen_transition_analytics(
         "summary": result["summary"],
         "transition_matrix": _slice_top_n(result["transition_matrix"], top_n),
         "funnel": _slice_top_n(result["funnel"], top_n),
+        "funnel_aggregate": _slice_top_n(result["funnel"], top_n),
+        "funnel_by_tariff": {
+            tariff: _slice_top_n(items, top_n)
+            for tariff, items in (result.get("funnel_by_tariff") or {}).items()
+        },
         "dropoff": _slice_top_n(result["dropoff"], top_n),
         "transition_durations": _slice_top_n(result["transition_durations"], top_n),
     }
@@ -3852,7 +3890,15 @@ def admin_transitions_funnel(
         TransitionFunnelItem.model_validate(item).model_dump(mode="json")
         for item in _slice_top_n(result["funnel"], top_n)
     ]
-    return _build_transition_envelope(data={"funnel": funnel_items}, filters_applied=filters_applied, top_n=top_n)
+    funnel_by_tariff = {
+        tariff: [TransitionFunnelItem.model_validate(item).model_dump(mode="json") for item in _slice_top_n(items, top_n)]
+        for tariff, items in (result.get("funnel_by_tariff") or {}).items()
+    }
+    return _build_transition_envelope(
+        data={"funnel": funnel_items, "funnel_aggregate": funnel_items, "funnel_by_tariff": funnel_by_tariff},
+        filters_applied=filters_applied,
+        top_n=top_n,
+    )
 
 
 @router.get("/api/analytics/transitions/timing")

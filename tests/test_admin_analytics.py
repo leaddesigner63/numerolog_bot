@@ -111,6 +111,77 @@ class AdminAnalyticsTests(unittest.TestCase):
         duration_pairs = {(item["from_screen"], item["to_screen"]) for item in result["transition_durations"]}
         self.assertIn(("S1", "UNKNOWN"), duration_pairs)
 
+
+    def test_funnel_templates_by_tariff(self) -> None:
+        base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        with self.Session() as session:
+            session.add_all(
+                [
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=11,
+                        from_screen_id="S0",
+                        to_screen_id="S1",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T1"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=11,
+                        from_screen_id="S1",
+                        to_screen_id="S3",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T1"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=11,
+                        from_screen_id="S3",
+                        to_screen_id="S6",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T1"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=22,
+                        from_screen_id="S0",
+                        to_screen_id="S1",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T2"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=22,
+                        from_screen_id="S1",
+                        to_screen_id="S5",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T2"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=22,
+                        from_screen_id="S5",
+                        to_screen_id="S3",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T2"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=22,
+                        from_screen_id="S3",
+                        to_screen_id="S7",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T2"},
+                    ),
+                ]
+            )
+            session.flush()
+            events = session.query(ScreenTransitionEvent).order_by(ScreenTransitionEvent.id.asc()).all()
+            for idx, event in enumerate(events):
+                event.created_at = base_time + timedelta(minutes=idx)
+            session.commit()
+
+            result = build_screen_transition_analytics(session, AnalyticsFilters())
+
+        self.assertIn("funnel_by_tariff", result)
+        self.assertEqual([item["step"] for item in result["funnel_by_tariff"]["T1"]], ["S0", "S1", "S3", "S6_OR_S7"])
+        self.assertEqual([item["step"] for item in result["funnel_by_tariff"]["T2"]], ["S0", "S1", "S5", "S3", "S6_OR_S7"])
+        self.assertEqual(result["funnel_by_tariff"]["T2"][2]["users"], 1)
+        self.assertEqual(result["funnel_by_tariff"]["T0"], [])
+
     def test_finance_layer_provider_confirmed_only(self) -> None:
         base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
         from app.db.models import (
