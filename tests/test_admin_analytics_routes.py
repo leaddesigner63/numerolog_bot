@@ -28,6 +28,8 @@ from app.db.models import (
     UserProfile,
     MarketingConsentEvent,
     MarketingConsentEventType,
+    FeedbackMessage,
+    FeedbackStatus,
     UserFirstTouchAttribution,
 )
 from app.main import create_app
@@ -641,6 +643,75 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(finance_payload["data"]["summary"]["provider_confirmed_orders"], 1)
         self.assertEqual(finance_payload["data"]["summary"]["provider_confirmed_revenue"], 1900.0)
 
+
+
+    def test_overview_excludes_deploy_smoke_entities(self) -> None:
+        now = datetime.now(timezone.utc)
+        with self.SessionLocal() as session:
+            smoke_user = User(id=720, telegram_user_id=9720)
+            regular_user = User(id=721, telegram_user_id=9721)
+            session.add_all([smoke_user, regular_user])
+            session.flush()
+            session.add_all(
+                [
+                    UserProfile(
+                        user_id=720,
+                        name="Smoke Check",
+                        birth_date="2000-01-01",
+                        birth_place_city="M",
+                        birth_place_country="RU",
+                    ),
+                    UserProfile(
+                        user_id=721,
+                        name="Regular",
+                        birth_date="2000-01-01",
+                        birth_place_city="M",
+                        birth_place_country="RU",
+                    ),
+                    Order(
+                        id=820,
+                        user_id=720,
+                        tariff=Tariff.T1,
+                        amount=1000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        provider_payment_id="smoke-20260101010101",
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=now,
+                    ),
+                    Order(
+                        id=821,
+                        user_id=721,
+                        tariff=Tariff.T2,
+                        amount=2000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        provider_payment_id="real-20260101010101",
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=now,
+                    ),
+                    Report(user_id=720, order_id=820, tariff=Tariff.T1, report_text="smoke"),
+                    Report(user_id=721, order_id=821, tariff=Tariff.T2, report_text="real"),
+                    FeedbackMessage(user_id=720, text="smoke", status=FeedbackStatus.SENT),
+                    FeedbackMessage(user_id=721, text="real", status=FeedbackStatus.SENT),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/admin/api/overview")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertEqual(payload["users"], 1)
+        self.assertEqual(payload["orders"], 1)
+        self.assertEqual(payload["reports"], 1)
+        self.assertEqual(payload["feedback_messages"], 1)
+        self.assertEqual(payload["confirmed_paid_orders"], 1)
+        self.assertEqual(payload["confirmed_revenue_total"], 2000.0)
 
     def test_overview_includes_worker_metrics(self) -> None:
         now = datetime.now(timezone.utc)

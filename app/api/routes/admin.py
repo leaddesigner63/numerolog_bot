@@ -63,6 +63,21 @@ _DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX = "smoke-"
 _DEPLOY_SMOKE_PROFILE_NAME = "Smoke Check"
 
 
+def _deploy_smoke_users_subquery():
+    smoke_users_by_order = select(Order.user_id).where(Order.provider_payment_id.ilike(f"{_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX}%"))
+    smoke_users_by_profile = select(UserProfile.user_id).where(
+        func.coalesce(UserProfile.name, "") == _DEPLOY_SMOKE_PROFILE_NAME
+    )
+    return smoke_users_by_order.union(smoke_users_by_profile)
+
+
+def _deploy_smoke_excluded_orders_filter():
+    return or_(
+        Order.provider_payment_id.is_(None),
+        ~Order.provider_payment_id.ilike(f"{_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX}%"),
+    )
+
+
 def _collect_worker_metrics(session: Session) -> dict[str, object]:
     ttl_seconds = max((settings.report_job_poll_interval_seconds or 0) * 3, 30)
     stale_after = datetime.now(timezone.utc) - timedelta(seconds=ttl_seconds)
@@ -3508,10 +3523,17 @@ async def admin_logout() -> RedirectResponse:
 
 @router.get("/api/overview")
 def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
-    users_count = session.scalar(select(func.count()).select_from(User)) or 0
-    orders_count = session.scalar(select(func.count()).select_from(Order)) or 0
-    reports_count = session.scalar(select(func.count()).select_from(Report)) or 0
-    feedback_count = session.scalar(select(func.count()).select_from(FeedbackMessage)) or 0
+    deploy_smoke_users = _deploy_smoke_users_subquery()
+    users_count = session.scalar(select(func.count()).select_from(User).where(~User.id.in_(deploy_smoke_users))) or 0
+    orders_count = session.scalar(
+        select(func.count()).select_from(Order).where(_deploy_smoke_excluded_orders_filter())
+    ) or 0
+    reports_count = session.scalar(
+        select(func.count()).select_from(Report).where(~Report.user_id.in_(deploy_smoke_users))
+    ) or 0
+    feedback_count = session.scalar(
+        select(func.count()).select_from(FeedbackMessage).where(~FeedbackMessage.user_id.in_(deploy_smoke_users))
+    ) or 0
     provider_sources = [
         PaymentConfirmationSource.PROVIDER_WEBHOOK,
         PaymentConfirmationSource.PROVIDER_POLL,
@@ -3529,22 +3551,28 @@ def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
     confirmed_paid_orders = session.scalar(
         select(func.count())
         .select_from(Order)
-        .where(provider_confirmed_filter)
+        .where(provider_confirmed_filter, _deploy_smoke_excluded_orders_filter())
     ) or 0
     confirmed_revenue_total = session.scalar(
         select(func.coalesce(func.sum(Order.amount), 0))
         .select_from(Order)
-        .where(provider_confirmed_filter)
+        .where(provider_confirmed_filter, _deploy_smoke_excluded_orders_filter())
     ) or 0
     manual_paid_orders = session.scalar(
         select(func.count())
         .select_from(Order)
-        .where(Order.payment_confirmation_source == PaymentConfirmationSource.ADMIN_MANUAL)
+        .where(
+            Order.payment_confirmation_source == PaymentConfirmationSource.ADMIN_MANUAL,
+            _deploy_smoke_excluded_orders_filter(),
+        )
     ) or 0
     manual_paid_amount_total = session.scalar(
         select(func.coalesce(func.sum(Order.amount), 0))
         .select_from(Order)
-        .where(Order.payment_confirmation_source == PaymentConfirmationSource.ADMIN_MANUAL)
+        .where(
+            Order.payment_confirmation_source == PaymentConfirmationSource.ADMIN_MANUAL,
+            _deploy_smoke_excluded_orders_filter(),
+        )
     ) or 0
     arpu_confirmed = 0
     if confirmed_paid_orders:
@@ -4569,12 +4597,7 @@ def admin_orders(
                 latest_manual_paid_event.c.rn == 1,
             ),
         )
-        .where(
-            or_(
-                Order.provider_payment_id.is_(None),
-                ~Order.provider_payment_id.ilike(f"{_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX}%"),
-            )
-        )
+        .where(_deploy_smoke_excluded_orders_filter())
     )
     if user_id is not None:
         query = query.where(Order.user_id == user_id)
@@ -4912,9 +4935,7 @@ def admin_users(
         .outerjoin(UserProfile, UserProfile.user_id == User.id)
         .outerjoin(order_agg, order_agg.c.user_id == User.id)
         .where(
-            ~User.id.in_(
-                select(Order.user_id).where(Order.provider_payment_id.ilike(f"{_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX}%"))
-            )
+            ~User.id.in_(_deploy_smoke_users_subquery())
         )
         .where(
             or_(
