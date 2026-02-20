@@ -25,6 +25,7 @@ from app.db.models import (
     ScreenStateRecord,
     Tariff,
     User,
+    UserProfile,
 )
 from app.db.session import get_session
 
@@ -52,6 +53,18 @@ def _prepare_paid_order_and_job() -> tuple[int, int, int]:
         user = User(telegram_user_id=telegram_user_id)
         session.add(user)
         session.flush()
+
+        profile = UserProfile(
+            user_id=user.id,
+            name="Smoke Check",
+            gender=None,
+            birth_date="01.01.1990",
+            birth_time="00:00",
+            birth_place_city="Moscow",
+            birth_place_region=None,
+            birth_place_country="RU",
+        )
+        session.add(profile)
 
         order = Order(
             user_id=user.id,
