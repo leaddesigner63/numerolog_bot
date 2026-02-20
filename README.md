@@ -46,7 +46,7 @@ app/
     marketing_messaging.py # единый сервис отправки маркетинговых сообщений (consent-check, ссылка отписки, campaign-логирование)
   payments/           # платёжные провайдеры и проверки webhook
 scripts/              # вспомогательные скрипты
-  deploy.sh           # серверный деплой-скрипт (используется GitHub Actions)
+  deploy.sh           # серверный деплой-скрипт (используется GitHub Actions; пишет маркер .last_deploy_success)
   check_runtime_services.sh # post-deploy проверка, что API и bot systemd units активны
   test.sh             # полный набор локальных проверок
   fast_checks.py      # быстрые сценарные проверки без внешних зависимостей
@@ -1045,3 +1045,9 @@ journalctl -u <service> -n 200 --no-pager
 Пошаговый деплой retention-логики: `docs/deploy/autodeploy_retention_nudge_step_by_step.md`.
 
 В админке Analytics добавлен отдельный блок "Resume-after-nudge по тарифам" и API-эндпоинт `/admin/api/analytics/finance/nudge-by-tariff`.
+
+
+## Надёжность автодеплоя по SSH
+
+- Workflow `deploy_production` использует SSH keepalive (`ServerAliveInterval`/`ServerAliveCountMax`) и fallback-проверку маркера `$DEPLOY_PATH/.last_deploy_success`, чтобы ложные сетевые обрывы в конце сессии не ломали релиз.
+- Маркер успешного деплоя записывается в конце `scripts/deploy.sh`.

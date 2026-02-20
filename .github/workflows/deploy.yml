@@ -85,19 +85,29 @@ jobs:
           WEBMASTER_PING_SCRIPT: ${{ secrets.WEBMASTER_PING_SCRIPT }}
           WEBMASTER_PING_URLS: ${{ secrets.WEBMASTER_PING_URLS }}
         run: |
-          ssh -p "$PORT" "$USER@$HOST" \
-            "env DEPLOY_PATH='$DEPLOY_PATH' \
-            SERVICE_NAME='$SERVICE_NAME' \
-            SERVICE_NAMES='$SERVICE_NAMES' \
-            ENV_FILE='$ENV_FILE' \
-            PRESERVE_PATHS='$PRESERVE_PATHS' \
-            GIT_REF='$GIT_REF' \
-            LANDING_URL='$LANDING_URL' \
-            LANDING_EXPECTED_CTA='$LANDING_EXPECTED_CTA' \
-            LANDING_ASSET_URLS='$LANDING_ASSET_URLS' \
-            WEBMASTER_PING_SCRIPT='$WEBMASTER_PING_SCRIPT' \
-            WEBMASTER_PING_URLS='$WEBMASTER_PING_URLS' \
-            bash -se" <<'EOF'
+          SSH_OPTS=(
+            -p "$PORT"
+            -o ServerAliveInterval=20
+            -o ServerAliveCountMax=6
+            -o TCPKeepAlive=yes
+            -o ConnectTimeout=20
+          )
+
+          run_remote_deploy() {
+            ssh "${SSH_OPTS[@]}" "$USER@$HOST" \
+              "env DEPLOY_PATH='$DEPLOY_PATH' \
+              SERVICE_NAME='$SERVICE_NAME' \
+              SERVICE_NAMES='$SERVICE_NAMES' \
+              ENV_FILE='$ENV_FILE' \
+              PRESERVE_PATHS='$PRESERVE_PATHS' \
+              GIT_REF='$GIT_REF' \
+              LANDING_URL='$LANDING_URL' \
+              LANDING_EXPECTED_CTA='$LANDING_EXPECTED_CTA' \
+              LANDING_ASSET_URLS='$LANDING_ASSET_URLS' \
+              WEBMASTER_PING_SCRIPT='$WEBMASTER_PING_SCRIPT' \
+              WEBMASTER_PING_URLS='$WEBMASTER_PING_URLS' \
+              DEPLOY_SUCCESS_MARKER='$DEPLOY_PATH/.last_deploy_success' \
+              bash -se" <<'EOF'
           set -euo pipefail
 
           if [ ! -f "$DEPLOY_PATH/scripts/deploy.sh" ]; then
@@ -107,3 +117,12 @@ jobs:
 
           bash "$DEPLOY_PATH/scripts/deploy.sh"
           EOF
+          }
+
+          if run_remote_deploy; then
+            exit 0
+          fi
+
+          echo "Первичный SSH-запуск деплоя завершился с ошибкой. Проверяем маркер успешного завершения..."
+          ssh "${SSH_OPTS[@]}" "$USER@$HOST" \
+            "test -s '$DEPLOY_PATH/.last_deploy_success' && echo '[OK] Найден маркер успешного деплоя: $DEPLOY_PATH/.last_deploy_success'"

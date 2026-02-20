@@ -188,3 +188,7 @@ else
   echo "[WARNING] 1) задайте секрет WEBMASTER_PING_URLS в CI (URL через запятую),"
   echo "[WARNING] 2) или задайте WEBMASTER_PING_SCRIPT и разместите исполняемый скрипт на сервере."
 fi
+
+DEPLOY_SUCCESS_MARKER="${DEPLOY_SUCCESS_MARKER:-$DEPLOY_PATH/.last_deploy_success}"
+printf '%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$DEPLOY_SUCCESS_MARKER"
+echo "[OK] Деплой успешно завершен. Маркер: $DEPLOY_SUCCESS_MARKER"
