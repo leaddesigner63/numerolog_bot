@@ -52,6 +52,30 @@ class PaymentScreenS3Tests(unittest.TestCase):
         callback_values = {callback for _, callback in buttons if callback}
         self.assertNotIn("payment:paid", callback_values)
 
+    def test_s3_shows_continue_button_when_order_already_paid(self) -> None:
+        content = screen_s3(
+            {
+                "selected_tariff": "T1",
+                "order_id": "42",
+                "order_status": "paid",
+                "order_amount": "560",
+                "order_currency": "RUB",
+                "payment_url": "https://example.com/pay",
+            }
+        )
+
+        buttons = []
+        if content.keyboard and content.keyboard.inline_keyboard:
+            for row in content.keyboard.inline_keyboard:
+                for button in row:
+                    buttons.append((button.text, button.callback_data, button.url))
+
+        callback_values = {callback for _, callback, _ in buttons if callback}
+        url_values = {url for _, _, url in buttons if url}
+
+        self.assertIn("payment:paid", callback_values)
+        self.assertNotIn("https://example.com/pay", url_values)
+
 
     def test_s3_shows_processing_notice_when_returned_from_payment_form(self) -> None:
         content = screen_s3(

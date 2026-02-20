@@ -390,6 +390,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
     offer_url = settings.offer_url
     offer_link = f"[офертой]({offer_url})" if offer_url else "офертой"
     payment_processing_notice = bool(state.get("payment_processing_notice"))
+    order_is_paid = str(order_status or "").lower() == "paid"
 
     text_parts = []
     if payment_processing_notice:
@@ -411,7 +412,16 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
 
     rows: list[list[InlineKeyboardButton]] = []
     if not payment_processing_notice:
-        if payment_url:
+        if order_is_paid:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=_with_button_icons("Продолжить", "✅"),
+                        callback_data="payment:paid",
+                    )
+                ]
+            )
+        elif payment_url:
             rows.append(
                 [
                     InlineKeyboardButton(
