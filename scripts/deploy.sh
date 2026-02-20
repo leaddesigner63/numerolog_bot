@@ -146,6 +146,16 @@ $SYSTEMCTL daemon-reload
 $SYSTEMCTL restart -- "${services[@]}"
 $SYSTEMCTL --no-pager --full status -- "${services[@]}" | head -n 80
 
+if [ -x scripts/check_runtime_services.sh ]; then
+  API_SERVICE_NAME="${API_SERVICE_NAME:-numerolog-api.service}" \
+  BOT_SERVICE_NAME="${BOT_SERVICE_NAME:-numerolog-bot.service}" \
+  SERVICE_NAMES_OVERRIDE="$SERVICES" \
+  bash scripts/check_runtime_services.sh
+else
+  echo "scripts/check_runtime_services.sh не найден или не исполняемый."
+  exit 1
+fi
+
 if [ -f scripts/smoke_check_landing.sh ]; then
   bash scripts/smoke_check_landing.sh
 else
