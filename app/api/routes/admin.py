@@ -59,6 +59,8 @@ _TRANSITION_ANALYTICS_CACHE_MAX_SIZE = 64
 _transition_analytics_cache_lock = threading.Lock()
 _transition_analytics_cache: dict[tuple, tuple[float, dict]] = {}
 _WORKER_SERVICE_NAME = "report_jobs_worker"
+_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX = "smoke-"
+_DEPLOY_SMOKE_PROFILE_NAME = "Smoke Check"
 
 
 def _collect_worker_metrics(session: Session) -> dict[str, object]:
@@ -4567,6 +4569,12 @@ def admin_orders(
                 latest_manual_paid_event.c.rn == 1,
             ),
         )
+        .where(
+            or_(
+                Order.provider_payment_id.is_(None),
+                ~Order.provider_payment_id.ilike(f"{_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX}%"),
+            )
+        )
     )
     if user_id is not None:
         query = query.where(Order.user_id == user_id)
@@ -4897,6 +4905,17 @@ def admin_users(
         )
         .outerjoin(UserProfile, UserProfile.user_id == User.id)
         .outerjoin(order_agg, order_agg.c.user_id == User.id)
+        .where(
+            ~User.id.in_(
+                select(Order.user_id).where(Order.provider_payment_id.ilike(f"{_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX}%"))
+            )
+        )
+        .where(
+            or_(
+                UserProfile.user_id.is_(None),
+                func.coalesce(UserProfile.name, "") != _DEPLOY_SMOKE_PROFILE_NAME,
+            )
+        )
     )
 
     status_filter = (marketing_consent_status or "").strip().lower()
