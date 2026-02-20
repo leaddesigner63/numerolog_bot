@@ -613,6 +613,30 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
 
         show_screen.assert_awaited_with(callback, screen_id="S15")
 
+
+    async def test_s3_report_details_navigation_keeps_order_state(self) -> None:
+        order_id = self._create_order(OrderStatus.CREATED)
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T3.value,
+            order_id=str(order_id),
+        )
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(_DummyCallback("s3:report_details"), state=SimpleNamespace())
+            await screens.handle_callbacks(_DummyCallback("s3:report_details:back"), state=SimpleNamespace())
+
+        self.assertEqual(show_screen.await_args_list[0].kwargs["screen_id"], "S3_INFO")
+        self.assertEqual(show_screen.await_args_list[1].kwargs["screen_id"], "S3")
+
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertEqual(state_snapshot.data.get("selected_tariff"), Tariff.T3.value)
+        self.assertEqual(state_snapshot.data.get("order_id"), str(order_id))
+
     async def test_tariff_switch_resets_stale_paid_order_state(self) -> None:
         stale_order_id = self._create_order(OrderStatus.PAID)
         screens.screen_manager.update_state(

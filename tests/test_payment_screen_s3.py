@@ -1,6 +1,6 @@
 import unittest
 
-from app.bot.screens import screen_s15, screen_s3
+from app.bot.screens import screen_s15, screen_s3, screen_s3_report_details
 from app.core.config import settings
 
 
@@ -19,12 +19,15 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertIn("Финальный шаг перед генерацией отчёта", message)
         self.assertIn("Тариф:", message)
         self.assertIn("Стоимость: 560 RUB", message)
+        self.assertIn("Что получите: PDF + ключевые выводы + рекомендации по шагам", message)
+        self.assertIn("Когда получите: обычно 5–15 минут", message)
         self.assertIn("Короткий дисклеймер", message)
         self.assertIn("Оплачивая, вы подтверждаете согласие", message)
 
         keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
         self.assertGreaterEqual(len(keyboard_rows), 1)
         self.assertEqual(keyboard_rows[0][0].url, "https://example.com/pay")
+        self.assertEqual(keyboard_rows[0][1].callback_data, "s3:report_details")
 
     def test_s3_falls_back_to_settings_price_when_order_amount_missing(self) -> None:
         content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
@@ -94,6 +97,24 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertNotIn("Стоимость:", content.messages[0])
         self.assertNotIn("Короткий дисклеймер", content.messages[0])
         self.assertIsNone(content.keyboard)
+
+
+    def test_s3_report_details_screen_keeps_checkout_context(self) -> None:
+        content = screen_s3_report_details(
+            {
+                "selected_tariff": "T2",
+                "order_id": "77",
+                "order_status": "created",
+            }
+        )
+
+        message = content.messages[0]
+        self.assertIn("Что входит в отчёт", message)
+        self.assertIn("Заказ №77", message)
+        self.assertIn("Где твои деньги?", message)
+
+        keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
+        self.assertEqual(keyboard_rows[0][0].callback_data, "s3:report_details:back")
 
 
 class PaymentScreenS15Tests(unittest.TestCase):
