@@ -2,11 +2,16 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import sys
 import time
 from datetime import datetime, timezone
 
 from sqlalchemy import select
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.bot.handlers.start import _create_paid_order_report_job
 from app.db.models import (
