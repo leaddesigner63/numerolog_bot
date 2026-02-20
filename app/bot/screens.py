@@ -351,10 +351,6 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
             "──────────\n"
             f"{bullets_text}"
             f"{note_text}"
-            "\n\n"
-            "──────────\n"
-            "Перед следующим шагом:\n"
-            "• Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
         ),
     )
     rows: list[list[InlineKeyboardButton]] = []
