@@ -48,7 +48,7 @@ class ReportJobRequiresPaidOrderTests(unittest.TestCase):
                     id=11,
                     user_id=1,
                     tariff=Tariff.T1,
-                    amount=990,
+                    amount=560,
                     currency="RUB",
                     provider=PaymentProvider.PRODAMUS,
                     status=OrderStatus.PAID,
@@ -108,6 +108,26 @@ class ReportJobRequiresPaidOrderTests(unittest.TestCase):
 
             self.assertIsNotNone(job)
             self.assertEqual(session.query(ReportJob).count(), 1)
+
+
+    def test_create_report_job_rejects_paid_order_with_amount_mismatch(self) -> None:
+        with self.SessionLocal() as session:
+            user = session.get(User, 1)
+            order = session.get(Order, 11)
+            order.amount = 1
+            session.add(order)
+            with patch("app.bot.handlers.screens.screen_manager.update_state"):
+                job = _create_report_job(
+                    session,
+                    user=user,
+                    tariff_value=Tariff.T1.value,
+                    order_id=11,
+                    chat_id=1001,
+                )
+            session.commit()
+
+            self.assertIsNone(job)
+            self.assertEqual(session.query(ReportJob).count(), 0)
 
     def test_create_report_job_rejects_paid_tariff_without_order_id(self) -> None:
         with self.SessionLocal() as session:

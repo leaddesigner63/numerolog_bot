@@ -20,6 +20,7 @@ from app.db.models import (
     ScreenStateRecord,
     Tariff,
     User,
+    UserProfile,
 )
 
 
@@ -51,6 +52,18 @@ class ReportJobPaidOrderStrictLookupTests(unittest.IsolatedAsyncioTestCase):
         with self.SessionLocal() as session:
             session.add(User(id=1, telegram_user_id=777, telegram_username="tester"))
             session.add(
+                UserProfile(
+                    user_id=1,
+                    name="Tester",
+                    gender="x",
+                    birth_date="01.01.2000",
+                    birth_time="00.00",
+                    birth_place_city="City",
+                    birth_place_region="Region",
+                    birth_place_country="Country",
+                )
+            )
+            session.add(
                 ScreenStateRecord(
                     telegram_user_id=777,
                     data={"selected_tariff": Tariff.T1.value, "order_id": "10"},
@@ -61,7 +74,7 @@ class ReportJobPaidOrderStrictLookupTests(unittest.IsolatedAsyncioTestCase):
                     id=9,
                     user_id=1,
                     tariff=Tariff.T1,
-                    amount=990,
+                    amount=560,
                     currency="RUB",
                     provider=PaymentProvider.PRODAMUS,
                     status=OrderStatus.PAID,
@@ -82,7 +95,7 @@ class ReportJobPaidOrderStrictLookupTests(unittest.IsolatedAsyncioTestCase):
                     id=10,
                     user_id=1,
                     tariff=Tariff.T1,
-                    amount=990,
+                    amount=560,
                     currency="RUB",
                     provider=PaymentProvider.PRODAMUS,
                     status=OrderStatus.PAID,

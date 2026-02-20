@@ -8,7 +8,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core import report_service as report_service_module
 from app.db.base import Base
-from app.db.models import Report, ReportJob, ReportJobStatus, ScreenStateRecord, Tariff, User
+from app.db.models import Report, ReportJob, ReportJobStatus, ScreenStateRecord, Tariff, User, UserProfile
 
 
 class ReportJobTariffPriorityTests(unittest.IsolatedAsyncioTestCase):
@@ -38,6 +38,18 @@ class ReportJobTariffPriorityTests(unittest.IsolatedAsyncioTestCase):
 
         with self.SessionLocal() as session:
             session.add(User(id=1, telegram_user_id=4242, telegram_username="tester"))
+            session.add(
+                UserProfile(
+                    user_id=1,
+                    name="Tester",
+                    gender="x",
+                    birth_date="01.01.2000",
+                    birth_time="00.00",
+                    birth_place_city="City",
+                    birth_place_region="Region",
+                    birth_place_country="Country",
+                )
+            )
             session.add(
                 ScreenStateRecord(
                     telegram_user_id=4242,

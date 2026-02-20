@@ -418,7 +418,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
                 Order(
                     user_id=1,
                     tariff=Tariff.T2,
-                    amount=1490,
+                    amount=2190,
                     currency="RUB",
                     provider=PaymentProvider.PRODAMUS,
                     status=OrderStatus.PAID,

@@ -13,6 +13,8 @@ from app.db.models import (
     Order,
     OrderFulfillmentStatus,
     OrderStatus,
+    QuestionnaireResponse,
+    QuestionnaireStatus,
     Report,
     ReportJob,
     ReportJobStatus,
@@ -20,6 +22,7 @@ from app.db.models import (
     ScreenStateRecord,
     Tariff,
     User,
+    UserProfile,
 )
 from app.db.session import get_session
 from sqlalchemy import select
@@ -178,6 +181,46 @@ class ReportService:
                 return None
             user_id = user.id
             telegram_user_id = user.telegram_user_id
+            profile = session.execute(
+                select(UserProfile).where(UserProfile.user_id == user.id).limit(1)
+            ).scalar_one_or_none()
+            if not profile:
+                job.status = ReportJobStatus.FAILED
+                job.last_error = "profile_missing"
+                session.add(job)
+                return None
+            if job.tariff in {Tariff.T2, Tariff.T3}:
+                latest_questionnaire = (
+                    session.execute(
+                        select(QuestionnaireResponse)
+                        .where(QuestionnaireResponse.user_id == user.id)
+                        .order_by(QuestionnaireResponse.updated_at.desc(), QuestionnaireResponse.id.desc())
+                        .limit(1)
+                    )
+                    .scalars()
+                    .first()
+                )
+                if (
+                    not latest_questionnaire
+                    or latest_questionnaire.status != QuestionnaireStatus.COMPLETED
+                ):
+                    job.status = ReportJobStatus.FAILED
+                    job.last_error = "questionnaire_incomplete"
+                    session.add(job)
+                    return None
+            if job.tariff in PAID_TARIFFS:
+                order = session.get(Order, job.order_id) if job.order_id else None
+                expected_amount = settings.tariff_prices_rub.get(job.tariff.value)
+                if not order or order.status != OrderStatus.PAID:
+                    job.status = ReportJobStatus.FAILED
+                    job.last_error = "paid_order_missing"
+                    session.add(job)
+                    return None
+                if expected_amount is not None and float(order.amount or 0) != float(expected_amount):
+                    job.status = ReportJobStatus.FAILED
+                    job.last_error = "paid_order_amount_mismatch"
+                    session.add(job)
+                    return None
             state_record = session.get(ScreenStateRecord, telegram_user_id)
             state_data = dict(state_record.data or {}) if state_record else {}
             state_data["selected_tariff"] = job.tariff.value

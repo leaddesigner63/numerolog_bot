@@ -990,6 +990,9 @@ def _create_report_job(
             return None
         if order.status != OrderStatus.PAID:
             return None
+        expected_amount = _tariff_prices().get(tariff)
+        if expected_amount is not None and float(order.amount or 0) != float(expected_amount):
+            return None
     else:
         order_id = None
     query = select(ReportJob).where(
@@ -1382,12 +1385,16 @@ def _get_reusable_paid_order(
         tariff = Tariff(tariff_value)
     except ValueError:
         return None
+    expected_amount = _tariff_prices().get(tariff)
+    if expected_amount is None:
+        return None
     return (
         session.execute(
             select(Order)
             .where(
                 Order.user_id == user.id,
                 Order.tariff == tariff,
+                Order.amount == expected_amount,
                 Order.status == OrderStatus.PAID,
                 Order.fulfillment_status == OrderFulfillmentStatus.PENDING,
                 Order.fulfilled_report_id.is_(None),
@@ -1465,6 +1472,14 @@ async def _prepare_checkout_order(
                     order = None
                     state_order_not_usable = True
                 if order and order.tariff != tariff:
+                    order = None
+                    state_order_not_usable = True
+                expected_amount = _tariff_prices().get(tariff)
+                if (
+                    order
+                    and expected_amount is not None
+                    and float(order.amount or 0) != float(expected_amount)
+                ):
                     order = None
                     state_order_not_usable = True
                 if not order:
