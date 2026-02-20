@@ -7,6 +7,8 @@ def test_runtime_services_check_script_has_required_defaults() -> None:
     assert 'API_SERVICE_NAME="${API_SERVICE_NAME:-numerolog-api.service}"' in script
     assert 'BOT_SERVICE_NAME="${BOT_SERVICE_NAME:-numerolog-bot.service}"' in script
     assert 'is-active --quiet' in script
+    assert 'RUNTIME_API_HEALTHCHECK_URL' in script
+    assert 'curl --silent --show-error --fail --max-time 5' in script
     assert 'exit 1' in script
 
 

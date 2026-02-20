@@ -402,3 +402,17 @@ cat <DEPLOY_PATH>/.last_deploy_success
    - проверить индексы и размер таблицы `orders`;
    - убедиться, что smoke-check записи не растут бесконтрольно;
    - перезапустить сервис `systemctl restart numerolog-bot`.
+
+## Стабильность админки после деплоя (обязательно)
+
+Чтобы исключить ситуацию «workflow зелёный, а `/admin` не отвечает», post-deploy проверка должна включать HTTP health-check API.
+
+Используйте переменные:
+
+```bash
+RUNTIME_API_HEALTHCHECK_URL=http://127.0.0.1:8000/health
+RUNTIME_API_HEALTHCHECK_ATTEMPTS=20
+RUNTIME_API_HEALTHCHECK_INTERVAL_SECONDS=2
+```
+
+И подробный runbook: `docs/deploy/autodeploy_admin_reliability_step_by_step.md`.
