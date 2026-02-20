@@ -25,6 +25,7 @@ from app.db.models import (
     OrderFulfillmentStatus,
     OrderStatus,
     PaymentProvider as PaymentProviderEnum,
+    PaymentConfirmationSource,
     QuestionnaireResponse,
     QuestionnaireStatus,
     Report,
@@ -128,6 +129,9 @@ _report_wait_tasks: dict[int, asyncio.Task[None]] = {}
 
 
 _payment_wait_tasks: dict[int, asyncio.Task[None]] = {}
+
+PAYMENT_PROVIDER_POLL_LAST_CHECKED_AT_KEY = "payment_provider_poll_last_checked_at"
+PAYMENT_PROVIDER_POLL_ORDER_ID_KEY = "payment_provider_poll_order_id"
 
 
 def _safe_int(value: str | int | None) -> int | None:
@@ -348,6 +352,61 @@ async def _run_payment_waiter(bot: Bot, chat_id: int, user_id: int) -> None:
             order = session.get(Order, order_id)
             if not order:
                 return
+
+            state_snapshot = screen_manager.update_state(user_id)
+            state_data = state_snapshot.data
+            current_time = now_app_timezone()
+
+            if order.status != OrderStatus.PAID:
+                min_poll_interval_seconds = max(
+                    int(getattr(settings, "payment_provider_poll_min_interval_seconds", 10) or 10),
+                    1,
+                )
+                last_poll_order_id = _safe_int(state_data.get(PAYMENT_PROVIDER_POLL_ORDER_ID_KEY))
+                last_poll_at = _parse_state_datetime(
+                    state_data.get(PAYMENT_PROVIDER_POLL_LAST_CHECKED_AT_KEY)
+                )
+                should_poll_provider = (
+                    last_poll_order_id != order.id
+                    or not last_poll_at
+                    or (current_time - last_poll_at).total_seconds() >= min_poll_interval_seconds
+                )
+                if should_poll_provider:
+                    screen_manager.update_state(
+                        user_id,
+                        **{
+                            PAYMENT_PROVIDER_POLL_ORDER_ID_KEY: str(order.id),
+                            PAYMENT_PROVIDER_POLL_LAST_CHECKED_AT_KEY: current_time.isoformat(),
+                        },
+                    )
+                    try:
+                        provider = get_payment_provider(order.provider.value)
+                        poll_result = provider.check_payment_status(order)
+                    except Exception as exc:
+                        logger.warning(
+                            "payment_provider_poll_failed",
+                            extra={
+                                "order_id": order.id,
+                                "provider": order.provider.value,
+                                "error": str(exc),
+                            },
+                        )
+                        poll_result = None
+
+                    if poll_result and getattr(poll_result, "is_paid", False):
+                        provider_payment_id = getattr(poll_result, "provider_payment_id", None)
+                        if order.status != OrderStatus.PAID:
+                            order.status = OrderStatus.PAID
+                            order.paid_at = current_time
+                        if not order.payment_confirmed_at:
+                            order.payment_confirmed_at = current_time
+                        order.payment_confirmed = True
+                        order.payment_confirmation_source = PaymentConfirmationSource.PROVIDER_POLL
+                        if provider_payment_id and not order.provider_payment_id:
+                            order.provider_payment_id = str(provider_payment_id)
+                        session.add(order)
+                        session.flush()
+
             screen_manager.update_state(user_id, **_refresh_order_state(order))
             if order.status == OrderStatus.PAID:
                 _refresh_profile_state(session, user_id)
@@ -356,12 +415,13 @@ async def _run_payment_waiter(bot: Bot, chat_id: int, user_id: int) -> None:
                 selected_tariff = state_snapshot.data.get("selected_tariff")
                 questionnaire = state_snapshot.data.get("questionnaire") or {}
 
-                target_screen_id = "S6"
-                if selected_tariff in {Tariff.T2.value, Tariff.T3.value} and (
+                profile = state_snapshot.data.get("profile")
+                target_screen_id = "S4"
+                if profile and selected_tariff in {Tariff.T2.value, Tariff.T3.value} and (
                     questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value
                 ):
                     target_screen_id = "S5"
-                elif selected_tariff in PAID_TARIFFS:
+                elif profile and selected_tariff in PAID_TARIFFS:
                     user = _get_or_create_user(session, user_id)
                     _create_report_job(
                         session,
@@ -370,6 +430,12 @@ async def _run_payment_waiter(bot: Bot, chat_id: int, user_id: int) -> None:
                         order_id=order.id,
                         chat_id=chat_id,
                     )
+                    target_screen_id = "S6"
+                screen_manager.update_state(
+                    user_id,
+                    profile_flow="report",
+                    payment_processing_notice=False,
+                )
                 await screen_manager.show_screen(
                     bot=bot,
                     chat_id=chat_id,

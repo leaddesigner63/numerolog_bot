@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     payment_webhook_url: str | None = None
     payment_success_url: str | None = None
     payment_fail_url: str | None = None
+    payment_provider_poll_min_interval_seconds: int = 10
 
     free_t0_cooldown_hours: int = 720
     tariff_t0_price_rub: int = 0
