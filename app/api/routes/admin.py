@@ -1692,7 +1692,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         targetId: "orders",
         columns: [
           {label: "ID", key: "id", sortable: true},
-          {label: "Пользователь", key: "telegram_user_id", sortable: true},
+          {label: "Пользователь", key: "user_label", sortable: true},
           {label: "Тариф", key: "tariff", sortable: true},
           {label: "Статус", key: "status", sortable: true},
           {
@@ -1734,7 +1734,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         targetId: "reports",
         columns: [
           {label: "ID", key: "id", sortable: true},
-          {label: "Пользователь", key: "telegram_user_id", sortable: true},
+          {label: "Пользователь", key: "user_label", sortable: true},
           {label: "Статус заказа", key: "order_status", sortable: true},
           {
             label: "Оплата подтверждена",
@@ -1755,7 +1755,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         targetId: "users",
         columns: [
           {label: "ID", key: "id", sortable: true},
-          {label: "Telegram", key: "telegram_user_id", sortable: true},
+          {label: "Username", key: "user_label", sortable: true},
           {label: "Имя", key: "name", sortable: true},
           {label: "Дата рождения", key: "birth_date", sortable: true},
           {label: "Подтв. заказов", key: "confirmed_orders_count", sortable: true},
@@ -1794,7 +1794,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         targetId: "feedbackInbox",
         columns: [
           {label: "Тред", key: "thread_feedback_id", sortable: true},
-          {label: "Пользователь", key: "telegram_user_id", sortable: true},
+          {label: "Пользователь", key: "user_label", sortable: true},
           {label: "User ID", key: "user_id", sortable: true},
           {label: "Сообщений", key: "message_count", sortable: true},
           {label: "Последний статус", key: "status", sortable: true},
@@ -1819,7 +1819,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         targetId: "feedbackArchive",
         columns: [
           {label: "Тред", key: "thread_feedback_id", sortable: true},
-          {label: "Пользователь", key: "telegram_user_id", sortable: true},
+          {label: "Пользователь", key: "user_label", sortable: true},
           {label: "User ID", key: "user_id", sortable: true},
           {label: "Сообщений", key: "message_count", sortable: true},
           {label: "Последний статус", key: "status", sortable: true},
@@ -4604,6 +4604,8 @@ def admin_orders(
                 "id": order.id,
                 "user_id": order.user_id,
                 "telegram_user_id": user.telegram_user_id if user else None,
+                "telegram_username": user.telegram_username if user else None,
+                "user_label": (user.telegram_username if user and user.telegram_username is not None else (user.telegram_user_id if user else None)),
                 "tariff": order.tariff.value,
                 "amount": float(order.amount),
                 "currency": order.currency,
@@ -4835,6 +4837,8 @@ def admin_reports(
             "id": report.id,
             "user_id": report.user_id,
             "telegram_user_id": user.telegram_user_id if user else None,
+            "telegram_username": user.telegram_username if user else None,
+            "user_label": (user.telegram_username if user and user.telegram_username is not None else (user.telegram_user_id if user else None)),
             "order_id": report.order_id,
             "order_status": order_status,
             "payment_confirmed": payment_confirmed,
@@ -4887,6 +4891,8 @@ def admin_users(
     sortable_fields = {
         "id": User.id,
         "created_at": User.created_at,
+        "telegram_username": User.telegram_username,
+        "user_label": User.telegram_username,
         "telegram_user_id": User.telegram_user_id,
         "confirmed_orders_count": func.coalesce(order_agg.c.confirmed_orders_count, 0),
         "confirmed_revenue_total": func.coalesce(order_agg.c.confirmed_revenue_total, 0),
@@ -4949,6 +4955,8 @@ def admin_users(
             {
                 "id": user.id,
                 "telegram_user_id": user.telegram_user_id,
+                "telegram_username": user.telegram_username,
+                "user_label": (user.telegram_username if user.telegram_username is not None else user.telegram_user_id),
                 "created_at": user.created_at.isoformat(),
                 "name": profile.name if profile else None,
                 "gender": profile.gender if profile else None,
@@ -5064,6 +5072,8 @@ def _load_feedback_threads(session: Session, *, limit: int, archived: bool) -> l
                 "id": thread_root.id,
                 "user_id": thread_root.user_id,
                 "telegram_user_id": user.telegram_user_id if user else None,
+                "telegram_username": user.telegram_username if user else None,
+                "user_label": (user.telegram_username if user and user.telegram_username is not None else (user.telegram_user_id if user else None)),
                 "status": last_status.value,
                 "text": last_text,
                 "sent_at": last_sent_at.isoformat() if last_sent_at else None,
