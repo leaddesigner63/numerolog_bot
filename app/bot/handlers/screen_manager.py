@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from typing import Any
 
 from aiogram import Bot
@@ -174,6 +175,11 @@ class ScreenStateStore:
 class ScreenManager:
     _telegram_message_limit = 4096
     _telegram_caption_limit = 1024
+    _critical_screens: dict[str, str] = {
+        "S1": "before_tariff_selection",
+        "S3": "before_payment",
+        "S5": "before_payment",
+    }
 
     def __init__(self, store: ScreenStateStore | None = None) -> None:
         self._store = store or ScreenStateStore()
@@ -408,6 +414,15 @@ class ScreenManager:
         if message_ids:
             self._store.update_screen(user_id, screen_id, message_ids)
             delivered = True
+        if delivered and screen_id in self._critical_screens:
+            now_iso = datetime.now(timezone.utc).isoformat()
+            self._store.update_data(
+                user_id,
+                last_critical_screen_id=screen_id,
+                last_critical_stage=self._critical_screens.get(screen_id),
+                last_critical_step_at=now_iso,
+                last_critical_chat_id=chat_id,
+            )
         if pdf_notice_required:
             try:
                 sent_notice = await bot.send_message(
@@ -669,6 +684,28 @@ class ScreenManager:
 
     def update_state(self, user_id: int, **kwargs: Any) -> ScreenState:
         return self._store.update_data(user_id, **kwargs)
+
+
+    def record_transition_event_safe(
+        self,
+        *,
+        user_id: int,
+        from_screen: str | None,
+        to_screen: str,
+        trigger_type: ScreenTransitionTriggerType | str | None,
+        trigger_value: str | None,
+        transition_status: ScreenTransitionStatus | str | None,
+        metadata_json: dict[str, Any] | None = None,
+    ) -> None:
+        self._record_transition_event(
+            user_id=user_id,
+            from_screen=from_screen,
+            to_screen=to_screen,
+            trigger_type=trigger_type,
+            trigger_value=trigger_value,
+            transition_status=transition_status,
+            metadata_json=metadata_json,
+        )
 
     def add_screen_message_id(self, user_id: int, message_id: int) -> ScreenState:
         return self._store.add_screen_message_id(user_id, message_id)

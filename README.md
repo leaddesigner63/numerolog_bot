@@ -58,6 +58,7 @@ docs/
   deploy/
     landing_autodeploy.md # подробный runbook по автодеплою лендинга (VPS + Nginx)
     autodeploy_step_by_step.md # пошаговая инструкция по настройке автодеплоя для пользователя
+    autodeploy_retention_nudge_step_by_step.md # деплой retention-nudge и post-deploy проверки
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   landing/
     release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)
@@ -1019,3 +1020,21 @@ journalctl -u <service> -n 200 --no-pager
 - На экране `S3` при статусе заказа `paid` показывается кнопка **«Продолжить»** (`payment:paid`) вместо кнопки перехода на платёжную ссылку.
 - Это позволяет пользователю сразу перейти к следующему шагу после подтверждённой оплаты, даже если автопереход не сработал.
 - Для неоплаченных заказов поведение прежнее: отображается кнопка **«Далее»** с платёжной ссылкой.
+
+## Retention-nudge (возврат в воронку)
+
+- В `screen_manager` фиксируется `last_critical_step_at`/`last_critical_screen_id` для критичных шагов (перед выбором тарифа и перед оплатой).
+- В `report_jobs_worker` добавлена фоновая проверка «застрявших» пользователей: если пользователь остановился на критичном шаге дольше `RESUME_NUDGE_DELAY_HOURS`, отправляется одно мягкое напоминание с deeplink на продолжение.
+- Отправка делается через `marketing_messaging.send_marketing_message` с учетом согласия пользователя и campaign-логированием.
+- В аналитике админки доступны:
+  - `top_dropoff_screens` (топ-3 экранов оттока),
+  - `resume_after_nudge_to_paid` uplift-метрика (доля оплат после возобновления по nudge),
+  - `resume_after_nudge_by_tariff` (разрез uplift по тарифам T0–T3).
+
+Новые настройки окружения:
+- `RESUME_NUDGE_DELAY_HOURS` (по умолчанию `6`).
+- `RESUME_NUDGE_CAMPAIGN` (по умолчанию `resume_after_stall_v1`).
+
+Пошаговый деплой retention-логики: `docs/deploy/autodeploy_retention_nudge_step_by_step.md`.
+
+В админке Analytics добавлен отдельный блок "Resume-after-nudge по тарифам" и API-эндпоинт `/admin/api/analytics/finance/nudge-by-tariff`.

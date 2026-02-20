@@ -1166,6 +1166,10 @@ def admin_ui(request: Request) -> HTMLResponse:
           <div id="analyticsFinanceByTariff" class="muted">Нет данных</div>
         </div>
         <div class="analytics-block">
+          <div class="analytics-title">Resume-after-nudge по тарифам</div>
+          <div id="analyticsFinanceNudgeByTariff" class="muted">Нет данных</div>
+        </div>
+        <div class="analytics-block">
           <div class="analytics-title">Финансы по дням <span class="muted">(источник: provider-confirmed only)</span></div>
           <svg id="analyticsFinanceChart" class="timeseries-chart" viewBox="0 0 900 220" preserveAspectRatio="none"></svg>
           <div id="analyticsFinanceTimeseries" class="muted">Нет данных</div>
@@ -3103,6 +3107,8 @@ def admin_ui(request: Request) -> HTMLResponse:
           <div class="kpi-card"><h3>Provider-confirmed оплаты</h3><div class="value">${Number(summary.provider_confirmed_orders) || 0}</div></div>
           <div class="kpi-card"><h3>Конверсия в оплату</h3><div class="value">${formatPercent(summary.conversion_to_provider_confirmed)}</div></div>
           <div class="kpi-card"><h3>Выручка</h3><div class="value">${Number(summary.provider_confirmed_revenue || 0).toFixed(2)} ₽</div></div>
+          <div class="kpi-card"><h3>Resume после nudge</h3><div class="value">${Number(summary.resume_after_nudge_users) || 0}</div></div>
+          <div class="kpi-card"><h3>Resume → paid</h3><div class="value">${formatPercent(summary.resume_after_nudge_to_paid)}</div></div>
         </div>
       `;
     }
@@ -3170,7 +3176,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       stateNode.textContent = "Загрузка аналитики...";
       try {
         const query = buildAnalyticsQuery();
-        const [summaryRes, matrixRes, funnelRes, timingRes, fullRes, financeSummaryRes, financeTariffRes, financeTimeseriesRes, trafficSummaryRes, trafficSourceRes, trafficCampaignRes] = await Promise.all([
+        const [summaryRes, matrixRes, funnelRes, timingRes, fullRes, financeSummaryRes, financeTariffRes, financeNudgeByTariffRes, financeTimeseriesRes, trafficSummaryRes, trafficSourceRes, trafficCampaignRes] = await Promise.all([
           fetchJson(`/analytics/transitions/summary?${query}`),
           fetchJson(`/analytics/transitions/matrix?${query}`),
           fetchJson(`/analytics/transitions/funnel?${query}`),
@@ -3178,6 +3184,7 @@ def admin_ui(request: Request) -> HTMLResponse:
           fetchJson(`/analytics/screen-transitions?${query}`),
           fetchJson(`/analytics/finance/summary?${query}`),
           fetchJson(`/analytics/finance/by-tariff?${query}`),
+          fetchJson(`/analytics/finance/nudge-by-tariff?${query}`),
           fetchJson(`/analytics/finance/timeseries?${query}`),
           fetchJson(`/analytics/traffic/summary?${query}`),
           fetchJson(`/analytics/traffic/by-source?${query}`),
@@ -3193,6 +3200,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         const dropoffRows = fullRes?.data?.dropoff || [];
         const financeSummary = financeSummaryRes?.data?.summary || {};
         const financeByTariff = financeTariffRes?.data?.by_tariff || [];
+        const financeNudgeByTariff = financeNudgeByTariffRes?.data?.resume_after_nudge_by_tariff || [];
         const financeTimeseries = financeTimeseriesRes?.data?.timeseries || [];
         const trafficSummary = trafficSummaryRes?.data?.summary || {};
         const trafficBySource = trafficSourceRes?.data?.by_source || [];
@@ -3210,6 +3218,7 @@ def admin_ui(request: Request) -> HTMLResponse:
           renderAnalyticsTable("analyticsBottlenecks", ["Переход", "CR", "Drop-off", "Медиана времени"], []);
           renderFinanceSummary({});
           renderAnalyticsTable("analyticsFinanceByTariff", ["Тариф", "Оплаты", "Выручка", "Средний чек", "Источник"], []);
+          renderAnalyticsTable("analyticsFinanceNudgeByTariff", ["Тариф", "Resume users", "Paid users", "Resume → paid"], []);
           renderAnalyticsTable("analyticsFinanceTimeseries", ["Дата", "S3/S4 users", "Оплаты", "Конверсия", "Выручка"], []);
           renderFinanceTimeseriesChart([]);
           return;
@@ -3229,6 +3238,16 @@ def admin_ui(request: Request) -> HTMLResponse:
             {value: `${Number(row.provider_confirmed_revenue || 0).toFixed(2)} ₽`},
             {value: `${Number(row.avg_check || 0).toFixed(2)} ₽`},
             {value: row.data_source || "provider_confirmed_only"},
+          ])
+        );
+        renderAnalyticsTable(
+          "analyticsFinanceNudgeByTariff",
+          ["Тариф", "Resume users", "Paid users", "Resume → paid"],
+          financeNudgeByTariff.map((row) => [
+            {value: row.tariff || "—"},
+            {value: Number(row.resume_users) || 0},
+            {value: Number(row.paid_users) || 0},
+            {value: formatPercent(row.resume_to_paid)},
           ])
         );
         renderFinanceTimeseriesChart(financeTimeseries);
@@ -3634,6 +3653,9 @@ class FinanceSummaryItem(BaseModel):
     provider_confirmed_users: int
     conversion_to_provider_confirmed: float
     provider_confirmed_revenue: float
+    resume_after_nudge_users: int = 0
+    resume_after_nudge_paid_users: int = 0
+    resume_after_nudge_to_paid: float = 0.0
     data_source: str
 
 
@@ -3652,6 +3674,13 @@ class FinanceTimeseriesItem(BaseModel):
     provider_confirmed_revenue: float
     conversion_to_provider_confirmed: float
     data_source: str
+
+
+class FinanceNudgeByTariffItem(BaseModel):
+    tariff: str
+    resume_users: int
+    paid_users: int
+    resume_to_paid: float
 
 
 class TrafficSummaryItem(BaseModel):
@@ -4153,6 +4182,26 @@ def admin_finance_by_tariff(
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "data": {"by_tariff": items},
+    }
+
+
+@router.get("/api/analytics/finance/nudge-by-tariff")
+def admin_finance_nudge_by_tariff(
+    from_dt: datetime | None = Query(default=None, alias="from"),
+    to_dt: datetime | None = Query(default=None, alias="to"),
+    period: str | None = Query(default=None),
+    tariff: str | None = Query(default=None),
+    session: Session = Depends(_get_db_session),
+) -> dict:
+    filters = _build_finance_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
+    result = _safe_build_finance_analytics(session, filters)
+    items = [
+        FinanceNudgeByTariffItem.model_validate(item).model_dump(mode="json")
+        for item in result.get("resume_after_nudge_by_tariff", [])
+    ]
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "data": {"resume_after_nudge_by_tariff": items},
     }
 
 

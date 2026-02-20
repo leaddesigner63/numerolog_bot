@@ -2,6 +2,7 @@ from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.types import Message
 from sqlalchemy import select
+from datetime import datetime, timezone
 
 from app.bot.handlers.screen_manager import screen_manager
 from app.bot.handlers.screens import ensure_payment_waiter
@@ -34,6 +35,20 @@ def _extract_paywait_order_id(payload: str) -> int | None:
     if not payload.startswith("paywait_"):
         return None
     raw_order_id = payload.split("paywait_", 1)[-1]
+    try:
+        return int(raw_order_id)
+    except (TypeError, ValueError):
+        return None
+
+
+def _extract_resume_nudge_order_id(payload: str) -> int | None:
+    if not payload.startswith("resume_nudge"):
+        return None
+    if payload == "resume_nudge":
+        return None
+    if not payload.startswith("resume_nudge_"):
+        return None
+    raw_order_id = payload.split("resume_nudge_", 1)[-1]
     try:
         return int(raw_order_id)
     except (TypeError, ValueError):
@@ -75,7 +90,15 @@ async def handle_start(message: Message) -> None:
         pass
 
     if payload:
+        if payload.startswith("resume_nudge"):
+            screen_manager.update_state(
+                message.from_user.id,
+                resume_after_nudge_at=datetime.now(timezone.utc).isoformat(),
+                resume_after_nudge_payload=payload,
+            )
         order_id = _extract_paywait_order_id(payload)
+        if order_id is None:
+            order_id = _extract_resume_nudge_order_id(payload)
         if order_id is not None:
             try:
                 with get_session() as session:

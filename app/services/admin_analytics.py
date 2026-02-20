@@ -18,6 +18,7 @@ from app.db.models import (
     PaymentConfirmationSource,
     ScreenTransitionEvent,
     ScreenTransitionTriggerType,
+    ScreenStateRecord,
     User,
     UserFirstTouchAttribution,
     UserProfile,
@@ -116,6 +117,7 @@ def build_screen_transition_analytics(session: Session, filters: AnalyticsFilter
             "funnel": [],
             "funnel_by_tariff": {tariff: [] for tariff in _FUNNEL_TARIFFS},
             "dropoff": [],
+            "top_dropoff_screens": [],
             "transition_durations": [],
         }
 
@@ -129,6 +131,7 @@ def build_screen_transition_analytics(session: Session, filters: AnalyticsFilter
         "funnel": _build_funnel(events_by_user),
         "funnel_by_tariff": _build_funnel_by_tariff(events_by_user),
         "dropoff": _build_dropoff(events_by_user, filters),
+        "top_dropoff_screens": _build_top_dropoff_screens(events_by_user, filters),
         "transition_durations": _build_transition_durations(events_by_user),
     }
 
@@ -141,6 +144,7 @@ def build_finance_analytics(session: Session, filters: FinanceAnalyticsFilters) 
     conversion = (len(paid_users) / len(reached_users)) if reached_users else 0.0
 
     report_details_clicks, report_details_users = _count_s3_report_details_clicks(session, filters)
+    nudge_uplift = _build_resume_nudge_uplift(session, filters)
 
     return {
         "summary": {
@@ -152,10 +156,14 @@ def build_finance_analytics(session: Session, filters: FinanceAnalyticsFilters) 
             "provider_confirmed_revenue": round(sum(item.amount for item in confirmed_orders), 2),
             "s3_report_details_clicks": report_details_clicks,
             "s3_report_details_users": report_details_users,
+            "resume_after_nudge_users": nudge_uplift["resume_users"],
+            "resume_after_nudge_paid_users": nudge_uplift["paid_users"],
+            "resume_after_nudge_to_paid": nudge_uplift["conversion_to_paid"],
             "data_source": "provider_confirmed_only",
         },
         "by_tariff": _build_revenue_by_tariff(confirmed_orders),
         "timeseries": _build_finance_timeseries(entries, confirmed_orders),
+        "resume_after_nudge_by_tariff": _build_resume_nudge_uplift_by_tariff(session, filters),
     }
 
 
@@ -779,6 +787,86 @@ def _build_dropoff(events_by_user: dict[int, list[EventPoint]], filters: Analyti
     ]
 
 
+
+def _build_top_dropoff_screens(events_by_user: dict[int, list[EventPoint]], filters: AnalyticsFilters) -> list[dict]:
+    dropoff_rows = _build_dropoff(events_by_user, filters)
+    if not dropoff_rows:
+        return []
+
+    stage_hints = {
+        "S1": "before_tariff_selection",
+        "S3": "before_payment",
+        "S5": "before_payment",
+    }
+    result: list[dict] = []
+    for row in dropoff_rows[:3]:
+        screen = str(row.get("screen"))
+        result.append({**row, "stage_hint": stage_hints.get(screen, "unknown")})
+    return result
+
+
+def _parse_iso_datetime(raw_value: object) -> datetime | None:
+    if not isinstance(raw_value, str) or not raw_value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw_value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _build_resume_nudge_uplift(session: Session, filters: FinanceAnalyticsFilters) -> dict[str, float | int]:
+    rows = session.execute(select(ScreenStateRecord)).scalars().all()
+    resume_points: dict[int, datetime] = {}
+    for row in rows:
+        data = row.data if isinstance(row.data, dict) else {}
+        resume_at = _parse_iso_datetime(data.get("resume_after_nudge_at"))
+        if not resume_at:
+            continue
+        if filters.from_dt and resume_at < filters.from_dt:
+            continue
+        if filters.to_dt and resume_at > filters.to_dt:
+            continue
+        if filters.tariff:
+            state_tariff = str(data.get("selected_tariff") or "").upper()
+            if state_tariff and state_tariff != str(filters.tariff).upper():
+                continue
+        resume_points[row.telegram_user_id] = resume_at
+
+    if not resume_points:
+        return {"resume_users": 0, "paid_users": 0, "conversion_to_paid": 0.0}
+
+    paid_users: set[int] = set()
+    for telegram_user_id, resume_at in resume_points.items():
+        query = (
+            select(Order.id)
+            .join(User, User.id == Order.user_id)
+            .where(
+                User.telegram_user_id == telegram_user_id,
+                Order.status == OrderStatus.PAID,
+                Order.payment_confirmed.is_(True),
+                Order.payment_confirmation_source.in_(_PROVIDER_CONFIRMATION_SOURCES),
+                Order.payment_confirmed_at.is_not(None),
+                Order.payment_confirmed_at >= resume_at,
+            )
+        )
+        if filters.tariff:
+            query = query.where(Order.tariff == filters.tariff.upper())
+        if session.execute(query).scalar_one_or_none() is not None:
+            paid_users.add(telegram_user_id)
+
+    resume_users = len(resume_points)
+    paid_count = len(paid_users)
+    conversion = (paid_count / resume_users) if resume_users else 0.0
+    return {
+        "resume_users": resume_users,
+        "paid_users": paid_count,
+        "conversion_to_paid": round(conversion, 6),
+    }
+
+
 def _build_transition_durations(events_by_user: dict[int, list[EventPoint]]) -> list[dict]:
     durations_by_pair: dict[tuple[str, str], list[float]] = {}
 
@@ -836,3 +924,19 @@ def parse_trigger_type(value: str | None) -> str | None:
         return ScreenTransitionTriggerType(candidate).value
     except ValueError:
         return ScreenTransitionTriggerType.UNKNOWN.value
+
+
+def _build_resume_nudge_uplift_by_tariff(session: Session, filters: FinanceAnalyticsFilters) -> list[dict[str, float | int | str]]:
+    rows: list[dict[str, float | int | str]] = []
+    for tariff in _FUNNEL_TARIFFS:
+        scoped = FinanceAnalyticsFilters(from_dt=filters.from_dt, to_dt=filters.to_dt, tariff=tariff)
+        uplift = _build_resume_nudge_uplift(session, scoped)
+        rows.append(
+            {
+                "tariff": tariff,
+                "resume_users": uplift["resume_users"],
+                "paid_users": uplift["paid_users"],
+                "resume_to_paid": uplift["conversion_to_paid"],
+            }
+        )
+    return rows
