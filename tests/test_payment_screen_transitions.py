@@ -344,24 +344,13 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state_snapshot.data.get("profile_flow"), "report")
 
     async def test_s3_requires_questionnaire_for_t3_before_checkout(self) -> None:
-        with self.SessionLocal() as session:
-            session.add(
-                Order(
-                    user_id=1,
-                    tariff=Tariff.T3,
-                    amount=2490,
-                    currency="RUB",
-                    provider=PaymentProvider.PRODAMUS,
-                    status=OrderStatus.PAID,
-                    fulfillment_status=OrderFulfillmentStatus.PENDING,
-                )
-            )
-            session.commit()
+        order_id = self._create_order(OrderStatus.PENDING, tariff=Tariff.T3)
 
         self._create_profile(consent_accepted=True)
         screens.screen_manager.update_state(
             1001,
             selected_tariff=Tariff.T3.value,
+            order_id=str(order_id),
             offer_seen=True,
             profile={"name": "Иван"},
             questionnaire={"status": "in_progress"},
@@ -373,10 +362,40 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
             patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
             patch.object(screens, "_send_notice", new=AsyncMock()),
+            patch.object(screens, "_maybe_run_payment_waiter", new=AsyncMock()) as maybe_run_payment_waiter,
         ):
             await screens.handle_callbacks(callback, state=AsyncMock())
 
         show_screen.assert_awaited_with(callback, screen_id="S5")
+        maybe_run_payment_waiter.assert_not_awaited()
+
+    async def test_s3_with_completed_questionnaire_for_t3_runs_payment_flow(self) -> None:
+        order_id = self._create_order(OrderStatus.PENDING, tariff=Tariff.T3)
+        self._create_profile(consent_accepted=True)
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T3.value,
+            order_id=str(order_id),
+            offer_seen=True,
+            profile={"name": "Иван"},
+            questionnaire={"status": "completed"},
+        )
+        callback = _DummyCallback("screen:S3")
+
+        with (
+            patch.object(screens, "_show_marketing_consent_or_target_screen", new=AsyncMock()) as show_target_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+            patch.object(screens, "_send_notice", new=AsyncMock()) as send_notice,
+            patch.object(screens, "_refresh_questionnaire_state") as refresh_questionnaire,
+            patch.object(screens, "_maybe_run_payment_waiter", new=AsyncMock()) as maybe_run_payment_waiter,
+        ):
+            refresh_questionnaire.return_value = None
+            await screens.handle_callbacks(callback, state=AsyncMock())
+
+        show_target_screen.assert_awaited_with(callback, screen_id="S3")
+        maybe_run_payment_waiter.assert_awaited_once_with(callback)
+        send_notice.assert_not_awaited()
 
     async def test_s3_does_not_create_order_before_final_checkout_trigger(self) -> None:
         self._create_profile(consent_accepted=True)

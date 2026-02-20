@@ -1573,8 +1573,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         callback,
                         screen_id="S5",
                     )
-                await _safe_callback_answer(callback)
-                return
+                    await _safe_callback_answer(callback)
+                    return
             if state_snapshot.data.get("existing_tariff_report_found") and not state_snapshot.data.get("existing_report_warning_seen"):
                 await _show_screen_for_callback(
                     callback,
