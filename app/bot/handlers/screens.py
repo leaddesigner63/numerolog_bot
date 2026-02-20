@@ -1921,6 +1921,41 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 return
 
             screen_manager.update_state(callback.from_user.id, profile_flow=None)
+            if tariff == Tariff.T1.value:
+                order_id = _safe_int(state_snapshot.data.get("order_id"))
+                if order_id:
+                    with get_session() as session:
+                        order = session.get(Order, order_id)
+                        if order:
+                            screen_manager.update_state(
+                                callback.from_user.id,
+                                **_refresh_order_state(order),
+                            )
+                        if order and order.status == OrderStatus.PAID:
+                            user = _get_or_create_user(
+                                session,
+                                callback.from_user.id,
+                                callback.from_user.username,
+                            )
+                            job = _create_report_job(
+                                session,
+                                user=user,
+                                tariff_value=tariff,
+                                order_id=order.id,
+                                chat_id=callback.message.chat.id if callback.message else None,
+                            )
+                            if not job:
+                                await _send_notice(
+                                    callback,
+                                    "Не удалось создать задание на генерацию.",
+                                )
+                                await _safe_callback_answer(callback)
+                                return
+                    await _show_screen_for_callback(callback, screen_id="S6")
+                    await _maybe_run_report_delay(callback)
+                    await _safe_callback_answer(callback)
+                    return
+
             if tariff in {Tariff.T2.value, Tariff.T3.value}:
                 with get_session() as session:
                     _refresh_questionnaire_state(session, callback.from_user.id)

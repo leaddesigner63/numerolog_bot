@@ -177,13 +177,14 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
 
         show_screen.assert_awaited_with(callback, screen_id="S4")
 
-    async def test_profile_save_does_not_generate_report_for_paid_tariff(self) -> None:
+    async def test_profile_save_generates_report_for_paid_t1_order(self) -> None:
         order_id = self._create_order(OrderStatus.PAID)
         self._create_profile(consent_accepted=True)
         screens.screen_manager.update_state(
             1001,
             selected_tariff=Tariff.T1.value,
             order_id=str(order_id),
+            profile_flow="report",
         )
         callback = _DummyCallback("profile:save")
 
@@ -191,13 +192,17 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
             patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
             patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_maybe_run_report_delay", new=AsyncMock()) as report_delay,
         ):
             await screens.handle_callbacks(callback, state=SimpleNamespace())
 
-        show_screen.assert_awaited_with(callback, screen_id="S3")
+        show_screen.assert_awaited_with(callback, screen_id="S6")
+        report_delay.assert_awaited_once()
         with self.SessionLocal() as session:
             jobs_count = session.execute(select(func.count(ReportJob.id))).scalar_one()
-        self.assertEqual(jobs_count, 0)
+            job = session.execute(select(ReportJob).order_by(ReportJob.id.desc())).scalar_one()
+        self.assertEqual(jobs_count, 1)
+        self.assertEqual(job.order_id, order_id)
 
     async def test_report_retry_requires_confirmed_payment(self) -> None:
         order_id = self._create_order(OrderStatus.CREATED)
