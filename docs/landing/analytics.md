@@ -62,7 +62,11 @@
    - Формула: `users_with_tariff_click / users_with_bot_start`.
    - Сегменты: `source`, `campaign`, `tariff`.
 
-3. **CR в оплату**
+3. **Доля mobile-кликов sticky CTA**
+   - Формула: `unique(landing_cta_click where placement=sticky_primary) / unique(landing_cta_click)`.
+   - Используется как дополнительный KPI качества mobile first-экрана и не заменяет базовую CTR-метрику.
+
+4. **CR в оплату**
    - Формула: `users_with_paid / users_with_bot_start`.
    - Для продуктовой диагностики дополнительно считать `users_with_paid / users_with_tariff_click`.
 
