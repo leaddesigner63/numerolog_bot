@@ -18,6 +18,9 @@ from app.db.models import (
     PaymentConfirmationSource,
     PaymentProvider,
     Report,
+    ReportJob,
+    ReportJobStatus,
+    ServiceHeartbeat,
     ScreenTransitionEvent,
     ScreenTransitionTriggerType,
     Tariff,
@@ -525,6 +528,56 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         finance_payload = finance.json()
         self.assertEqual(finance_payload["data"]["summary"]["provider_confirmed_orders"], 1)
         self.assertEqual(finance_payload["data"]["summary"]["provider_confirmed_revenue"], 1900.0)
+
+
+    def test_overview_includes_worker_metrics(self) -> None:
+        now = datetime.now(timezone.utc)
+        with self.SessionLocal() as session:
+            user = User(id=112, telegram_user_id=700712)
+            session.add(user)
+            session.add(
+                Order(
+                    id=215,
+                    user_id=112,
+                    tariff=Tariff.T1,
+                    amount=1500,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    payment_confirmed=True,
+                    payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                    payment_confirmed_at=now,
+                )
+            )
+            session.add(ServiceHeartbeat(service_name="report_jobs_worker", updated_at=now))
+            session.add_all(
+                [
+                    ReportJob(
+                        user_id=112,
+                        order_id=215,
+                        tariff=Tariff.T1,
+                        status=ReportJobStatus.PENDING,
+                        attempts=0,
+                    ),
+                    ReportJob(
+                        user_id=112,
+                        order_id=215,
+                        tariff=Tariff.T1,
+                        status=ReportJobStatus.IN_PROGRESS,
+                        attempts=1,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/admin/api/overview")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertIn("worker", payload)
+        self.assertTrue(payload["worker"]["online"])
+        self.assertEqual(payload["worker"]["jobs"]["pending"], 1)
+        self.assertEqual(payload["worker"]["jobs"]["in_progress"], 1)
 
     def test_transitions_summary_contract(self) -> None:
         self._seed_events()
