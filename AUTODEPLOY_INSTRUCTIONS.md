@@ -3,6 +3,7 @@
 ## Короткий чеклист автодеплоя для текущего релиза (этап 1 флоу оплаты)
 1. В GitHub Secrets проверьте: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY`, `SERVICE_NAMES`.
 2. Убедитесь, что `.github/workflows/deploy.yml` запускается на push в рабочую ветку и вызывает `scripts/deploy.sh`.
+   Внутри `scripts/deploy.sh` после деплоя обязателен smoke-check `bash scripts/smoke_check_report_job_completion.sh` (paid-заказ -> ReportJob -> COMPLETED).
 3. После push дождитесь успешного job `deploy` в GitHub Actions.
 4. На сервере выполните:
    - `systemctl status numerolog-api.service numerolog-bot.service`
@@ -28,6 +29,7 @@
 ## CI/CD pipeline (пошагово, воспроизводимо)
 
 1. Push в `main` запускает `.github/workflows/deploy.yml`:
+   - в `deploy_production` после перезапуска сервисов выполняется smoke-check `scripts/smoke_check_report_job_completion.sh` с таймаутом ожидания статуса `COMPLETED`;
    - `build_and_check`: установка зависимостей, compileall, `bash scripts/test.sh`;
    - `smoke_checkout_flow`: целевой регрессионный прогон `bash scripts/smoke_check_checkout_flow.sh`;
      - Скрипт сам пытается поднять `pytest` через `pip` при «чистом» окружении, чтобы не падать с `exit code 127` при отсутствии бинаря.
