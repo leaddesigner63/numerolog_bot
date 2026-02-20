@@ -2005,11 +2005,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     if callback.data == "payment:start":
-        _ensure_profile_state(callback.from_user.id)
+        with get_session() as session:
+            _refresh_profile_state(session, callback.from_user.id)
+            _refresh_questionnaire_state(session, callback.from_user.id)
         state_snapshot = screen_manager.update_state(callback.from_user.id)
         tariff = state_snapshot.data.get("selected_tariff")
-        if tariff != Tariff.T1.value:
-            await _send_notice(callback, "Сначала выберите подходящий тариф.")
+        if tariff not in PAID_TARIFFS:
+            await _send_notice(callback, "Сначала выберите платный тариф.")
             await _safe_callback_answer(callback)
             return
         if not state_snapshot.data.get("profile"):
@@ -2024,6 +2026,16 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             )
             await _safe_callback_answer(callback)
             return
+        if tariff in {Tariff.T2.value, Tariff.T3.value}:
+            questionnaire = state_snapshot.data.get("questionnaire") or {}
+            if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
+                await _send_notice(callback, "Сначала заполните анкету.")
+                await _show_screen_for_callback(
+                    callback,
+                    screen_id="S5",
+                )
+                await _safe_callback_answer(callback)
+                return
 
         order = await _prepare_checkout_order(
             callback,

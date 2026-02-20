@@ -308,6 +308,61 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         prepare_checkout.assert_awaited_once_with(callback, tariff_value=Tariff.T1.value)
         show_screen.assert_awaited_with(callback, screen_id="S3")
 
+    async def test_payment_start_creates_checkout_order_for_t2_t3(self) -> None:
+        self._create_profile(consent_accepted=True)
+        for tariff in (Tariff.T2, Tariff.T3):
+            with self.subTest(tariff=tariff.value):
+                screens.screen_manager._store._states.clear()
+                screens.screen_manager.update_state(
+                    1001,
+                    selected_tariff=tariff.value,
+                    questionnaire={"status": "completed"},
+                    personal_data_consent_accepted=True,
+                )
+                callback = _DummyCallback("payment:start")
+
+                with (
+                    patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+                    patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+                    patch.object(screens, "_refresh_questionnaire_state") as refresh_questionnaire,
+                    patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+                    patch.object(
+                        screens,
+                        "_prepare_checkout_order",
+                        new=AsyncMock(return_value=SimpleNamespace(id=999)),
+                    ) as prepare_checkout,
+                ):
+                    refresh_questionnaire.return_value = None
+                    await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+                prepare_checkout.assert_awaited_once_with(callback, tariff_value=tariff.value)
+                show_screen.assert_awaited_with(callback, screen_id="S3")
+
+    async def test_payment_start_for_t2_with_incomplete_questionnaire_returns_to_s5(self) -> None:
+        self._create_profile(consent_accepted=True)
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T2.value,
+            questionnaire={"status": "in_progress"},
+            personal_data_consent_accepted=True,
+        )
+        callback = _DummyCallback("payment:start")
+
+        with (
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+            patch.object(screens, "_refresh_questionnaire_state") as refresh_questionnaire,
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_send_notice", new=AsyncMock()) as send_notice,
+            patch.object(screens, "_prepare_checkout_order", new=AsyncMock()) as prepare_checkout,
+        ):
+            refresh_questionnaire.return_value = None
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        send_notice.assert_awaited_with(callback, "Сначала заполните анкету.")
+        show_screen.assert_awaited_with(callback, screen_id="S5")
+        prepare_checkout.assert_not_awaited()
+
     async def test_report_retry_requires_confirmed_payment(self) -> None:
         order_id = self._create_order(OrderStatus.CREATED)
         screens.screen_manager.update_state(
