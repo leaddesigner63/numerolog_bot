@@ -47,7 +47,7 @@ app/
   payments/           # платёжные провайдеры и проверки webhook
 scripts/              # вспомогательные скрипты
   deploy.sh           # серверный деплой-скрипт (используется GitHub Actions; пишет маркер .last_deploy_success)
-  check_runtime_services.sh # post-deploy проверка, что API и bot systemd units активны
+  check_runtime_services.sh # post-deploy проверка systemd + HTTP health-check API (защита от "деплой успешен, но админка не отвечает")
   test.sh             # полный набор локальных проверок
   fast_checks.py      # быстрые сценарные проверки без внешних зависимостей
   check_landing_content.py # статическая проверка словаря/дисклеймеров лендинга
@@ -63,6 +63,7 @@ docs/
     autodeploy_retention_nudge_step_by_step.md # деплой retention-nudge и post-deploy проверки
     autodeploy_payment_confirmation_step_by_step.md # автодеплой с безопасным подтверждением оплаты (только webhook/polling в production)
     autodeploy_admin_username_step_by_step.md # автодеплой изменений админки с отображением пользователей по username
+    autodeploy_admin_reliability_step_by_step.md # защита от недоступности админки после деплоя (systemd + API healthcheck)
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   landing/
     release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)
@@ -236,6 +237,19 @@ python -m app.bot.polling
 2. Бот/worker polling: `python -m app.bot.polling`
 
 Если поднят только один из них, система считается запущенной некорректно: вебхуки оплат могут приниматься API, но генерация/доставка отчётов не будет завершаться без фонового polling-процесса.
+
+
+### Анти-флап для админки после деплоя
+
+`deploy.sh` всегда запускает `scripts/check_runtime_services.sh`, который теперь проверяет не только `systemctl is-active`, но и HTTP-доступность API через `RUNTIME_API_HEALTHCHECK_URL` (по умолчанию `http://127.0.0.1:8000/health`) с ретраями. Это предотвращает сценарий, когда systemd уже считает сервис активным, но Uvicorn ещё не поднял роуты и `/admin` временно недоступен.
+
+При необходимости задайте в окружении деплоя:
+
+```bash
+RUNTIME_API_HEALTHCHECK_URL=http://127.0.0.1:8000/health
+RUNTIME_API_HEALTHCHECK_ATTEMPTS=20
+RUNTIME_API_HEALTHCHECK_INTERVAL_SECONDS=2
+```
 
 ## Яндекс.Метрика: проверка и эксплуатация
 
