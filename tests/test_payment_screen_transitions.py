@@ -242,11 +242,39 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             patch.object(screens, "_send_notice", new=AsyncMock()) as send_notice,
             patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
             patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
-        ):
+        ): 
             await screens.handle_callbacks(callback, state=SimpleNamespace())
 
         show_screen.assert_awaited_with(callback, screen_id="S3")
         send_notice.assert_awaited()
+        with self.SessionLocal() as session:
+            jobs_count = session.execute(select(func.count(ReportJob.id))).scalar_one()
+        self.assertEqual(jobs_count, 0)
+
+    async def test_report_retry_paid_order_opens_wait_screen_and_creates_job(self) -> None:
+        order_id = self._create_order(OrderStatus.PAID)
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T1.value,
+            order_id=str(order_id),
+        )
+        callback = _DummyCallback("report:retry")
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+            patch.object(screens, "_maybe_run_report_delay", new=AsyncMock()) as report_delay,
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S6")
+        report_delay.assert_awaited_once()
+        with self.SessionLocal() as session:
+            jobs_count = session.execute(select(func.count(ReportJob.id))).scalar_one()
+            job = session.execute(select(ReportJob).order_by(ReportJob.id.desc())).scalar_one()
+        self.assertEqual(jobs_count, 1)
+        self.assertEqual(job.order_id, order_id)
 
 
     async def test_tariff_with_existing_report_opens_warning_without_creating_order(self) -> None:
