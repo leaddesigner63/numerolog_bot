@@ -26,6 +26,11 @@ from app.bot.flows.checkout_state_machine import (
     resolve_checkout_transition,
 )
 from app.bot.handlers.screen_manager import screen_manager
+from app.bot.screen_images import (
+    S4_SCENARIO_AFTER_PAYMENT,
+    S4_SCENARIO_PROFILE,
+    S4_SCENARIO_STATE_KEY,
+)
 from app.core.config import settings
 from app.core.timezone import APP_TIMEZONE, as_app_timezone, format_app_datetime, now_app_timezone
 from app.core.pdf_service import pdf_service
@@ -465,6 +470,7 @@ async def _run_payment_waiter(bot: Bot, chat_id: int, user_id: int) -> None:
                     user_id,
                     profile_flow="report",
                     payment_processing_notice=False,
+                    **{S4_SCENARIO_STATE_KEY: S4_SCENARIO_AFTER_PAYMENT},
                 )
                 await screen_manager.show_screen(
                     bot=bot,
@@ -677,6 +683,14 @@ async def _show_screen_for_callback(
     screen_id: str,
     metadata_json: dict[str, Any] | None = None,
 ) -> bool:
+    if screen_id == "S4":
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        scenario = state_snapshot.data.get(S4_SCENARIO_STATE_KEY)
+        if scenario not in {S4_SCENARIO_PROFILE, S4_SCENARIO_AFTER_PAYMENT}:
+            screen_manager.update_state(
+                callback.from_user.id,
+                **{S4_SCENARIO_STATE_KEY: S4_SCENARIO_PROFILE},
+            )
     if screen_id == "S8":
         await screen_manager.enter_text_input_mode(
             bot=callback.bot,
@@ -1846,6 +1860,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         callback.from_user.id,
                         profile_flow="report",
                         payment_processing_notice=False,
+                        **{S4_SCENARIO_STATE_KEY: S4_SCENARIO_AFTER_PAYMENT},
                     )
                     await _show_screen_for_callback(
                         callback,

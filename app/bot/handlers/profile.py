@@ -13,6 +13,7 @@ from sqlalchemy import delete, select, func
 
 from app.bot.questionnaire.config import load_questionnaire_config
 from app.bot.handlers.screen_manager import screen_manager
+from app.bot.screen_images import S4_SCENARIO_PROFILE, S4_SCENARIO_STATE_KEY
 from app.core.config import settings
 from app.core.timezone import APP_TIMEZONE, format_app_datetime, now_app_timezone
 from app.db.models import (
@@ -189,6 +190,10 @@ def _append_marketing_consent_event(
 
 
 async def _show_profile_screen(message: Message, user_id: int) -> None:
+    screen_manager.update_state(
+        user_id,
+        **{S4_SCENARIO_STATE_KEY: S4_SCENARIO_PROFILE},
+    )
     await screen_manager.show_screen(
         bot=message.bot,
         chat_id=message.chat.id,
