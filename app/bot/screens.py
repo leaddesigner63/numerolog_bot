@@ -10,6 +10,7 @@ from typing import Any
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from app.bot.keyboards import enforce_long_button_rows
 from app.bot.questionnaire.config import load_questionnaire_config
 from app.core.config import settings
 from app.core.tariff_labels import tariff_button_title
@@ -164,7 +165,7 @@ def _global_menu() -> list[list[InlineKeyboardButton]]:
 
 def _build_keyboard(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    for row in rows:
+    for row in enforce_long_button_rows(rows):
         builder.row(*row)
     return builder.as_markup()
 

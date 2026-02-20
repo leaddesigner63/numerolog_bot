@@ -9,6 +9,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from sqlalchemy import select
 
+from app.bot.keyboards import enforce_long_button_rows
 from app.bot.questionnaire.config import (
     QuestionnaireQuestion,
     load_questionnaire_config,
@@ -86,7 +87,7 @@ def _build_keyboard(question: QuestionnaireQuestion) -> InlineKeyboardMarkup | N
     else:
         return None
 
-    return InlineKeyboardMarkup(inline_keyboard=rows)
+    return InlineKeyboardMarkup(inline_keyboard=enforce_long_button_rows(rows))
 
 
 def _with_button_icons(text: str, icon: str) -> str:

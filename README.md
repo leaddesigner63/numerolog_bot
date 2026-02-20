@@ -24,6 +24,7 @@ app/
       fallback.py     # обработчик сообщений/кнопок без сценария (очистка и возврат на старт)
     report_jobs_worker.py # фоновые задания генерации отчётов (pending/in_progress) + heartbeat в service_heartbeats
     markdown.py       # рендеринг Markdown-разметки в Telegram-HTML
+    keyboards.py      # общее правило раскладки inline-кнопок (длинные кнопки: максимум 2 в строке)
     screens.py        # сценарные экраны S0-S15 + S_MARKETING_CONSENT (согласие на рассылку)
     questionnaire/    # конфиг и вспомогательные модули анкеты
   assets/
@@ -59,6 +60,7 @@ scripts/              # вспомогательные скрипты
 docs/
   screen_images_update_matrix.md # матрица актуализации экранных ассетов и список сценариев для замены изображений
   deploy/
+    autodeploy_keyboard_layout_step_by_step.md # пошаговый автодеплой обновлённого правила раскладки кнопок
     landing_autodeploy.md # подробный runbook по автодеплою лендинга (VPS + Nginx)
     autodeploy_step_by_step.md # пошаговая инструкция по настройке автодеплоя для пользователя
     autodeploy_retention_nudge_step_by_step.md # деплой retention-nudge и post-deploy проверки
@@ -211,6 +213,9 @@ python -m http.server 8080 --directory web
   2. Проверить, что домен `aireadu.ru` (в canonical/OG/robots/sitemap) и ссылка на бота `https://t.me/AIreadUbot` используются на всех ключевых страницах, а также заменить все `будет добавлено` на финальные значения перед прод-выкладкой.
   3. Запустить автодеплой и выполнить пост-проверки из `AUTODEPLOY_INSTRUCTIONS.md` (включая smoke-check лендинга и ручной обход страниц).
   4. Перед публикацией новых статей обновить `docs/landing/seo-keyword-map.md` и подтвердить чек «новый URL не дублирует существующий кластер».
+
+
+- Для изменения логики раскладки кнопок используйте отдельный runbook: [`docs/deploy/autodeploy_keyboard_layout_step_by_step.md`](docs/deploy/autodeploy_keyboard_layout_step_by_step.md).
 
 5. Выполните миграции:
 
