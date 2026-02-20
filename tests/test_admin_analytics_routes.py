@@ -889,6 +889,10 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(by_tariff.status_code, 200)
         self.assertEqual(by_tariff.json()["data"]["by_tariff"][0]["provider_confirmed_revenue"], 2500.0)
 
+        nudge_by_tariff = self.client.get("/admin/api/analytics/finance/nudge-by-tariff", params={"tariff": "T2"})
+        self.assertEqual(nudge_by_tariff.status_code, 200)
+        self.assertIn("resume_after_nudge_by_tariff", nudge_by_tariff.json()["data"])
+
         timeseries = self.client.get("/admin/api/analytics/finance/timeseries", params={"tariff": "T2"})
         self.assertEqual(timeseries.status_code, 200)
         self.assertTrue(timeseries.json()["data"]["timeseries"])
@@ -1193,6 +1197,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertIn("analyticsTrafficSource", html)
         self.assertIn("analyticsTrafficCampaign", html)
         self.assertIn("analyticsFinanceByTariff", html)
+        self.assertIn("analyticsFinanceNudgeByTariff", html)
         self.assertIn("analyticsFinanceChart", html)
         self.assertIn("provider-confirmed only", html)
         self.assertIn("financeAudit", html)

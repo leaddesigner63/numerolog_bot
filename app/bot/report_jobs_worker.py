@@ -14,11 +14,21 @@ from app.bot.handlers import screens as screens_handler
 from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
 from app.core.report_service import report_service
-from app.db.models import ReportJob, ReportJobStatus, ServiceHeartbeat, User
+from app.db.models import (
+    Order,
+    OrderStatus,
+    ReportJob,
+    ReportJobStatus,
+    ScreenStateRecord,
+    ServiceHeartbeat,
+    User,
+)
 from app.db.session import get_session
+from app.services.marketing_messaging import send_marketing_message
 
 
 class ReportJobWorker:
+
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
         self._service_name = "report_jobs_worker"
@@ -30,6 +40,7 @@ class ReportJobWorker:
         while True:
             try:
                 await self._process_pending_jobs(bot)
+                await self._process_stalled_users(bot)
             except Exception as exc:
                 self._logger.warning(
                     "report_job_worker_failed",
@@ -60,6 +71,107 @@ class ReportJobWorker:
             if not claimed:
                 continue
             await self._handle_job(bot, job_id)
+
+    async def _process_stalled_users(self, bot: Bot) -> None:
+        threshold_hours = int(getattr(settings, "resume_nudge_delay_hours", 6) or 6)
+        threshold = timedelta(hours=max(threshold_hours, 1))
+        now = datetime.now(timezone.utc)
+
+        with get_session() as session:
+            state_rows = session.execute(select(ScreenStateRecord)).scalars().all()
+            for state_row in state_rows:
+                try:
+                    state_data = dict(state_row.data or {})
+                    critical_at = self._parse_dt(state_data.get("last_critical_step_at"))
+                    if not critical_at:
+                        continue
+                    if now - critical_at < threshold:
+                        continue
+                    if state_data.get("resume_nudge_sent_at"):
+                        continue
+
+                    user = session.execute(
+                        select(User).where(User.telegram_user_id == state_row.telegram_user_id)
+                    ).scalar_one_or_none()
+                    if user is None:
+                        continue
+
+                    if self._has_paid_order(session, user.id):
+                        continue
+
+                    deep_link = self._build_resume_deeplink(state_data=state_data)
+                    message_text = (
+                        "Вы остановились на важном шаге.\n"
+                        "Если хотите, можно мягко продолжить с того же места 👇\n"
+                        f"{deep_link}"
+                    )
+                    resume_campaign = str(getattr(settings, "resume_nudge_campaign", "resume_after_stall_v1") or "resume_after_stall_v1")
+                    send_result = await send_marketing_message(
+                        bot=bot,
+                        session=session,
+                        user_id=user.id,
+                        campaign=resume_campaign,
+                        message_text=message_text,
+                    )
+                    if not send_result.sent:
+                        continue
+
+                    sent_at = now.isoformat()
+                    state_data["resume_nudge_sent_at"] = sent_at
+                    state_data["resume_nudge_campaign"] = resume_campaign
+                    state_data["resume_nudge_target_screen_id"] = state_data.get("last_critical_screen_id")
+                    state_row.data = state_data
+                    session.add(state_row)
+                    screen_manager.record_transition_event_safe(
+                        user_id=state_row.telegram_user_id,
+                        from_screen=state_data.get("last_critical_screen_id"),
+                        to_screen=state_data.get("last_critical_screen_id") or "UNKNOWN",
+                        trigger_type="system",
+                        trigger_value="resume_nudge:sent",
+                        transition_status="success",
+                        metadata_json={
+                            "campaign": resume_campaign,
+                            "reason": "resume_nudge_sent",
+                            "tariff": state_data.get("selected_tariff"),
+                        },
+                    )
+                except Exception as exc:
+                    self._logger.warning(
+                        "resume_nudge_process_failed",
+                        extra={"telegram_user_id": state_row.telegram_user_id, "error": str(exc)},
+                    )
+
+    def _build_resume_deeplink(self, *, state_data: dict) -> str:
+        bot_username = getattr(settings, "telegram_bot_username", None)
+        order_id = state_data.get("order_id")
+        payload = "resume_nudge"
+        if order_id:
+            payload = f"resume_nudge_{order_id}"
+        if bot_username:
+            return f"https://t.me/{bot_username}?start={payload}"
+        return f"/start {payload}"
+
+    @staticmethod
+    def _parse_dt(value: object) -> datetime | None:
+        if not isinstance(value, str) or not value:
+            return None
+        try:
+            parsed = datetime.fromisoformat(value)
+        except ValueError:
+            return None
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(timezone.utc)
+
+    @staticmethod
+    def _has_paid_order(session, user_id: int) -> bool:
+        paid_order = session.execute(
+            select(Order.id).where(
+                Order.user_id == user_id,
+                Order.status == OrderStatus.PAID,
+            )
+        ).scalar_one_or_none()
+        return paid_order is not None
 
     def _update_heartbeat(self) -> None:
         now = datetime.now(timezone.utc)
