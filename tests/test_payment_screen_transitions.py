@@ -113,7 +113,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             session.add(profile)
             session.commit()
 
-    async def test_profile_save_routes_to_s3_for_t1_without_creating_order(self) -> None:
+    async def test_profile_save_routes_to_s3_for_t1_with_created_order(self) -> None:
         self._create_profile(consent_accepted=True)
         screens.screen_manager.update_state(
             1001,
@@ -129,15 +129,12 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             patch.object(screens, "_send_notice", new=AsyncMock()) as send_notice,
             patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
             patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
-            patch.object(screens, "_prepare_checkout_order", new=AsyncMock()) as prepare_checkout,
         ):
             await screens.handle_callbacks(callback, state=SimpleNamespace())
 
         show_screen.assert_awaited_with(callback, screen_id="S3")
-        prepare_checkout.assert_not_awaited()
         state_snapshot = screens.screen_manager.update_state(1001)
-        self.assertIsNone(state_snapshot.data.get("order_id"))
-        self.assertIsNone(state_snapshot.data.get("payment_url"))
+        self.assertIsNotNone(state_snapshot.data.get("order_id"))
 
     async def test_profile_save_requires_personal_data_consent(self) -> None:
         order_id = self._create_order(OrderStatus.PAID, tariff=Tariff.T2)
@@ -236,7 +233,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(jobs_count, 1)
         self.assertEqual(job.order_id, order_id)
 
-    async def test_profile_save_t1_with_unpaid_order_routes_to_s3_without_job_creation(self) -> None:
+    async def test_profile_save_t1_with_unpaid_order_routes_to_s3_with_order_id(self) -> None:
         self._create_profile(consent_accepted=True)
         for status in (OrderStatus.CREATED, OrderStatus.PENDING):
             with self.subTest(status=status.value):
@@ -253,18 +250,17 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
                     patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
                     patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
                     patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
-                    patch.object(screens, "_prepare_checkout_order", new=AsyncMock()) as prepare_checkout,
                     patch.object(screens, "_create_report_job", new=AsyncMock()) as create_job,
+                    patch.object(screens, "_send_notice", new=AsyncMock()),
                 ):
                     await screens.handle_callbacks(callback, state=SimpleNamespace())
 
                 show_screen.assert_awaited_with(callback, screen_id="S3")
-                prepare_checkout.assert_not_awaited()
                 create_job.assert_not_awaited()
                 state_snapshot = screens.screen_manager.update_state(1001)
-                self.assertIsNone(state_snapshot.data.get("order_id"))
+                self.assertIsNotNone(state_snapshot.data.get("order_id"))
 
-    async def test_profile_save_t1_without_order_routes_to_s3_without_checkout(self) -> None:
+    async def test_profile_save_t1_without_order_routes_to_s3_with_order_id(self) -> None:
         self._create_profile(consent_accepted=True)
         screens.screen_manager.update_state(
             1001,
@@ -277,16 +273,15 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
             patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
             patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
-            patch.object(screens, "_prepare_checkout_order", new=AsyncMock()) as prepare_checkout,
             patch.object(screens, "_create_report_job", new=AsyncMock()) as create_job,
+            patch.object(screens, "_send_notice", new=AsyncMock()),
         ):
             await screens.handle_callbacks(callback, state=SimpleNamespace())
 
         show_screen.assert_awaited_with(callback, screen_id="S3")
-        prepare_checkout.assert_not_awaited()
         create_job.assert_not_awaited()
         state_snapshot = screens.screen_manager.update_state(1001)
-        self.assertIsNone(state_snapshot.data.get("order_id"))
+        self.assertIsNotNone(state_snapshot.data.get("order_id"))
 
     async def test_payment_start_creates_checkout_order_for_t1(self) -> None:
         self._create_profile(consent_accepted=True)
