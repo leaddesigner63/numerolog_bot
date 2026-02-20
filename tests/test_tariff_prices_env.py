@@ -20,9 +20,9 @@ def test_format_price_uses_settings_tariff_values(monkeypatch) -> None:
     monkeypatch.setattr("app.bot.screens.settings.tariff_t2_price_rub", 1888)
     monkeypatch.setattr("app.bot.screens.settings.tariff_t3_price_rub", 2999)
 
-    assert _format_price({}, "T1") == "<tg-spoiler>777 RUB</tg-spoiler>"
-    assert _format_price({}, "T2") == "<tg-spoiler>1888 RUB</tg-spoiler>"
-    assert _format_price({}, "T3") == "<tg-spoiler>2999 RUB</tg-spoiler>"
+    assert _format_price({}, "T1") == "777 RUB"
+    assert _format_price({}, "T2") == "1888 RUB"
+    assert _format_price({}, "T3") == "2999 RUB"
 
 
 def test_create_order_price_uses_settings_tariff_values(monkeypatch) -> None:

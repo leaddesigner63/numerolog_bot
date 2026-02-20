@@ -244,12 +244,12 @@ def _format_price(state: dict[str, Any], tariff: str) -> str:
     order_amount = state.get("order_amount")
     order_currency = state.get("order_currency", "RUB")
     if order_amount:
-        return f"<tg-spoiler>{order_amount} {order_currency}</tg-spoiler>"
+        return f"{order_amount} {order_currency}"
     # Fallback — из справочника
     price = settings.tariff_prices_rub.get(tariff)
     if price is None:
         return ""
-    return f"<tg-spoiler>{price} RUB</tg-spoiler>"
+    return f"{price} RUB"
 
 
 def _apply_spoiler_markdown(text: str, spoiler_text: str) -> str:
@@ -448,6 +448,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             text_parts.append("\n\nПлатёжная ссылка пока недоступна. Проверьте настройки провайдера.")
 
     text = _with_screen_prefix("S3", "".join(text_parts))
+    text = _apply_spoiler_markdown(text, price_label)
 
     rows: list[list[InlineKeyboardButton]] = []
     if not payment_processing_notice:
