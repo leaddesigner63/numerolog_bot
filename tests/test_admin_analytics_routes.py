@@ -551,6 +551,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(payload["filters_applied"]["screen_ids"], ["S1"])
 
     def test_transitions_return_503_on_database_overload(self) -> None:
+        admin_routes._transition_analytics_cache.clear()
         with patch.object(
             admin_routes,
             "build_screen_transition_analytics",
@@ -560,6 +561,24 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 503)
         self.assertIn("временно перегружена", response.json()["detail"])
+
+
+    def test_transitions_funnel_returns_aggregate_and_by_tariff(self) -> None:
+        self._seed_events()
+        response = self.client.get("/admin/api/analytics/transitions/funnel")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+
+        self.assertIn("funnel", payload["data"])
+        self.assertIn("funnel_aggregate", payload["data"])
+        self.assertIn("funnel_by_tariff", payload["data"])
+        self.assertIn("T0", payload["data"]["funnel_by_tariff"])
+        self.assertIn("T1", payload["data"]["funnel_by_tariff"])
+        self.assertIn("T2", payload["data"]["funnel_by_tariff"])
+        self.assertIn("T3", payload["data"]["funnel_by_tariff"])
+
+        t2_steps = [row["step"] for row in payload["data"]["funnel_by_tariff"]["T2"]]
+        self.assertEqual(t2_steps, ["S0", "S1", "S5", "S3", "S6_OR_S7"])
 
     def test_transitions_validation_errors(self) -> None:
         bad_screen = self.client.get(
