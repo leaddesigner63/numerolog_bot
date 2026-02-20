@@ -914,7 +914,7 @@ def screen_s4_edit(state: dict[str, Any]) -> ScreenContent:
 
 def screen_s4_consent(_: dict[str, Any]) -> ScreenContent:
     consent_url = settings.legal_consent_url or "https://aireadu.ru/legal/consent/"
-    newsletter_consent_url = "https://numerologbot.ru/legal/newsletter-consent/"
+    newsletter_consent_url = "https://aireadu.ru/legal/newsletter-consent/"
     text = _with_screen_prefix(
         "S4",
         (
@@ -1483,7 +1483,7 @@ def screen_marketing_consent(_: dict[str, Any]) -> ScreenContent:
         "S_MARKETING_CONSENT",
         "Хочешь получать короткие полезные разборы, анонсы обновлений и спец-предложения?\n"
         "Мы пишем по делу и без спама.\n\n"
-        "Условия подписки: https://numerologbot.ru/legal/newsletter-consent/",
+        "Условия подписки: https://aireadu.ru/legal/newsletter-consent/",
     )
     rows = [
         [
