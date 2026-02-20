@@ -244,12 +244,12 @@ def _format_price(state: dict[str, Any], tariff: str) -> str:
     order_amount = state.get("order_amount")
     order_currency = state.get("order_currency", "RUB")
     if order_amount:
-        return f"{order_amount} {order_currency}"
+        return f"<tg-spoiler>{order_amount} {order_currency}</tg-spoiler>"
     # Fallback — из справочника
     price = settings.tariff_prices_rub.get(tariff)
     if price is None:
         return ""
-    return f"{price} RUB"
+    return f"<tg-spoiler>{price} RUB</tg-spoiler>"
 
 
 def _apply_spoiler_markdown(text: str, spoiler_text: str) -> str:
