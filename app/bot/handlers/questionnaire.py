@@ -349,12 +349,12 @@ async def _ensure_questionnaire_access(callback: CallbackQuery) -> bool:
         await screen_manager.send_ephemeral_message(
             callback.message,
             "Анкета доступна только для тарифов T2 и T3.",
-            user_id=callback.from_user.id,
+            user_id=(callback.from_user.id if callback.from_user else None),
         )
         await screen_manager.show_screen(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
+            user_id=(callback.from_user.id if callback.from_user else None),
             screen_id="S1",
         )
         return False
@@ -375,12 +375,12 @@ async def _ensure_profile_ready(callback: CallbackQuery, state: FSMContext) -> b
     await screen_manager.send_ephemeral_message(
         callback.message,
         "Сначала заполните «Мои данные».",
-        user_id=callback.from_user.id,
+        user_id=(callback.from_user.id if callback.from_user else None),
     )
     await screen_manager.show_screen(
         bot=callback.bot,
         chat_id=callback.message.chat.id,
-        user_id=callback.from_user.id,
+        user_id=(callback.from_user.id if callback.from_user else None),
         screen_id="S4",
     )
     await start_profile_wizard(callback.message, state, callback.from_user.id)
@@ -590,7 +590,7 @@ async def _start_edit_questionnaire(
     )
     await _send_question(
         message=callback.message,
-        user_id=callback.from_user.id,
+        user_id=(callback.from_user.id if callback.from_user else None),
         question=config.get_question(current_question_id),
         existing_answer=answers.get(current_question_id),
         show_edit_actions=True,
@@ -622,7 +622,7 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
             await screen_manager.send_ephemeral_message(
                 callback.message,
                 "Анкета уже заполнена. Нажмите «Редактировать анкету», чтобы внести изменения.",
-                user_id=callback.from_user.id,
+                user_id=(callback.from_user.id if callback.from_user else None),
             )
             await callback.answer()
             payload = _question_payload(response, config.version)
@@ -649,7 +649,7 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
             await screen_manager.send_ephemeral_message(
                 callback.message,
                 "Анкета уже заполнена. Нажмите «Продолжить», чтобы перейти к генерации.",
-                user_id=callback.from_user.id,
+                user_id=(callback.from_user.id if callback.from_user else None),
             )
             await callback.answer()
             payload = _question_payload(response, config.version)
@@ -679,7 +679,7 @@ async def start_questionnaire(callback: CallbackQuery, state: FSMContext) -> Non
     )
     await _send_question(
         message=callback.message,
-        user_id=callback.from_user.id,
+        user_id=(callback.from_user.id if callback.from_user else None),
         question=config.get_question(current_question_id),
         answered_count=len(answers),
         total_questions=len(config.questions),
@@ -721,7 +721,7 @@ async def restart_questionnaire(callback: CallbackQuery, state: FSMContext) -> N
     )
     await _send_question(
         message=callback.message,
-        user_id=callback.from_user.id,
+        user_id=(callback.from_user.id if callback.from_user else None),
         question=config.get_question(config.start_question_id),
         answered_count=0,
         total_questions=len(config.questions),
@@ -768,7 +768,7 @@ async def expand_questionnaire_answers_from_lk(callback: CallbackQuery) -> None:
     await screen_manager.show_screen(
         bot=callback.bot,
         chat_id=callback.message.chat.id,
-        user_id=callback.from_user.id,
+        user_id=(callback.from_user.id if callback.from_user else None),
         screen_id="S11",
     )
     await callback.answer()
@@ -783,7 +783,7 @@ async def collapse_questionnaire_answers_from_lk(callback: CallbackQuery) -> Non
     await screen_manager.show_screen(
         bot=callback.bot,
         chat_id=callback.message.chat.id,
-        user_id=callback.from_user.id,
+        user_id=(callback.from_user.id if callback.from_user else None),
         screen_id="S11",
     )
     await callback.answer()
@@ -797,7 +797,7 @@ async def delete_questionnaire_from_lk(callback: CallbackQuery, state: FSMContex
         callback.message,
         "Вы уверены, что хотите удалить расширенную анкету?",
         reply_markup=_build_delete_questionnaire_confirm_keyboard(),
-        user_id=callback.from_user.id,
+        user_id=(callback.from_user.id if callback.from_user else None),
     )
     await callback.answer()
 
@@ -807,7 +807,7 @@ async def cancel_delete_questionnaire_from_lk(callback: CallbackQuery) -> None:
     await screen_manager.show_screen(
         bot=callback.bot,
         chat_id=callback.message.chat.id,
-        user_id=callback.from_user.id,
+        user_id=(callback.from_user.id if callback.from_user else None),
         screen_id="S11",
     )
     await callback.answer("Удаление отменено.")
@@ -836,7 +836,7 @@ async def confirm_delete_questionnaire_from_lk(callback: CallbackQuery, state: F
     await screen_manager.show_screen(
         bot=callback.bot,
         chat_id=callback.message.chat.id,
-        user_id=callback.from_user.id,
+        user_id=(callback.from_user.id if callback.from_user else None),
         screen_id="S11",
     )
     await callback.answer("Анкета удалена.")
@@ -860,7 +860,7 @@ async def keep_current_edit_answer(callback: CallbackQuery, state: FSMContext) -
     await screen_manager.delete_last_question_message(
         bot=callback.bot,
         chat_id=callback.message.chat.id,
-        user_id=callback.from_user.id,
+        user_id=(callback.from_user.id if callback.from_user else None),
     )
     await _handle_answer(
         message=callback.message,
@@ -888,7 +888,7 @@ async def change_current_edit_answer(callback: CallbackQuery, state: FSMContext)
     config = load_questionnaire_config()
     await _send_question(
         message=callback.message,
-        user_id=callback.from_user.id,
+        user_id=(callback.from_user.id if callback.from_user else None),
         question=config.get_question(current_question_id),
         existing_answer=answers.get(current_question_id),
         force_input=True,
@@ -911,8 +911,11 @@ async def copy_current_answer(callback: CallbackQuery, state: FSMContext) -> Non
         await callback.answer("Текущий ответ пустой.", show_alert=False)
         return
 
-    await callback.message.answer(
+    await screen_manager.send_ephemeral_message(
+        callback.message,
         f"Текущий ответ:\n{answer_text}",
+        user_id=(callback.from_user.id if callback.from_user else None),
+        delete_delay_seconds=3,
     )
     await callback.answer("Ответ отправлен отдельным сообщением.", show_alert=False)
 
@@ -1046,7 +1049,7 @@ async def handle_choice_answer(callback: CallbackQuery, state: FSMContext) -> No
         await screen_manager.delete_last_question_message(
             bot=callback.bot,
             chat_id=callback.message.chat.id,
-            user_id=callback.from_user.id,
+            user_id=(callback.from_user.id if callback.from_user else None),
         )
     await _handle_answer(message=callback.message, state=state, answer=value, question_id=question_id)
     await callback.answer()
