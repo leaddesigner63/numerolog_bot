@@ -194,6 +194,43 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(payload["orders"][0]["user_id"], 140)
         self.assertTrue(payload["orders"][0]["payment_confirmed"])
 
+    def test_orders_endpoint_excludes_deploy_smoke_orders(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=144, telegram_user_id=700744)
+            session.add(user)
+            session.flush()
+            session.add_all(
+                [
+                    Order(
+                        id=261,
+                        user_id=144,
+                        tariff=Tariff.T1,
+                        amount=1000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        provider_payment_id="smoke-20260101010101",
+                        status=OrderStatus.PAID,
+                    ),
+                    Order(
+                        id=262,
+                        user_id=144,
+                        tariff=Tariff.T2,
+                        amount=2000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        provider_payment_id="real-20260101010101",
+                        status=OrderStatus.PAID,
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/admin/api/orders")
+        self.assertEqual(response.status_code, 200)
+        order_ids = {item["id"] for item in response.json()["orders"]}
+        self.assertNotIn(261, order_ids)
+        self.assertIn(262, order_ids)
+
     def test_orders_payload_includes_latest_manual_paid_actor(self) -> None:
         with self.SessionLocal() as session:
             user = User(id=142, telegram_user_id=700742)
@@ -353,6 +390,62 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         never_asked = self.client.get("/admin/api/users", params={"marketing_consent_status": "never-asked"})
         self.assertEqual(never_asked.status_code, 200)
         self.assertEqual({item["id"] for item in never_asked.json()["users"]}, {503})
+
+    def test_users_endpoint_excludes_deploy_smoke_users(self) -> None:
+        with self.SessionLocal() as session:
+            smoke_user = User(id=701, telegram_user_id=9701)
+            real_user = User(id=702, telegram_user_id=9702)
+            session.add_all([smoke_user, real_user])
+            session.flush()
+            session.add_all(
+                [
+                    UserProfile(
+                        user_id=701,
+                        name="Smoke Check",
+                        birth_date="2000-01-01",
+                        birth_place_city="M",
+                        birth_place_country="RU",
+                    ),
+                    UserProfile(
+                        user_id=702,
+                        name="Real User",
+                        birth_date="2000-01-01",
+                        birth_place_city="M",
+                        birth_place_country="RU",
+                    ),
+                    Order(
+                        user_id=701,
+                        tariff=Tariff.T1,
+                        amount=1000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        provider_payment_id="smoke-20260101010101",
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.SYSTEM,
+                        payment_confirmed_at=datetime.now(timezone.utc),
+                    ),
+                    Order(
+                        user_id=702,
+                        tariff=Tariff.T2,
+                        amount=2000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        provider_payment_id="real-20260101010101",
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=datetime.now(timezone.utc),
+                    ),
+                ]
+            )
+            session.commit()
+
+        response = self.client.get("/admin/api/users")
+        self.assertEqual(response.status_code, 200)
+        ids = {item["id"] for item in response.json()["users"]}
+        self.assertNotIn(701, ids)
+        self.assertIn(702, ids)
 
     def test_marketing_subscriptions_analytics_summary(self) -> None:
         base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)

@@ -347,6 +347,7 @@ pytest -q tests/test_yandex_metrika_counter.py
 - просмотр заказов, отчётов, пользователей и входящей обратной связи в отдельном разделе;
 - в разделе **«Пользователи»** доступны финансовые агрегаты по подтверждённым оплатам: `confirmed_orders_count`, `confirmed_revenue_total`, `manual_paid_orders_count`;
 - endpoint `/admin/api/orders` поддерживает серверные фильтры `user_id` и `payment_confirmed`, а в UI есть кнопка «Открыть заказы пользователя с фин-фильтром» для быстрого перехода к подтверждённым оплатам конкретного пользователя;
+- тестовые сущности деплойного smoke-check (`provider_payment_id` с префиксом `smoke-`, профиль `Smoke Check`) автоматически исключаются из разделов статистики по заказам и пользователям;
 - в разделе **«Отчёты»** добавлены финполя заказа (`order_status`, `payment_confirmed`, `payment_confirmation_source`, `payment_confirmed_at`) и колонка **«Фин. основание»** (`provider_confirmed` / `manual` / `none`), а также быстрые фильтры по provider-confirmed и по неподтверждённой оплате;
 - endpoint `/admin/api/reports` поддерживает серверные фильтры `financial_basis` и `payment_not_confirmed_only`, поэтому UI-фильтры масштабируются на большие выборки без клиентской перегрузки;
 - раздел **Analytics** дополнен финансовыми блоками «Финансовая воронка», «Выручка по тарифам» и «Финансы по дням» (источник данных: только `provider-confirmed` оплаты), а также мини-графиком тренда выручки по дням;
