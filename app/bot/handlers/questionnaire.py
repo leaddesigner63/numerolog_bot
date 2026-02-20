@@ -910,8 +910,11 @@ async def copy_current_answer(callback: CallbackQuery, state: FSMContext) -> Non
         await callback.answer("Текущий ответ пустой.", show_alert=False)
         return
 
-    await callback.message.answer(
+    await screen_manager.send_ephemeral_message(
+        callback.message,
         f"Текущий ответ:\n{answer_text}",
+        user_id=callback.from_user.id,
+        delete_delay_seconds=3,
     )
     await callback.answer("Ответ отправлен отдельным сообщением.", show_alert=False)
 
