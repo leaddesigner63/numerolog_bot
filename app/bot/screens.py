@@ -679,6 +679,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     requires_payment = selected_tariff_raw in {"T1", "T2", "T3"} and order_status != "paid"
     is_t0 = selected_tariff_raw == "T0"
 
+    is_order_creation_mode = selected_tariff_raw in {"T1", "T2", "T3"}
     show_payment_success_banner = order_status == "paid" and bool(profile_flow)
     payment_success_banner = (
         "<b>🟧 ОПЛАТА ПРОШЛА УСПЕШНО. 🟧</b>\n\n" if show_payment_success_banner else ""
@@ -735,14 +736,15 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 )
             ]
         )
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=_with_button_icons("Удалить мои данные", "🗑️"),
-                    callback_data="screen:S4_DELETE",
-                )
-            ]
-        )
+        if not is_order_creation_mode:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=_with_button_icons("Удалить мои данные", "🗑️"),
+                        callback_data="screen:S4_DELETE",
+                    )
+                ]
+            )
     elif is_t0:
         rows.append(
             [
@@ -811,7 +813,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             ]
         )
 
-    if not show_profile_flow_compact_keyboard:
+    if not show_profile_flow_compact_keyboard and not is_order_creation_mode:
         rows.append(
             [
                 InlineKeyboardButton(
