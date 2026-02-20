@@ -44,6 +44,7 @@ class QuestionnaireForceInputKeyboardTests(unittest.IsolatedAsyncioTestCase):
             chat_id=123,
             user_id=42,
             preserve_last_question=True,
+            cleanup_mode="delete_messages",
         )
 
     async def test_force_input_for_text_question_has_no_copy_button(self) -> None:
@@ -84,6 +85,7 @@ class QuestionnaireForceInputKeyboardTests(unittest.IsolatedAsyncioTestCase):
             chat_id=123,
             user_id=42,
             preserve_last_question=True,
+            cleanup_mode="delete_messages",
         )
 
 

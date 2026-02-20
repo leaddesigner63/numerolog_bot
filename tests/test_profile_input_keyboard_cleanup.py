@@ -21,7 +21,12 @@ class ProfileInputKeyboardCleanupTests(unittest.IsolatedAsyncioTestCase):
         ) as enter_mode, patch.object(profile.screen_manager, "update_last_question_message_id"):
             await profile.start_profile_wizard(message, state, user_id=7)
 
-        enter_mode.assert_awaited_once_with(bot=message.bot, chat_id=100, user_id=7)
+        enter_mode.assert_awaited_once_with(
+            bot=message.bot,
+            chat_id=100,
+            user_id=7,
+            cleanup_mode="delete_messages",
+        )
 
     async def test_start_profile_edit_text_clears_screen_inline_keyboard(self) -> None:
         state = AsyncMock()
@@ -50,6 +55,7 @@ class ProfileInputKeyboardCleanupTests(unittest.IsolatedAsyncioTestCase):
             chat_id=100,
             user_id=7,
             preserve_last_question=True,
+            cleanup_mode="delete_messages",
         )
 
     async def test_accept_consent_uses_cleanup_friendly_screen_manager_messages(self) -> None:

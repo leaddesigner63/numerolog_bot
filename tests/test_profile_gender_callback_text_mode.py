@@ -31,6 +31,7 @@ class ProfileGenderCallbackTextModeTests(unittest.IsolatedAsyncioTestCase):
             chat_id=200,
             user_id=10,
             preserve_last_question=True,
+            cleanup_mode="delete_messages",
         )
 
 

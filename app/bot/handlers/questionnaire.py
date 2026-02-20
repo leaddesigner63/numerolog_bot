@@ -482,6 +482,7 @@ async def _send_question(
             chat_id=message.chat.id,
             user_id=user_id,
             preserve_last_question=True,
+            cleanup_mode="delete_messages",
         )
     question_text = _decorate_question_text_with_progress(
         question_text=question_text,

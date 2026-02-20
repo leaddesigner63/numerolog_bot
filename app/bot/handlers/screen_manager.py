@@ -4,7 +4,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 
 from aiogram import Bot
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -173,6 +173,7 @@ class ScreenStateStore:
 
 
 class ScreenManager:
+    CleanupMode = Literal["remove_keyboard_only", "delete_messages"]
     _telegram_message_limit = 4096
     _telegram_caption_limit = 1024
     _critical_screens: dict[str, str] = {
@@ -749,9 +750,28 @@ class ScreenManager:
         self._store.clear_last_question_message_id(user_id)
 
     async def clear_current_screen_inline_keyboards(
-        self, bot: Bot, chat_id: int, user_id: int
+        self,
+        bot: Bot,
+        chat_id: int,
+        user_id: int,
+        cleanup_mode: CleanupMode = "remove_keyboard_only",
     ) -> None:
         state = self._store.get_state(user_id)
+        if cleanup_mode == "delete_messages":
+            for message_id in list(state.message_ids):
+                try:
+                    await bot.delete_message(chat_id=chat_id, message_id=message_id)
+                except (TelegramBadRequest, TelegramForbiddenError, Exception):
+                    continue
+            for message_id in list(state.user_message_ids):
+                try:
+                    await bot.delete_message(chat_id=chat_id, message_id=message_id)
+                except (TelegramBadRequest, TelegramForbiddenError, Exception):
+                    continue
+            self._store.clear_message_ids(user_id)
+            self._store.clear_user_message_ids(user_id)
+            return
+
         for message_id in list(state.message_ids):
             try:
                 await bot.edit_message_reply_markup(
@@ -769,6 +789,7 @@ class ScreenManager:
         chat_id: int,
         user_id: int,
         preserve_last_question: bool = False,
+        cleanup_mode: CleanupMode = "remove_keyboard_only",
     ) -> None:
         if not preserve_last_question:
             await self.delete_last_question_message(
@@ -780,6 +801,7 @@ class ScreenManager:
             bot=bot,
             chat_id=chat_id,
             user_id=user_id,
+            cleanup_mode=cleanup_mode,
         )
 
     async def send_ephemeral_message(
