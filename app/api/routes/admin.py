@@ -1271,14 +1271,33 @@ def admin_ui(request: Request) -> HTMLResponse:
       window.location.reload();
     }
 
+    const adminRequestTimeoutMs = 15000;
+
     async function fetchJson(path, options = {}) {
-      const response = await fetch(`/admin/api${path}`, {
-        ...options,
-        headers: {
-          "Content-Type": "application/json",
-          ...(options.headers || {})
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), adminRequestTimeoutMs);
+      const { signal: optionsSignal, ...optionsWithoutSignal } = options;
+      if (optionsSignal) {
+        optionsSignal.addEventListener("abort", () => controller.abort(), { once: true });
+      }
+      let response;
+      try {
+        response = await fetch(`/admin/api${path}`, {
+          ...optionsWithoutSignal,
+          signal: controller.signal,
+          headers: {
+            "Content-Type": "application/json",
+            ...(options.headers || {})
+          }
+        });
+      } catch (error) {
+        if (error && error.name === "AbortError") {
+          throw new Error("Превышено время ожидания ответа от админ-API");
         }
-      });
+        throw error;
+      } finally {
+        clearTimeout(timeoutId);
+      }
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         throw new Error(data.detail || "Ошибка запроса");
@@ -3204,7 +3223,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       stateNode.textContent = "Загрузка аналитики...";
       try {
         const query = buildAnalyticsQuery();
-        const [summaryRes, matrixRes, funnelRes, timingRes, fullRes, financeSummaryRes, financeTariffRes, financeNudgeByTariffRes, financeTimeseriesRes, trafficSummaryRes, trafficSourceRes, trafficCampaignRes] = await Promise.all([
+        const endpointRequests = [
           fetchJson(`/analytics/transitions/summary?${query}`),
           fetchJson(`/analytics/transitions/matrix?${query}`),
           fetchJson(`/analytics/transitions/funnel?${query}`),
@@ -3217,7 +3236,28 @@ def admin_ui(request: Request) -> HTMLResponse:
           fetchJson(`/analytics/traffic/summary?${query}`),
           fetchJson(`/analytics/traffic/by-source?${query}`),
           fetchJson(`/analytics/traffic/by-campaign?${query}&page=1&page_size=100`),
-        ]);
+        ];
+        const endpointResponses = await Promise.allSettled(endpointRequests);
+        const failedEndpoints = endpointResponses
+          .map((result, index) => (result.status === "rejected" ? index + 1 : null))
+          .filter((value) => value !== null);
+        const pickResultValue = (index, fallback) => {
+          const result = endpointResponses[index];
+          return result && result.status === "fulfilled" ? result.value : fallback;
+        };
+
+        const summaryRes = pickResultValue(0, {});
+        const matrixRes = pickResultValue(1, {});
+        const funnelRes = pickResultValue(2, {});
+        const timingRes = pickResultValue(3, {});
+        const fullRes = pickResultValue(4, {});
+        const financeSummaryRes = pickResultValue(5, {});
+        const financeTariffRes = pickResultValue(6, {});
+        const financeNudgeByTariffRes = pickResultValue(7, {});
+        const financeTimeseriesRes = pickResultValue(8, {});
+        const trafficSummaryRes = pickResultValue(9, {});
+        const trafficSourceRes = pickResultValue(10, {});
+        const trafficCampaignRes = pickResultValue(11, {});
 
         const summary = summaryRes?.data?.summary || {};
         const matrixRows = matrixRes?.data?.transition_matrix || [];
@@ -3331,7 +3371,9 @@ def admin_ui(request: Request) -> HTMLResponse:
             {value: row.medianSec ? `${Math.round(row.medianSec)} сек` : "—", className: row.medianSec > analyticsThresholds.longDurationSec ? "problem-cell" : ""},
           ])
         );
-        stateNode.textContent = `Обновлено: ${new Date().toLocaleString()}`;
+        stateNode.textContent = failedEndpoints.length
+          ? `Обновлено частично: ${new Date().toLocaleString()} (ошибки в ${failedEndpoints.length} из ${endpointResponses.length} источников)`
+          : `Обновлено: ${new Date().toLocaleString()}`;
       } catch (error) {
         stateNode.textContent = `Ошибка загрузки аналитики: ${error.message}`;
       }
