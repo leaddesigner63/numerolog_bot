@@ -284,10 +284,12 @@ class ScreenManager:
             retry_failed_message_ids.append(message_id)
         failed_message_ids = retry_failed_message_ids
 
+        failed_user_message_ids: list[int] = []
         for message_id in previous_user_message_ids:
             try:
                 await bot.delete_message(chat_id=chat_id, message_id=message_id)
             except (TelegramBadRequest, TelegramForbiddenError, Exception) as exc:
+                failed_user_message_ids.append(message_id)
                 self._logger.info(
                     "user_message_cleanup_failed",
                     extra={
@@ -297,6 +299,13 @@ class ScreenManager:
                         "error": str(exc),
                     },
                 )
+
+        retry_failed_user_message_ids: list[int] = []
+        for message_id in failed_user_message_ids:
+            if await self._retry_delete_message(bot, chat_id, message_id):
+                continue
+            retry_failed_user_message_ids.append(message_id)
+        failed_user_message_ids = retry_failed_user_message_ids
 
         if last_question_message_id and (
             last_question_message_id not in previous_message_ids
@@ -324,7 +333,21 @@ class ScreenManager:
         if previous_message_ids:
             self._store.clear_message_ids(user_id)
         if previous_user_message_ids:
-            self._store.clear_user_message_ids(user_id)
+            if not failed_user_message_ids:
+                self._store.clear_user_message_ids(user_id)
+            else:
+                for message_id in previous_user_message_ids:
+                    if message_id in failed_user_message_ids:
+                        continue
+                    self._store.remove_user_message_id(user_id, message_id)
+                self._logger.warning(
+                    "user_message_cleanup_incomplete",
+                    extra={
+                        "user_id": user_id,
+                        "screen_id": state.screen_id,
+                        "failed_message_ids": failed_user_message_ids,
+                    },
+                )
         if (
             last_question_message_id
             and last_question_message_id in previous_message_ids
