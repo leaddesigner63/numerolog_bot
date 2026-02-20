@@ -743,6 +743,31 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
 
         show_screen.assert_awaited_with(callback, screen_id="S15")
 
+    async def test_payment_start_opens_existing_report_warning_before_checkout(self) -> None:
+        order_id = self._create_order(OrderStatus.CREATED)
+        self._create_profile(consent_accepted=True)
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T1.value,
+            order_id=str(order_id),
+            offer_seen=True,
+            existing_tariff_report_found=True,
+            existing_report_warning_seen=False,
+            personal_data_consent_accepted=True,
+            profile={"name": "Иван"},
+        )
+        callback = _DummyCallback("payment:start")
+
+        with (
+            patch.object(screens, "_prepare_checkout_order", new=AsyncMock(return_value=SimpleNamespace(id=order_id))),
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S15")
+
 
     async def test_s3_report_details_navigation_keeps_order_state(self) -> None:
         order_id = self._create_order(OrderStatus.CREATED)
@@ -753,6 +778,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         )
 
         with (
+            patch.object(screens, "_prepare_checkout_order", new=AsyncMock(return_value=SimpleNamespace(id=order_id))),
             patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
             patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
             patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
