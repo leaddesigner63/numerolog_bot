@@ -61,6 +61,51 @@ class ProfileGenderTests(unittest.TestCase):
 
         self.assertEqual(facts["profile"]["gender"], "женский")
 
+    def test_screen_s4_shows_delete_button_when_opened_from_lk(self) -> None:
+        content = screen_s4(
+            {
+                "selected_tariff": "T2",
+                "s4_opened_from_lk": True,
+                "profile": {
+                    "name": "Алекс",
+                    "gender": "мужской",
+                    "birth_date": "01.01.2000",
+                    "birth_time": "10:00",
+                    "birth_place": {"city": "Москва", "region": "", "country": ""},
+                },
+            }
+        )
+
+        callback_data = [
+            button.callback_data
+            for row in content.keyboard.inline_keyboard
+            for button in row
+            if button.callback_data
+        ]
+        self.assertIn("screen:S4_DELETE", callback_data)
+
+    def test_screen_s4_hides_delete_button_in_paid_flow_without_lk(self) -> None:
+        content = screen_s4(
+            {
+                "selected_tariff": "T2",
+                "profile": {
+                    "name": "Алекс",
+                    "gender": "мужской",
+                    "birth_date": "01.01.2000",
+                    "birth_time": "10:00",
+                    "birth_place": {"city": "Москва", "region": "", "country": ""},
+                },
+            }
+        )
+
+        callback_data = [
+            button.callback_data
+            for row in content.keyboard.inline_keyboard
+            for button in row
+            if button.callback_data
+        ]
+        self.assertNotIn("screen:S4_DELETE", callback_data)
+
     def test_screen_s11_shows_gender(self) -> None:
         content = screen_s11(
             {
