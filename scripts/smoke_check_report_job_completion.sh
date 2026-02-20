@@ -20,4 +20,5 @@ if [ -z "${PYTHON_BIN}" ] || [ ! -x "${PYTHON_BIN}" ]; then
   exit 1
 fi
 
-"${PYTHON_BIN}" "${REPO_ROOT}/scripts/smoke_check_report_job_completion.py"
+PYTHONPATH="${REPO_ROOT}:${PYTHONPATH:-}" \
+  "${PYTHON_BIN}" "${REPO_ROOT}/scripts/smoke_check_report_job_completion.py"
