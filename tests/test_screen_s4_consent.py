@@ -10,12 +10,14 @@ class ScreenS4ConsentTests(unittest.TestCase):
         content = screen_s4_consent({})
         message = content.messages[0]
 
-        self.assertIn("Продолжая, вы соглашаетесь с", message)
+        self.assertIn("Продолжая вы соглашаетесь с", message)
         link_match = re.search(r"\[условиями\]\(([^)]+)\)", message)
         self.assertIsNotNone(link_match)
+        newsletter_link_match = re.search(r"\[согласие на получение уведомлений\]\(([^)]+)\)", message)
+        self.assertIsNotNone(newsletter_link_match)
         self.assertIn("newsletter-consent", message)
 
-    def test_contains_marketing_consent_button(self) -> None:
+    def test_contains_opt_out_button(self) -> None:
         content = screen_s4_consent({})
         callback_data = [
             button.callback_data
@@ -24,7 +26,7 @@ class ScreenS4ConsentTests(unittest.TestCase):
             if button.callback_data
         ]
 
-        self.assertIn("profile:marketing_consent:accept", callback_data)
+        self.assertIn("profile:consent:accept_without_marketing", callback_data)
 
     def test_uses_default_consent_url_when_env_is_empty(self) -> None:
         original = settings.legal_consent_url

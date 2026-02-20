@@ -442,6 +442,19 @@ async def start_profile_flow(callback: CallbackQuery, state: FSMContext) -> None
 
 @router.callback_query(F.data == "profile:consent:accept")
 async def accept_profile_consent(callback: CallbackQuery) -> None:
+    await _apply_profile_consent_choice(callback, marketing_opt_out=False)
+
+
+@router.callback_query(F.data == "profile:consent:accept_without_marketing")
+async def accept_profile_consent_without_marketing(callback: CallbackQuery) -> None:
+    await _apply_profile_consent_choice(callback, marketing_opt_out=True)
+
+
+async def _apply_profile_consent_choice(
+    callback: CallbackQuery,
+    *,
+    marketing_opt_out: bool,
+) -> None:
     if not callback.from_user or not callback.message:
         await callback.answer()
         return
@@ -455,10 +468,40 @@ async def accept_profile_consent(callback: CallbackQuery) -> None:
             callback.from_user.username,
         )
         profile = user.profile
+        user_id = getattr(user, "id", None)
         if profile:
             consent_at = now_app_timezone()
             profile.personal_data_consent_accepted_at = consent_at
             profile.personal_data_consent_source = "profile_flow"
+            if marketing_opt_out:
+                profile.marketing_consent_revoked_at = consent_at
+                profile.marketing_consent_revoked_source = "profile_flow"
+                if user_id is not None:
+                    _append_marketing_consent_event(
+                        session=session,
+                        user_id=user_id,
+                        event_type=MarketingConsentEventType.REVOKED,
+                        event_at=consent_at,
+                        document_version=profile.marketing_consent_document_version,
+                        source=profile.marketing_consent_revoked_source,
+                        metadata_json={"handler": "profile:consent:accept_without_marketing"},
+                    )
+            else:
+                profile.marketing_consent_accepted_at = consent_at
+                profile.marketing_consent_revoked_at = None
+                profile.marketing_consent_document_version = "v1"
+                profile.marketing_consent_source = "profile_flow"
+                profile.marketing_consent_revoked_source = None
+                if user_id is not None:
+                    _append_marketing_consent_event(
+                        session=session,
+                        user_id=user_id,
+                        event_type=MarketingConsentEventType.ACCEPTED,
+                        event_at=consent_at,
+                        document_version=profile.marketing_consent_document_version,
+                        source=profile.marketing_consent_source,
+                        metadata_json={"handler": "profile:consent:accept"},
+                    )
             session.flush()
             screen_manager.update_state(
                 callback.from_user.id,
@@ -536,6 +579,7 @@ async def accept_marketing_consent(callback: CallbackQuery) -> None:
             callback.from_user.username,
         )
         profile = user.profile
+        user_id = getattr(user, "id", None)
         if profile:
             accepted_at = now_app_timezone()
             profile.marketing_consent_accepted_at = accepted_at
@@ -586,6 +630,7 @@ async def revoke_marketing_consent(callback: CallbackQuery) -> None:
             callback.from_user.username,
         )
         profile = user.profile
+        user_id = getattr(user, "id", None)
         if profile:
             revoked_at = now_app_timezone()
             profile.marketing_consent_revoked_at = revoked_at
@@ -619,6 +664,7 @@ async def accept_marketing_consent_prompt(callback: CallbackQuery) -> None:
             callback.from_user.username,
         )
         profile = user.profile
+        user_id = getattr(user, "id", None)
         if profile:
             profile.marketing_consent_accepted_at = now
             profile.marketing_consent_revoked_at = None
@@ -991,6 +1037,7 @@ async def handle_profile_birth_place(message: Message, state: FSMContext) -> Non
     with get_session() as session:
         user = _get_or_create_user(session, message.from_user.id, message.from_user.username)
         profile = user.profile
+        user_id = getattr(user, "id", None)
         if profile:
             profile.name = data["name"]
             profile.gender = data["gender"]
