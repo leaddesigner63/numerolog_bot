@@ -18,6 +18,8 @@ from app.db.models import (
     Tariff,
     User,
     UserProfile,
+    MarketingConsentEvent,
+    MarketingConsentEventType,
 )
 
 
@@ -123,6 +125,13 @@ class ProfileConsentAcceptTests(unittest.IsolatedAsyncioTestCase):
                     db_profile = session.execute(select(UserProfile).where(UserProfile.user_id == 1)).scalar_one()
                     self.assertIsNotNone(db_profile.personal_data_consent_accepted_at)
                     self.assertEqual(db_profile.personal_data_consent_source, "profile_flow")
+                    self.assertIsNotNone(db_profile.marketing_consent_accepted_at)
+                    self.assertIsNone(db_profile.marketing_consent_revoked_at)
+                    self.assertEqual(db_profile.marketing_consent_source, "profile_flow")
+                    events = session.execute(
+                        select(MarketingConsentEvent).order_by(MarketingConsentEvent.id)
+                    ).scalars().all()
+                    self.assertEqual(events[-1].event_type, MarketingConsentEventType.ACCEPTED)
                     active_jobs = session.execute(
                         select(ReportJob).where(ReportJob.user_id == 1)
                     ).scalars().all()
@@ -162,6 +171,12 @@ class ProfileConsentAcceptTests(unittest.IsolatedAsyncioTestCase):
             db_profile = session.execute(select(UserProfile).where(UserProfile.user_id == 1)).scalar_one()
             self.assertIsNotNone(db_profile.personal_data_consent_accepted_at)
             self.assertEqual(db_profile.personal_data_consent_source, "profile_flow")
+            self.assertIsNotNone(db_profile.marketing_consent_accepted_at)
+            self.assertIsNone(db_profile.marketing_consent_revoked_at)
+            events = session.execute(
+                select(MarketingConsentEvent).order_by(MarketingConsentEvent.id)
+            ).scalars().all()
+            self.assertEqual(events[-1].event_type, MarketingConsentEventType.ACCEPTED)
             jobs = session.execute(select(ReportJob).where(ReportJob.user_id == 1)).scalars().all()
             self.assertEqual(jobs, [])
 
@@ -173,6 +188,51 @@ class ProfileConsentAcceptTests(unittest.IsolatedAsyncioTestCase):
         show_screen.assert_not_awaited()
         callback.answer.assert_awaited_once()
 
+
+    async def test_accept_without_marketing_sets_mandatory_consent_and_revokes_marketing(self) -> None:
+        callback = SimpleNamespace(
+            bot=AsyncMock(),
+            message=SimpleNamespace(chat=SimpleNamespace(id=5001), answer=AsyncMock()),
+            from_user=SimpleNamespace(id=1001, username="tester"),
+            answer=AsyncMock(),
+        )
+        state_data = {"selected_tariff": Tariff.T2.value}
+
+        def _update_state(_user_id: int, **kwargs):
+            if kwargs:
+                state_data.update(kwargs)
+            return SimpleNamespace(data=state_data.copy())
+
+        with (
+            patch.object(profile.screen_manager, "update_state", side_effect=_update_state),
+            patch.object(profile.screen_manager, "send_ephemeral_message", new=AsyncMock()) as send_ephemeral,
+            patch.object(profile.screen_manager, "show_screen", new=AsyncMock()) as show_screen,
+        ):
+            await profile.accept_profile_consent_without_marketing(callback)
+
+        with self.SessionLocal() as session:
+            db_profile = session.execute(select(UserProfile).where(UserProfile.user_id == 1)).scalar_one()
+            self.assertIsNotNone(db_profile.personal_data_consent_accepted_at)
+            self.assertEqual(db_profile.personal_data_consent_source, "profile_flow")
+            self.assertIsNotNone(db_profile.marketing_consent_revoked_at)
+            self.assertEqual(db_profile.marketing_consent_revoked_source, "profile_flow")
+            events = session.execute(
+                select(MarketingConsentEvent).order_by(MarketingConsentEvent.id)
+            ).scalars().all()
+            self.assertEqual(events[-1].event_type, MarketingConsentEventType.REVOKED)
+
+        send_ephemeral.assert_awaited_once_with(
+            callback.message,
+            "Согласие подтверждено.",
+            user_id=1001,
+        )
+        show_screen.assert_awaited_once_with(
+            bot=callback.bot,
+            chat_id=5001,
+            user_id=1001,
+            screen_id="S5",
+        )
+        callback.answer.assert_awaited_once()
 
 
 if __name__ == "__main__":

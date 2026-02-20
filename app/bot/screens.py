@@ -911,15 +911,12 @@ def screen_s4_edit(state: dict[str, Any]) -> ScreenContent:
 
 def screen_s4_consent(_: dict[str, Any]) -> ScreenContent:
     consent_url = settings.legal_consent_url or "https://aireadu.ru/legal/consent/"
-    newsletter_consent_url = (
-        "https://numerologbot.ru/legal/newsletter-consent/"
-    )
+    newsletter_consent_url = "https://numerologbot.ru/legal/newsletter-consent/"
     text = _with_screen_prefix(
         "S4",
         (
-            "Продолжая, вы соглашаетесь с [условиями]"
-            f"({consent_url}).\n"
-            "Отдельно можно подтвердить [согласие на рассылку]"
+            "Продолжая вы соглашаетесь с [условиями]"
+            f"({consent_url}) и подтверждаете [согласие на получение уведомлений]"
             f"({newsletter_consent_url})."
         ),
     )
@@ -932,8 +929,8 @@ def screen_s4_consent(_: dict[str, Any]) -> ScreenContent:
         ],
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Согласие на рассылку", "📩"),
-                callback_data="profile:marketing_consent:accept",
+                text=_with_button_icons("Отказ от уведомлений", "📩"),
+                callback_data="profile:consent:accept_without_marketing",
             )
         ],
         [
