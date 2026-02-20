@@ -675,6 +675,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     birth_place = _format_birth_place(profile_data.get("birth_place"))
     birth_time = profile_data.get("birth_time") or "не указано"
     profile_flow = state.get("profile_flow")
+    opened_from_lk = bool(state.get("s4_opened_from_lk"))
     order_status = (state.get("order_status") or "").lower()
     requires_payment = selected_tariff_raw in {"T1", "T2", "T3"} and order_status != "paid"
     is_t0 = selected_tariff_raw == "T0"
@@ -736,7 +737,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 )
             ]
         )
-        if not is_order_creation_mode:
+        if not is_order_creation_mode or opened_from_lk:
             rows.append(
                 [
                     InlineKeyboardButton(

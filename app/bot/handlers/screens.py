@@ -684,7 +684,11 @@ async def _show_screen_for_callback(
     metadata_json: dict[str, Any] | None = None,
 ) -> bool:
     if screen_id == "S4":
-        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        current_screen_id = screen_manager.get_state(callback.from_user.id).screen_id
+        state_snapshot = screen_manager.update_state(
+            callback.from_user.id,
+            s4_opened_from_lk=current_screen_id == "S11",
+        )
         scenario = state_snapshot.data.get(S4_SCENARIO_STATE_KEY)
         if scenario not in {S4_SCENARIO_PROFILE, S4_SCENARIO_AFTER_PAYMENT}:
             screen_manager.update_state(
