@@ -685,6 +685,9 @@ class ScreenManager:
     def update_state(self, user_id: int, **kwargs: Any) -> ScreenState:
         return self._store.update_data(user_id, **kwargs)
 
+    def get_state(self, user_id: int) -> ScreenState:
+        return self._store.get_state(user_id)
+
 
     def record_transition_event_safe(
         self,
