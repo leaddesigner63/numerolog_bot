@@ -13,7 +13,13 @@ from sqlalchemy import select, func
 
 from app.bot.questionnaire.config import load_questionnaire_config, resolve_next_question_id
 from app.bot.screens import build_report_wait_message
-from app.bot.handlers.profile import start_profile_wizard
+from app.bot.handlers.profile import (
+    accept_marketing_consent_prompt,
+    accept_profile_consent,
+    accept_profile_consent_without_marketing,
+    skip_marketing_consent_prompt,
+    start_profile_wizard,
+)
 from app.bot.flows.checkout_state_machine import (
     CheckoutContext,
     resolve_checkout_entry_screen,
@@ -1648,6 +1654,22 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
 
     await _safe_callback_processing(callback)
     screen_manager.update_state(callback.from_user.id, s4_no_inline_keyboard=False)
+
+    if callback.data == "profile:consent:accept":
+        await accept_profile_consent(callback)
+        return
+
+    if callback.data == "profile:consent:accept_without_marketing":
+        await accept_profile_consent_without_marketing(callback)
+        return
+
+    if callback.data == "marketing:consent:accept":
+        await accept_marketing_consent_prompt(callback)
+        return
+
+    if callback.data == "marketing:consent:skip":
+        await skip_marketing_consent_prompt(callback)
+        return
 
     if callback.data == "s2:details":
         state_snapshot = screen_manager.update_state(callback.from_user.id)
