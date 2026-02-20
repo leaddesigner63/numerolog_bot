@@ -14,6 +14,11 @@ from sqlalchemy import select, func
 from app.bot.questionnaire.config import load_questionnaire_config, resolve_next_question_id
 from app.bot.screens import build_report_wait_message
 from app.bot.handlers.profile import start_profile_wizard
+from app.bot.flows.checkout_state_machine import (
+    CheckoutContext,
+    resolve_checkout_entry_screen,
+    resolve_checkout_transition,
+)
 from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
 from app.core.timezone import APP_TIMEZONE, as_app_timezone, format_app_datetime, now_app_timezone
@@ -137,6 +142,19 @@ PAYMENT_PROVIDER_POLL_ORDER_ID_KEY = "payment_provider_poll_order_id"
 def _is_local_payment_debug_autoconfirm_enabled() -> bool:
     return settings.env.lower() in {"dev", "local"} and bool(
         getattr(settings, "payment_debug_auto_confirm_local", False)
+    )
+
+
+def _checkout_context_from_state(state_data: dict[str, Any]) -> CheckoutContext:
+    questionnaire = state_data.get("questionnaire") or {}
+    return CheckoutContext(
+        tariff=state_data.get("selected_tariff"),
+        profile_ready=bool(state_data.get("profile")),
+        questionnaire_ready=(
+            questionnaire.get("status") == QuestionnaireStatus.COMPLETED.value
+        ),
+        order_created=bool(_safe_int(state_data.get("order_id"))),
+        payment_confirmed=(state_data.get("order_status") == OrderStatus.PAID.value),
     )
 
 
@@ -1933,12 +1951,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             existing_report_warning_seen=False,
             existing_tariff_report_found=False if reusable_paid_order else existing_tariff_report_found,
         )
-        if tariff == Tariff.T0.value:
-            next_screen = "S4"
-        elif reusable_paid_order:
-            next_screen = "S4"
-        else:
-            next_screen = "S2"
+        next_screen = resolve_checkout_entry_screen(
+            tariff=tariff,
+            reusable_paid_order=bool(reusable_paid_order),
+        )
         await _show_screen_for_callback(
             callback,
             screen_id=next_screen,
@@ -2010,12 +2026,18 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             _refresh_questionnaire_state(session, callback.from_user.id)
         state_snapshot = screen_manager.update_state(callback.from_user.id)
         tariff = state_snapshot.data.get("selected_tariff")
-        if tariff not in PAID_TARIFFS:
-            await _send_notice(callback, "Сначала выберите платный тариф.")
-            await _safe_callback_answer(callback)
-            return
-        if not state_snapshot.data.get("profile"):
-            await _send_notice(callback, "Сначала заполните «Мои данные».")
+        decision = resolve_checkout_transition(
+            _checkout_context_from_state(state_snapshot.data),
+            "payment_start",
+        )
+        if not decision.allowed:
+            if decision.guard_reason == "paid_tariff_required":
+                await _send_notice(callback, "Сначала выберите платный тариф.")
+            elif decision.guard_reason == "profile_required":
+                await _send_notice(callback, "Сначала заполните «Мои данные».")
+            elif decision.guard_reason == "questionnaire_required":
+                await _send_notice(callback, "Сначала заполните анкету.")
+                await _show_screen_for_callback(callback, screen_id="S5")
             await _safe_callback_answer(callback)
             return
         if not state_snapshot.data.get("personal_data_consent_accepted"):
@@ -2026,16 +2048,6 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             )
             await _safe_callback_answer(callback)
             return
-        if tariff in {Tariff.T2.value, Tariff.T3.value}:
-            questionnaire = state_snapshot.data.get("questionnaire") or {}
-            if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
-                await _send_notice(callback, "Сначала заполните анкету.")
-                await _show_screen_for_callback(
-                    callback,
-                    screen_id="S5",
-                )
-                await _safe_callback_answer(callback)
-                return
 
         order = await _prepare_checkout_order(
             callback,
@@ -2045,7 +2057,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             await _send_notice(callback, "Не удалось подготовить заказ для оплаты.")
             await _safe_callback_answer(callback)
             return
-        await _show_screen_for_callback(callback, screen_id="S3")
+        await _show_screen_for_callback(callback, screen_id=decision.next_screen)
         await _safe_callback_answer(callback)
         return
 
@@ -2134,36 +2146,49 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                                 callback.from_user.id,
                                 **_refresh_order_state(order),
                             )
-                        if order and order.status == OrderStatus.PAID:
-                            user = _get_or_create_user(
-                                session,
-                                callback.from_user.id,
-                                callback.from_user.username,
-                            )
-                            job = _create_report_job(
-                                session,
-                                user=user,
-                                tariff_value=tariff,
-                                order_id=order.id,
-                                chat_id=callback.message.chat.id if callback.message else None,
-                            )
-                            if not job:
-                                await _send_notice(
-                                    callback,
-                                    "Не удалось создать задание на генерацию.",
-                                )
-                                await _safe_callback_answer(callback)
-                                return
-                            await _show_screen_for_callback(callback, screen_id="S6")
-                            await _maybe_run_report_delay(callback)
-                            await _safe_callback_answer(callback)
-                            return
-
+                    state_snapshot = screen_manager.update_state(callback.from_user.id)
             if tariff in {Tariff.T2.value, Tariff.T3.value}:
                 with get_session() as session:
                     _refresh_questionnaire_state(session, callback.from_user.id)
-                await _show_screen_for_callback(callback, screen_id="S5")
-            else:
+                state_snapshot = screen_manager.update_state(callback.from_user.id)
+
+            decision = resolve_checkout_transition(
+                _checkout_context_from_state(state_snapshot.data),
+                "profile_saved",
+            )
+            if not decision.allowed:
+                await _send_notice(callback, "Сначала заполните «Мои данные».")
+                await _safe_callback_answer(callback)
+                return
+
+            if decision.should_start_job:
+                order_id = _safe_int(state_snapshot.data.get("order_id"))
+                with get_session() as session:
+                    user = _get_or_create_user(
+                        session,
+                        callback.from_user.id,
+                        callback.from_user.username,
+                    )
+                    job = _create_report_job(
+                        session,
+                        user=user,
+                        tariff_value=tariff,
+                        order_id=order_id,
+                        chat_id=callback.message.chat.id if callback.message else None,
+                    )
+                    if not job:
+                        await _send_notice(
+                            callback,
+                            "Не удалось создать задание на генерацию.",
+                        )
+                        await _safe_callback_answer(callback)
+                        return
+                await _show_screen_for_callback(callback, screen_id=decision.next_screen)
+                await _maybe_run_report_delay(callback)
+                await _safe_callback_answer(callback)
+                return
+
+            if decision.next_screen == "S3":
                 screen_manager.update_state(
                     callback.from_user.id,
                     order_id=None,
@@ -2173,7 +2198,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     order_provider=None,
                     payment_url=None,
                 )
-                await _show_screen_for_callback(callback, screen_id="S3")
+            await _show_screen_for_callback(callback, screen_id=decision.next_screen)
             await _safe_callback_answer(callback)
             return
 
@@ -2200,19 +2225,16 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 questionnaire=existing_questionnaire,
             )
         tariff = state_snapshot.data.get("selected_tariff")
-        if tariff in {Tariff.T2.value, Tariff.T3.value}:
+        decision = resolve_checkout_transition(
+            _checkout_context_from_state(state_snapshot.data),
+            "questionnaire_done",
+        )
+        if decision.allowed:
             if not state_snapshot.data.get("personal_data_consent_accepted"):
                 await _send_notice(callback, "Нужно согласие на обработку данных.")
                 await _show_screen_for_callback(
                     callback,
                     screen_id="S4_CONSENT",
-                )
-                await _safe_callback_answer(callback)
-                return
-            questionnaire = state_snapshot.data.get("questionnaire") or {}
-            if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
-                await _send_notice(
-                    callback, "Анкета ещё не заполнена. Нажмите «Заполнить анкету»."
                 )
                 await _safe_callback_answer(callback)
                 return
@@ -2224,7 +2246,14 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await _send_notice(callback, "Не удалось подготовить заказ для оплаты.")
                 await _safe_callback_answer(callback)
                 return
-            await _show_screen_for_callback(callback, screen_id="S3")
+            await _show_screen_for_callback(callback, screen_id=decision.next_screen)
+            await _safe_callback_answer(callback)
+            return
+
+        if tariff in {Tariff.T2.value, Tariff.T3.value}:
+            await _send_notice(
+                callback, "Анкета ещё не заполнена. Нажмите «Заполнить анкету»."
+            )
             await _safe_callback_answer(callback)
             return
 

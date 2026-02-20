@@ -16,6 +16,8 @@ app/
       admin.py         # веб-админка (HTTP UI + API)
       public.py        # публичные API-эндпоинты для сайта (в т.ч. цены тарифов из конфигурации бота)
   bot/                # Telegram-бот (aiogram)
+    flows/
+      checkout_state_machine.py # pure state-machine checkout-флоу (guards + next_screen + действия)
     handlers/         # обработчики сценариев и FSM ввода профиля
       screen_manager.py # менеджер экранов (очищает чат, ведёт safe-лог переходов экранов и funnel entry/exit)
       screen_images.py # команда /fill_screen_images для генерации картинок экранов
