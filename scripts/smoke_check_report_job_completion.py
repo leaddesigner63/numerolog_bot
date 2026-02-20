@@ -46,7 +46,7 @@ def _log(stage: str, **payload: object) -> None:
     print(f"[smoke_report_job] stage={stage} {details}".strip(), flush=True)
 
 
-def _prepare_paid_order_and_job() -> tuple[int, int, int]:
+def _prepare_paid_order_and_job() -> tuple[int, int, int, int]:
     now = datetime.now(timezone.utc)
     telegram_user_id = int(f"97{int(now.timestamp())}")
 
@@ -118,7 +118,22 @@ def _prepare_paid_order_and_job() -> tuple[int, int, int]:
             job_id=job.id,
             job_status=job.status.value,
         )
-        return user.id, order.id, job.id
+        return user.id, telegram_user_id, order.id, job.id
+
+
+def _cleanup_smoke_entities(*, user_id: int, telegram_user_id: int) -> None:
+    with get_session() as session:
+        user = session.get(User, user_id)
+        if user is not None:
+            session.delete(user)
+            session.flush()
+
+        state = session.get(ScreenStateRecord, telegram_user_id)
+        if state is not None:
+            session.delete(state)
+            session.flush()
+
+    _log("cleanup_done", user_id=user_id, telegram_user_id=telegram_user_id)
 
 
 def _wait_for_completion(*, job_id: int, timeout_seconds: int, poll_interval_seconds: int) -> int:
@@ -184,18 +199,34 @@ def main() -> int:
         poll_interval_seconds=poll_interval_seconds,
     )
 
+    user_id: int | None = None
+    telegram_user_id: int | None = None
     try:
-        _, order_id, job_id = _prepare_paid_order_and_job()
+        user_id, telegram_user_id, order_id, job_id = _prepare_paid_order_and_job()
     except Exception as exc:
         _log("prepare_error", error=f"{exc.__class__.__name__}: {exc}")
         return 1
 
     _log("job_created", order_id=order_id, job_id=job_id)
-    return _wait_for_completion(
+    result = _wait_for_completion(
         job_id=job_id,
         timeout_seconds=timeout_seconds,
         poll_interval_seconds=poll_interval_seconds,
     )
+
+    if user_id is not None and telegram_user_id is not None:
+        try:
+            _cleanup_smoke_entities(user_id=user_id, telegram_user_id=telegram_user_id)
+        except Exception as exc:
+            _log(
+                "cleanup_error",
+                user_id=user_id,
+                telegram_user_id=telegram_user_id,
+                error=f"{exc.__class__.__name__}: {exc}",
+            )
+            return 1
+
+    return result
 
 
 if __name__ == "__main__":
