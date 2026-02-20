@@ -690,7 +690,11 @@ async def _show_screen_for_callback(
             s4_opened_from_lk=current_screen_id == "S11",
         )
         scenario = state_snapshot.data.get(S4_SCENARIO_STATE_KEY)
-        if scenario not in {S4_SCENARIO_PROFILE, S4_SCENARIO_AFTER_PAYMENT}:
+        is_manual_s4_open = callback.data == "screen:S4"
+        if is_manual_s4_open or scenario not in {
+            S4_SCENARIO_PROFILE,
+            S4_SCENARIO_AFTER_PAYMENT,
+        }:
             screen_manager.update_state(
                 callback.from_user.id,
                 **{S4_SCENARIO_STATE_KEY: S4_SCENARIO_PROFILE},
