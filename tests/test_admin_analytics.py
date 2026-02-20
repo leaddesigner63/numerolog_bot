@@ -668,5 +668,66 @@ class AdminAnalyticsTests(unittest.TestCase):
         self.assertEqual(conversion["paid"]["conversion_from_start"], 0.666667)
 
 
+    def test_traffic_analytics_builds_paid_per_tariff_click_slice(self) -> None:
+        base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        from app.db.models import PaymentConfirmationSource, PaymentProvider, Tariff, User, UserFirstTouchAttribution, Order, OrderStatus
+
+        with self.Session() as session:
+            session.add_all([
+                User(id=401, telegram_user_id=4401),
+                User(id=402, telegram_user_id=4402),
+                User(id=403, telegram_user_id=4403),
+            ])
+            session.add_all([
+                UserFirstTouchAttribution(
+                    telegram_user_id=4401,
+                    source="vk",
+                    campaign="cmp_a",
+                    placement="tariff_t1",
+                    start_payload="lnd.src_vk.cmp_cmp_a.pl_tariff_t1",
+                    captured_at=base_time,
+                ),
+                UserFirstTouchAttribution(
+                    telegram_user_id=4402,
+                    source="vk",
+                    campaign="cmp_a",
+                    placement="tariff_t1",
+                    start_payload="lnd.src_vk.cmp_cmp_a.pl_tariff_t1",
+                    captured_at=base_time + timedelta(minutes=1),
+                ),
+                UserFirstTouchAttribution(
+                    telegram_user_id=4403,
+                    source="vk",
+                    campaign="cmp_b",
+                    placement="tariff_t2",
+                    start_payload="lnd.src_vk.cmp_cmp_b.pl_tariff_t2",
+                    captured_at=base_time + timedelta(minutes=2),
+                ),
+            ])
+            session.add(
+                Order(
+                    user_id=401,
+                    tariff=Tariff.T1,
+                    amount=560,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    payment_confirmed=True,
+                    payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                    payment_confirmed_at=base_time + timedelta(hours=1),
+                )
+            )
+            session.commit()
+
+            result = build_traffic_analytics(session, TrafficAnalyticsFilters(from_dt=base_time - timedelta(days=1), to_dt=base_time + timedelta(days=1)))
+
+        by_tariff = {item["tariff"]: item for item in result["paid_per_tariff_click"]}
+        self.assertEqual(by_tariff["T1"]["tariff_click_users"], 2)
+        self.assertEqual(by_tariff["T1"]["paid_users"], 1)
+        self.assertEqual(by_tariff["T1"]["paid_per_tariff_click"], 0.5)
+        self.assertEqual(by_tariff["T2"]["tariff_click_users"], 1)
+        self.assertEqual(by_tariff["T2"]["paid_users"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

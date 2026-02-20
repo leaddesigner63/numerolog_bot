@@ -27,6 +27,7 @@ from app.db.models import (
 _UNKNOWN_SCREEN = "UNKNOWN"
 _SCREEN_ID_PATTERN = re.compile(r"^S\d+(?:_T[0-3])?$")
 _FUNNEL_TARIFFS = ("T0", "T1", "T2", "T3")
+_TARIFF_CLICK_PLACEMENTS = {f"tariff_{tariff.lower()}": tariff for tariff in _FUNNEL_TARIFFS}
 _FUNNEL_TEMPLATE_T0_T1: list[tuple[str, set[str]]] = [
     ("S0", {"S0"}),
     ("S1", {"S1"}),
@@ -183,6 +184,7 @@ def build_traffic_analytics(session: Session, filters: TrafficAnalyticsFilters) 
             "users_by_source": [],
             "users_by_source_campaign": [],
             "conversions": [],
+            "paid_per_tariff_click": [],
         }
 
     base_user_ids = {item.telegram_user_id for item in first_touch}
@@ -190,11 +192,13 @@ def build_traffic_analytics(session: Session, filters: TrafficAnalyticsFilters) 
     users_by_source = _build_users_by_source(first_touch, paid_telegram_user_ids)
     users_by_source_campaign = _build_users_by_source_campaign(first_touch, paid_telegram_user_ids)
     conversions = _build_first_touch_conversions(session, filters, base_user_ids, paid_telegram_user_ids)
+    paid_per_tariff_click = _build_paid_per_tariff_click(first_touch, paid_telegram_user_ids)
     return {
         "users_started_total": len(base_user_ids),
         "users_by_source": users_by_source,
         "users_by_source_campaign": users_by_source_campaign,
         "conversions": conversions,
+        "paid_per_tariff_click": paid_per_tariff_click,
     }
 
 
@@ -287,6 +291,26 @@ def _build_users_by_source_campaign(items: list[UserFirstTouchAttribution], paid
             "conversion": round((len(user_ids & paid_telegram_user_ids) / len(user_ids)) if user_ids else 0.0, 6),
         }
         for (source, campaign), user_ids in sorted(grouped.items(), key=lambda pair: (-len(pair[1]), pair[0][0], pair[0][1]))
+    ]
+
+
+def _build_paid_per_tariff_click(items: list[UserFirstTouchAttribution], paid_telegram_user_ids: set[int]) -> list[dict]:
+    grouped: dict[str, set[int]] = {tariff: set() for tariff in _FUNNEL_TARIFFS}
+    for item in items:
+        placement = str(item.placement or "").strip().lower()
+        tariff = _TARIFF_CLICK_PLACEMENTS.get(placement)
+        if not tariff:
+            continue
+        grouped[tariff].add(item.telegram_user_id)
+
+    return [
+        {
+            "tariff": tariff,
+            "tariff_click_users": len(user_ids),
+            "paid_users": len(user_ids & paid_telegram_user_ids),
+            "paid_per_tariff_click": round((len(user_ids & paid_telegram_user_ids) / len(user_ids)) if user_ids else 0.0, 6),
+        }
+        for tariff, user_ids in grouped.items()
     ]
 
 
