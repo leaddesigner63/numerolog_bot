@@ -335,7 +335,15 @@ def _check_report_job_generation(database_url: str) -> None:
 
     from app.core.llm_router import LLMResponse
     from app.core.report_service import report_service
-    from app.db.models import Report, ReportJob, ReportJobStatus, ScreenStateRecord, Tariff, User
+    from app.db.models import (
+        Report,
+        ReportJob,
+        ReportJobStatus,
+        ScreenStateRecord,
+        Tariff,
+        User,
+        UserProfile,
+    )
 
     engine = create_engine(database_url)
     Session = sessionmaker(bind=engine)
@@ -348,6 +356,15 @@ def _check_report_job_generation(database_url: str) -> None:
             ScreenStateRecord(
                 telegram_user_id=user.telegram_user_id,
                 data={"selected_tariff": Tariff.T0.value},
+            )
+        )
+        session.add(
+            UserProfile(
+                user_id=user.id,
+                name="Fast Checks",
+                birth_date="2000-01-01",
+                birth_place_city="Moscow",
+                birth_place_country="Russia",
             )
         )
         job = ReportJob(
