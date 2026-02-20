@@ -1607,6 +1607,33 @@ async def _prepare_checkout_order(
         return order
 
 
+async def open_checkout_s3_with_order(
+    callback: CallbackQuery,
+    *,
+    fallback_screen_id: str | None = None,
+    missing_order_notice: str | None = None,
+    use_marketing_consent: bool = False,
+    run_payment_waiter: bool = False,
+) -> bool:
+    state_snapshot = screen_manager.update_state(callback.from_user.id)
+    order_id = _safe_int(state_snapshot.data.get("order_id"))
+    if not order_id:
+        if missing_order_notice:
+            await _send_notice(callback, missing_order_notice)
+        if fallback_screen_id:
+            await _show_screen_for_callback(callback, screen_id=fallback_screen_id)
+        return False
+
+    if use_marketing_consent:
+        await _show_marketing_consent_or_target_screen(callback, screen_id="S3")
+    else:
+        await _show_screen_for_callback(callback, screen_id="S3")
+
+    if run_payment_waiter:
+        await _maybe_run_payment_waiter(callback)
+    return True
+
+
 @router.callback_query()
 async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
     if not callback.data:
@@ -1860,12 +1887,29 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         callback.from_user.id,
                         tariff_value=selected_tariff,
                     )
-        await _show_marketing_consent_or_target_screen(
-            callback,
-            screen_id=screen_id,
-        )
-        if screen_id == "S3" and _safe_int(screen_manager.update_state(callback.from_user.id).data.get("order_id")):
-            await _maybe_run_payment_waiter(callback)
+        if screen_id == "S3":
+            opened = await open_checkout_s3_with_order(
+                callback,
+                fallback_screen_id=(
+                    "S5"
+                    if screen_manager.update_state(callback.from_user.id).data.get("selected_tariff")
+                    in {Tariff.T2.value, Tariff.T3.value}
+                    else "S4"
+                ),
+                missing_order_notice=(
+                    "Перейдите к финальной оплате через шаг сохранения данных."
+                ),
+                use_marketing_consent=True,
+                run_payment_waiter=True,
+            )
+            if not opened:
+                await _safe_callback_answer(callback)
+                return
+        else:
+            await _show_marketing_consent_or_target_screen(
+                callback,
+                screen_id=screen_id,
+            )
         if screen_id == "S2":
             screen_manager.update_state(callback.from_user.id, offer_seen=True)
         await _safe_callback_answer(callback)
@@ -1909,7 +1953,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             offer_seen=True,
             payment_processing_notice=False,
         )
-        await _show_screen_for_callback(callback, screen_id="S3")
+        await open_checkout_s3_with_order(
+            callback,
+            fallback_screen_id="S4",
+            missing_order_notice="Не удалось подготовить заказ для оплаты.",
+        )
         await _safe_callback_answer(callback)
         return
 
@@ -2211,15 +2259,22 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 return
 
             if decision.next_screen == "S3":
-                screen_manager.update_state(
-                    callback.from_user.id,
-                    order_id=None,
-                    order_status=None,
-                    order_amount=None,
-                    order_currency=None,
-                    order_provider=None,
-                    payment_url=None,
+                order = await _prepare_checkout_order(
+                    callback,
+                    tariff_value=tariff,
                 )
+                if not order:
+                    await _send_notice(callback, "Не удалось подготовить заказ для оплаты.")
+                    await _safe_callback_answer(callback)
+                    return
+                await open_checkout_s3_with_order(
+                    callback,
+                    fallback_screen_id="S4",
+                    missing_order_notice="Не удалось подготовить заказ для оплаты.",
+                )
+                await _safe_callback_answer(callback)
+                return
+
             await _show_screen_for_callback(callback, screen_id=decision.next_screen)
             await _safe_callback_answer(callback)
             return
@@ -2268,6 +2323,15 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 await _send_notice(callback, "Не удалось подготовить заказ для оплаты.")
                 await _safe_callback_answer(callback)
                 return
+            if decision.next_screen == "S3":
+                await open_checkout_s3_with_order(
+                    callback,
+                    fallback_screen_id="S5",
+                    missing_order_notice="Не удалось подготовить заказ для оплаты.",
+                )
+                await _safe_callback_answer(callback)
+                return
+
             await _show_screen_for_callback(callback, screen_id=decision.next_screen)
             await _safe_callback_answer(callback)
             return
