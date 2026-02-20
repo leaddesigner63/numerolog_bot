@@ -1616,6 +1616,12 @@ async def open_checkout_s3_with_order(
     run_payment_waiter: bool = False,
 ) -> bool:
     state_snapshot = screen_manager.update_state(callback.from_user.id)
+    if state_snapshot.data.get("existing_tariff_report_found") and not state_snapshot.data.get(
+        "existing_report_warning_seen"
+    ):
+        await _show_screen_for_callback(callback, screen_id="S15")
+        return True
+
     order_id = _safe_int(state_snapshot.data.get("order_id"))
     if not order_id:
         if missing_order_notice:
@@ -2116,6 +2122,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 callback,
                 screen_id="S4_CONSENT",
             )
+            await _safe_callback_answer(callback)
+            return
+
+        if state_snapshot.data.get("existing_tariff_report_found") and not state_snapshot.data.get(
+            "existing_report_warning_seen"
+        ):
+            await _show_screen_for_callback(callback, screen_id="S15")
             await _safe_callback_answer(callback)
             return
 
