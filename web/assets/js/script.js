@@ -103,7 +103,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   };
 
-  document.querySelectorAll('[data-telegram-cta]').forEach((cta) => {
+  document.querySelectorAll('[data-telegram-cta], a.btn[href*="t.me/"]').forEach((cta) => {
+    if (!cta.hasAttribute('data-telegram-cta')) {
+      cta.setAttribute('data-telegram-cta', '');
+    }
+
     cta.addEventListener('click', (event) => {
       event.preventDefault();
 
