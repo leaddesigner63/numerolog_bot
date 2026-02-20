@@ -1506,6 +1506,28 @@ async def _prepare_checkout_order(
                 ):
                     order = None
                     state_order_not_usable = True
+                if order and order.status in {
+                    OrderStatus.FAILED,
+                    OrderStatus.CANCELED,
+                }:
+                    order = None
+                    state_order_not_usable = True
+                if order and order.status == OrderStatus.PAID:
+                    paid_order_consumed = bool(order.fulfilled_report_id) or (
+                        order.fulfillment_status == OrderFulfillmentStatus.COMPLETED
+                    )
+                    if not paid_order_consumed:
+                        paid_order_consumed = (
+                            session.execute(
+                                select(Report.id)
+                                .where(Report.order_id == order.id)
+                                .limit(1)
+                            ).scalar_one_or_none()
+                            is not None
+                        )
+                    if paid_order_consumed:
+                        order = None
+                        state_order_not_usable = True
                 if not order:
                     state_order_not_usable = True
 

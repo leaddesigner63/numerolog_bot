@@ -905,6 +905,65 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state_snapshot.data.get("order_amount"), created_order_amount)
         self.assertEqual(state_snapshot.data.get("order_currency"), created_order_currency)
 
+    async def test_prepare_checkout_order_replaces_consumed_paid_order_from_state(self) -> None:
+        with self.SessionLocal() as session:
+            consumed_order = Order(
+                user_id=1,
+                tariff=Tariff.T1,
+                amount=560,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PAID,
+                fulfillment_status=OrderFulfillmentStatus.COMPLETED,
+            )
+            session.add(consumed_order)
+            session.flush()
+            session.add(
+                Report(
+                    user_id=1,
+                    order_id=consumed_order.id,
+                    tariff=Tariff.T1,
+                    report_text="report",
+                )
+            )
+            session.commit()
+            consumed_order_id = consumed_order.id
+
+        screens.screen_manager.update_state(
+            1001,
+            order_id=str(consumed_order_id),
+            order_status=OrderStatus.PAID.value,
+            payment_url="https://pay.example/consumed",
+            order_amount="560",
+            order_currency="RUB",
+            selected_tariff=Tariff.T1.value,
+        )
+
+        callback = _DummyCallback("profile:save")
+
+        with (
+            patch.object(screens, "get_payment_provider") as get_payment_provider,
+            patch.object(screens, "_send_notice", new=AsyncMock()),
+        ):
+            get_payment_provider.return_value = SimpleNamespace(create_payment_link=lambda *_args, **_kwargs: None)
+            order = await screens._prepare_checkout_order(callback, tariff_value=Tariff.T1.value)
+
+        self.assertIsNotNone(order)
+        order_identity = inspect(order).identity
+        self.assertIsNotNone(order_identity)
+        new_order_id = int(order_identity[0])
+        self.assertNotEqual(new_order_id, consumed_order_id)
+
+        with self.SessionLocal() as session:
+            created_order = session.get(Order, new_order_id)
+            self.assertIsNotNone(created_order)
+            self.assertEqual(created_order.status, OrderStatus.CREATED)
+
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertEqual(state_snapshot.data.get("order_id"), str(new_order_id))
+        self.assertEqual(state_snapshot.data.get("order_status"), OrderStatus.CREATED.value)
+        self.assertIsNone(state_snapshot.data.get("payment_url"))
+
 
 if __name__ == "__main__":
     unittest.main()
