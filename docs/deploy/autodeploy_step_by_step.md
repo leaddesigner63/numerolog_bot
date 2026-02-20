@@ -147,6 +147,104 @@
    ```
    В `Location` должны остаться `utm_source` и `utm_campaign`.
 
+
+## Проверка worker после деплоя
+
+После каждого релиза проверьте, что фоновая обработка отчётов действительно работает:
+
+1. Убедитесь, что запущен polling-процесс бота:
+   ```bash
+   systemctl status numerolog-bot.service --no-pager
+   ```
+2. Проверьте, что heartbeat воркера обновляется:
+   ```bash
+   cd /opt/numerolog_bot
+   python - <<'PY'
+from app.db.session import SessionLocal
+from app.db.models import ServiceHeartbeat
+
+session = SessionLocal()
+try:
+    hb = (
+        session.query(ServiceHeartbeat)
+        .filter(ServiceHeartbeat.service_name == "report_jobs_worker")
+        .order_by(ServiceHeartbeat.updated_at.desc())
+        .first()
+    )
+    print(hb.updated_at if hb else "heartbeat not found")
+finally:
+    session.close()
+PY
+   ```
+3. Проверьте размер очереди report jobs:
+   ```bash
+   cd /opt/numerolog_bot
+   python - <<'PY'
+from app.db.session import SessionLocal
+from app.db.models import ReportJob
+from sqlalchemy import func
+
+session = SessionLocal()
+try:
+    rows = (
+        session.query(ReportJob.status, func.count(ReportJob.id))
+        .group_by(ReportJob.status)
+        .all()
+    )
+    for status, count in rows:
+        print(f"{status}: {count}")
+finally:
+    session.close()
+PY
+   ```
+4. Проверьте live-эндпоинт здоровья воркера:
+   ```bash
+   curl -sS "https://<домен>/api/worker/health"
+   ```
+   Ожидается статус `ok` и отсутствие длительного накопления `pending`.
+
+## Типовые инциденты и восстановление
+
+### 1) Worker offline
+Симптомы: API работает, webhook оплаты проходит, но новые отчёты не доходят до `completed`.
+
+Шаги восстановления:
+1. Проверить статус сервиса:
+   ```bash
+   systemctl status numerolog-bot.service --no-pager
+   ```
+2. Проверить последние логи:
+   ```bash
+   journalctl -u numerolog-bot.service -n 200 --no-pager
+   ```
+3. Перезапустить сервис и убедиться, что heartbeat снова обновляется:
+   ```bash
+   sudo systemctl restart numerolog-bot.service
+   ```
+
+### 2) Очередь зависла
+Симптомы: количество `pending`/`in_progress` растёт и не снижается.
+
+Шаги восстановления:
+1. Снять срез очереди и найти «застрявшие» задачи по времени создания.
+2. Проверить доступность внешних зависимостей (LLM API, файловое хранилище, БД).
+3. После фикса причины перезапустить bot worker:
+   ```bash
+   sudo systemctl restart numerolog-bot.service
+   ```
+4. Повторно проверить очередь и heartbeat командами из раздела «Проверка worker после деплоя».
+
+### 3) Webhook прошёл, а отчёт не стартует
+Симптомы: заказ помечен как `paid`, но в `report_jobs` не появляется новая задача или она не уходит в `in_progress`.
+
+Шаги восстановления:
+1. Проверить, что событие webhook зафиксировано и статус заказа действительно `paid`.
+2. Проверить наличие задачи в `report_jobs` и её статус.
+3. Проверить, что запущены оба обязательных процесса прод-архитектуры:
+   - `uvicorn app.main:app`
+   - `python -m app.bot.polling`
+4. Если задача не создалась — переиграть сценарий через штатный retry/повтор из бота и проверить логи API + bot worker.
+
 ## Короткий post-deploy чек-лист
 
 - [ ] Миграция `0029_add_user_first_touch_attribution` применена.
