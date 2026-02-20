@@ -26,7 +26,7 @@ class ScreenS4KeyboardTests(unittest.TestCase):
 
         self.assertIn("Мои данные.", content.messages[0])
 
-    def test_profile_flow_with_profile_shows_only_three_buttons(self) -> None:
+    def test_profile_flow_with_profile_hides_delete_and_cabinet_buttons(self) -> None:
         content = screen_s4(
             {
                 "selected_tariff": "T1",
@@ -50,10 +50,10 @@ class ScreenS4KeyboardTests(unittest.TestCase):
             labels,
             [
                 "📝 Редактировать",
-                "🗑️ Удалить мои данные",
                 "✅ Продолжить",
             ],
         )
+        self.assertNotIn("🗑️ Удалить мои данные", labels)
         self.assertNotIn("👤 Кабинет", labels)
         self.assertNotIn("➡️ Тарифы", labels)
 
@@ -115,7 +115,7 @@ class ScreenS4KeyboardTests(unittest.TestCase):
 
         self.assertNotIn("🟧 ОПЛАТА ПРОШЛА УСПЕШНО. 🟧", content.messages[0])
 
-    def test_paid_tariff_with_profile_shows_continue_even_without_profile_flow(self) -> None:
+    def test_paid_tariff_with_profile_hides_delete_and_cabinet_in_order_flow(self) -> None:
         content = screen_s4(
             {
                 "selected_tariff": "T2",
@@ -138,7 +138,8 @@ class ScreenS4KeyboardTests(unittest.TestCase):
         labels = [button.text for row in content.keyboard.inline_keyboard for button in row]
 
         self.assertIn("✅ Продолжить", labels)
-        self.assertIn("👤 Кабинет", labels)
+        self.assertNotIn("🗑️ Удалить мои данные", labels)
+        self.assertNotIn("👤 Кабинет", labels)
         self.assertIn("➡️ Тарифы", labels)
 
     def test_t0_with_profile_shows_continue_button(self) -> None:
