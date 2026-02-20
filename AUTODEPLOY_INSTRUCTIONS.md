@@ -378,3 +378,15 @@ server {
    - `questionnaire_done` (для T2/T3) -> `S3` и создание заказа;
    - подтверждение оплаты (webhook/status) -> переход в post-payment шаг (`S4/S5`).
 3. Если smoke-check не прошёл — выполните rollback по разделу `Rollback plan` и повторите деплой после исправления.
+
+
+## 10. Troubleshooting: `client_loop: send disconnect: Broken pipe` (SSH exit code 255)
+
+1. Повторно откройте job `deploy_production` и убедитесь, что в логах есть строка: `Найден маркер успешного деплоя: <DEPLOY_PATH>/.last_deploy_success`.
+2. На сервере проверьте маркер вручную:
+```bash
+ls -l <DEPLOY_PATH>/.last_deploy_success
+cat <DEPLOY_PATH>/.last_deploy_success
+```
+3. Если маркер есть и сервисы активны (`systemctl status numerolog-api.service numerolog-bot.service`), деплой считается успешно завершённым, даже если SSH-сессия оборвалась в конце.
+4. Если маркера нет, перезапустите workflow и проверьте стабильность сети/фаервола между GitHub Actions и VPS.
