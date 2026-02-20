@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from sqlalchemy import create_engine, select, func
+from sqlalchemy import create_engine, inspect, select, func
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
@@ -761,6 +761,62 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
 
         show_screen.assert_awaited_with(callback, screen_id="S5")
         send_notice.assert_not_awaited()
+
+
+    async def test_prepare_checkout_order_replaces_foreign_order_from_state(self) -> None:
+        with self.SessionLocal() as session:
+            foreign_user = User(id=2, telegram_user_id=2002, telegram_username="foreign")
+            session.add(foreign_user)
+            session.flush()
+            foreign_order = Order(
+                user_id=foreign_user.id,
+                tariff=Tariff.T1,
+                amount=560,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.CREATED,
+            )
+            session.add(foreign_order)
+            session.commit()
+            foreign_order_id = foreign_order.id
+
+        screens.screen_manager.update_state(
+            1001,
+            order_id=str(foreign_order_id),
+            order_status=OrderStatus.PAID.value,
+            payment_url="https://pay.example/foreign",
+            order_amount="999",
+            order_currency="USD",
+        )
+
+        callback = _DummyCallback("profile:save")
+
+        with (
+            patch.object(screens, "get_payment_provider") as get_payment_provider,
+            patch.object(screens, "_send_notice", new=AsyncMock()),
+        ):
+            get_payment_provider.return_value = SimpleNamespace(create_payment_link=lambda *_args, **_kwargs: None)
+            order = await screens._prepare_checkout_order(callback, tariff_value=Tariff.T1.value)
+
+        self.assertIsNotNone(order)
+        order_identity = inspect(order).identity
+        self.assertIsNotNone(order_identity)
+        new_order_id = int(order_identity[0])
+        self.assertNotEqual(new_order_id, foreign_order_id)
+
+        with self.SessionLocal() as session:
+            created_order = session.get(Order, new_order_id)
+            self.assertIsNotNone(created_order)
+            self.assertEqual(created_order.user_id, 1)
+            created_order_amount = str(int(created_order.amount))
+            created_order_currency = created_order.currency
+
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertEqual(state_snapshot.data.get("order_id"), str(new_order_id))
+        self.assertEqual(state_snapshot.data.get("order_status"), OrderStatus.CREATED.value)
+        self.assertIsNone(state_snapshot.data.get("payment_url"))
+        self.assertEqual(state_snapshot.data.get("order_amount"), created_order_amount)
+        self.assertEqual(state_snapshot.data.get("order_currency"), created_order_currency)
 
 
 if __name__ == "__main__":

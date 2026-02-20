@@ -1450,10 +1450,27 @@ async def _prepare_checkout_order(
         order: Order | None = None
         if not force_new_order:
             order_id = _safe_int(state_snapshot.data.get("order_id"))
+            state_order_not_usable = False
             if order_id:
                 order = session.get(Order, order_id)
+                if order and order.user_id != user.id:
+                    logger.warning(
+                        "checkout_order_owner_mismatch",
+                        extra={
+                            "telegram_user_id": callback.from_user.id,
+                            "order_id": order_id,
+                            "order_user_id": order.user_id,
+                        },
+                    )
+                    order = None
+                    state_order_not_usable = True
                 if order and order.tariff != tariff:
                     order = None
+                    state_order_not_usable = True
+                if not order:
+                    state_order_not_usable = True
+
+                if state_order_not_usable:
                     screen_manager.update_state(
                         callback.from_user.id,
                         order_id=None,
@@ -1463,6 +1480,7 @@ async def _prepare_checkout_order(
                         order_provider=None,
                         payment_url=None,
                     )
+                    force_new_order = True
 
         if not order and not force_new_order:
             order = _get_reusable_paid_order(session, callback.from_user.id, tariff_value)
