@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import socket
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -12,13 +14,16 @@ from app.bot.handlers import screens as screens_handler
 from app.bot.handlers.screen_manager import screen_manager
 from app.core.config import settings
 from app.core.report_service import report_service
-from app.db.models import ReportJob, ReportJobStatus, User
+from app.db.models import ReportJob, ReportJobStatus, ServiceHeartbeat, User
 from app.db.session import get_session
 
 
 class ReportJobWorker:
     def __init__(self) -> None:
         self._logger = logging.getLogger(__name__)
+        self._service_name = "report_jobs_worker"
+        self._host = socket.gethostname()
+        self._pid = os.getpid()
 
     async def run(self, bot: Bot) -> None:
         poll_interval = max(settings.report_job_poll_interval_seconds, 1)
@@ -34,6 +39,7 @@ class ReportJobWorker:
             await asyncio.sleep(poll_interval)
 
     async def _process_pending_jobs(self, bot: Bot) -> None:
+        self._update_heartbeat()
         job_ids = []
         with get_session() as session:
             job_ids = (
@@ -54,6 +60,26 @@ class ReportJobWorker:
             if not claimed:
                 continue
             await self._handle_job(bot, job_id)
+
+    def _update_heartbeat(self) -> None:
+        now = datetime.now(timezone.utc)
+        with get_session() as session:
+            heartbeat = session.get(ServiceHeartbeat, self._service_name)
+            if heartbeat:
+                heartbeat.updated_at = now
+                heartbeat.host = self._host
+                heartbeat.pid = self._pid
+                session.add(heartbeat)
+                return
+
+            session.add(
+                ServiceHeartbeat(
+                    service_name=self._service_name,
+                    updated_at=now,
+                    host=self._host,
+                    pid=self._pid,
+                )
+            )
 
     def _claim_job(self, job_id: int) -> bool:
         lock_timeout = timedelta(seconds=settings.report_job_lock_timeout_seconds)

@@ -374,6 +374,20 @@ class ReportJob(Base):
     user: Mapped[User] = relationship(back_populates="report_jobs")
 
 
+class ServiceHeartbeat(Base):
+    __tablename__ = "service_heartbeats"
+
+    service_name: Mapped[str] = mapped_column(String(64), primary_key=True)
+    host: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    pid: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+
 class FreeLimit(Base):
     __tablename__ = "free_limits"
 
