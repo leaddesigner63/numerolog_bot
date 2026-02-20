@@ -6,7 +6,7 @@ import json
 import logging
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse
 from aiogram import Bot
@@ -39,6 +39,9 @@ from app.db.models import (
     OrderFulfillmentStatus,
     OrderStatus,
     Report,
+    ReportJob,
+    ReportJobStatus,
+    ServiceHeartbeat,
     SystemPrompt,
     User,
     UserProfile,
@@ -55,6 +58,50 @@ _TRANSITION_ANALYTICS_CACHE_TTL_SECONDS = 5
 _TRANSITION_ANALYTICS_CACHE_MAX_SIZE = 64
 _transition_analytics_cache_lock = threading.Lock()
 _transition_analytics_cache: dict[tuple, tuple[float, dict]] = {}
+_WORKER_SERVICE_NAME = "report_jobs_worker"
+
+
+def _collect_worker_metrics(session: Session) -> dict[str, object]:
+    ttl_seconds = max((settings.report_job_poll_interval_seconds or 0) * 3, 30)
+    stale_after = datetime.now(timezone.utc) - timedelta(seconds=ttl_seconds)
+    metrics: dict[str, object] = {
+        "online": False,
+        "last_seen_at": None,
+        "heartbeat_age_seconds": None,
+        "jobs": {
+            ReportJobStatus.PENDING.value: 0,
+            ReportJobStatus.IN_PROGRESS.value: 0,
+        },
+    }
+
+    heartbeat = session.get(ServiceHeartbeat, _WORKER_SERVICE_NAME)
+    if heartbeat and heartbeat.updated_at:
+        heartbeat_updated_at = heartbeat.updated_at
+        if heartbeat_updated_at.tzinfo is None:
+            heartbeat_updated_at = heartbeat_updated_at.replace(tzinfo=timezone.utc)
+        metrics["last_seen_at"] = heartbeat_updated_at.isoformat()
+        heartbeat_age_seconds = max(int((datetime.now(timezone.utc) - heartbeat_updated_at).total_seconds()), 0)
+        metrics["heartbeat_age_seconds"] = heartbeat_age_seconds
+        metrics["online"] = heartbeat_updated_at >= stale_after
+
+    rows = session.execute(
+        select(ReportJob.status, func.count(ReportJob.id))
+        .where(
+            ReportJob.status.in_(
+                [
+                    ReportJobStatus.PENDING,
+                    ReportJobStatus.IN_PROGRESS,
+                ]
+            )
+        )
+        .group_by(ReportJob.status)
+    ).all()
+    jobs = metrics["jobs"]
+    if isinstance(jobs, dict):
+        for status, count in rows:
+            jobs[status.value] = count
+
+    return metrics
 
 
 def _admin_credentials_ready() -> bool:
@@ -781,6 +828,30 @@ def admin_ui(request: Request) -> HTMLResponse:
       color: #94a3b8;
       line-height: 1.35;
     }
+    .overview-warning-banner {
+      margin-top: 12px;
+      border: 1px solid rgba(250, 204, 21, 0.6);
+      background: rgba(250, 204, 21, 0.14);
+      color: #fde68a;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .worker-widget {
+      margin-top: 12px;
+      border: 1px solid #2a2f3a;
+      border-radius: 10px;
+      padding: 12px;
+      background: #0f1115;
+      display: grid;
+      gap: 8px;
+    }
+    .worker-widget-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 8px;
+    }
   </style>
 </head>
 <body>
@@ -1208,6 +1279,10 @@ def admin_ui(request: Request) -> HTMLResponse:
     async function loadOverview() {
       try {
         const data = await fetchJson("/overview");
+        const workerMetrics = data.worker || {};
+        const workerJobs = workerMetrics.jobs || {};
+        const workerOnline = Boolean(workerMetrics.online);
+        const totalPaidOrders = Number(data.confirmed_paid_orders || 0) + Number(data.manual_paid_orders || 0);
         const cards = [
           {
             title: "Пользователи",
@@ -1245,8 +1320,30 @@ def admin_ui(request: Request) -> HTMLResponse:
             note: "Все обращения в поддержку"
           }
         ];
+        const workerStatusClass = workerOnline ? "ok" : "bad";
+        const workerStatusText = workerOnline ? "online" : "offline";
+        const workerLastSeen = workerMetrics.last_seen_at || "нет heartbeat";
+        const heartbeatAge = workerMetrics.heartbeat_age_seconds;
+        const heartbeatAgeText = heartbeatAge === null || heartbeatAge === undefined
+          ? "нет данных"
+          : `${heartbeatAge} сек`;
+        const offlineWarning = !workerOnline && totalPaidOrders > 0
+          ? `<div class="overview-warning-banner">⚠️ Оплаты есть, генерация может быть недоступна</div>`
+          : "";
+
         document.getElementById("overview").innerHTML = `
           <div class="muted">Финансовые KPI ниже учитывают только provider-confirmed оплаты (подтверждённые платёжным провайдером).</div>
+          ${offlineWarning}
+          <div class="worker-widget">
+            <div><strong>Состояние worker генерации отчётов</strong></div>
+            <div class="worker-widget-grid">
+              <div><span class="status ${workerStatusClass}">Worker: ${workerStatusText}</span></div>
+              <div><strong>Heartbeat age:</strong> ${heartbeatAgeText}</div>
+              <div><strong>Последний heartbeat:</strong> ${workerLastSeen}</div>
+              <div><strong>Jobs pending:</strong> ${workerJobs.pending ?? 0}</div>
+              <div><strong>Jobs in_progress:</strong> ${workerJobs.in_progress ?? 0}</div>
+            </div>
+          </div>
           <div class="overview-grid">
             ${cards.map((card) => `
               <div class="overview-card">
@@ -3419,6 +3516,21 @@ def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
     if confirmed_paid_orders:
         arpu_confirmed = round(float(confirmed_revenue_total) / confirmed_paid_orders, 2)
 
+    worker_metrics: dict[str, object]
+    try:
+        worker_metrics = _collect_worker_metrics(session)
+    except Exception as exc:
+        worker_metrics = {
+            "online": False,
+            "last_seen_at": None,
+            "heartbeat_age_seconds": None,
+            "jobs": {
+                ReportJobStatus.PENDING.value: 0,
+                ReportJobStatus.IN_PROGRESS.value: 0,
+            },
+            "error": f"worker_metrics_unavailable: {exc.__class__.__name__}",
+        }
+
     return {
         "users": users_count,
         "orders": orders_count,
@@ -3429,6 +3541,7 @@ def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
         "arpu_confirmed": arpu_confirmed,
         "reports": reports_count,
         "feedback_messages": feedback_count,
+        "worker": worker_metrics,
     }
 
 
