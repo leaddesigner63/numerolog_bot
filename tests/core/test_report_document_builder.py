@@ -1,5 +1,3 @@
-import pytest
-
 from app.core.report_document import ReportDocumentBuilder
 
 
@@ -66,9 +64,8 @@ FULL_T3_PLAN_WITH_BLANK_LINES_FIXTURE = """Персональный аналит
 """
 
 
-@pytest.mark.parametrize(
-    ("source", "expected_paragraph"),
-    [
+def test_build_keeps_wrapped_short_lines_as_body_paragraph() -> None:
+    cases = [
         (
             WRAPPED_PARAGRAPH_FIXTURE,
             "Иногда ритм сбивается, и это нормально когда нагрузка растёт.",
@@ -91,21 +88,20 @@ FULL_T3_PLAN_WITH_BLANK_LINES_FIXTURE = """Персональный аналит
 """,
             "Остановись на минуту, выдохни, и продолжай в своём темпе.",
         ),
-    ],
-)
-def test_build_keeps_wrapped_short_lines_as_body_paragraph(source: str, expected_paragraph: str) -> None:
-    builder = ReportDocumentBuilder()
-
-    doc = builder.build(source, tariff="T1", meta={"id": "fixture-1"})
-
-    assert doc is not None
-    assert doc.sections
-    first_section = doc.sections[0]
-    assert first_section.title == ""
-    assert first_section.bullets == []
-    assert first_section.paragraphs == [
-        expected_paragraph,
     ]
+
+    for source, expected_paragraph in cases:
+        builder = ReportDocumentBuilder()
+        doc = builder.build(source, tariff="T1", meta={"id": "fixture-1"})
+
+        assert doc is not None
+        assert doc.sections
+        first_section = doc.sections[0]
+        assert first_section.title == ""
+        assert first_section.bullets == []
+        assert first_section.paragraphs == [
+            expected_paragraph,
+        ]
 
 
 def test_build_splits_explicit_section_title_and_paragraph() -> None:
