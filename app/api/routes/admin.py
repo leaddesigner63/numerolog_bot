@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import HTMLResponse, RedirectResponse
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from sqlalchemy import and_, case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select, true
 from sqlalchemy.exc import OperationalError, TimeoutError as SQLAlchemyTimeoutError
 from sqlalchemy.orm import Session
 
@@ -64,7 +64,7 @@ _DEPLOY_SMOKE_PROFILE_NAME = "Smoke Check"
 
 
 def _deploy_smoke_users_subquery():
-    smoke_users_by_order = select(Order.user_id).where(Order.provider_payment_id.ilike(f"{_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX}%"))
+    smoke_users_by_order = select(Order.user_id).where(Order.provider_payment_id.startswith(_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX))
     smoke_users_by_profile = select(UserProfile.user_id).where(
         func.coalesce(UserProfile.name, "") == _DEPLOY_SMOKE_PROFILE_NAME
     )
@@ -74,8 +74,19 @@ def _deploy_smoke_users_subquery():
 def _deploy_smoke_excluded_orders_filter():
     return or_(
         Order.provider_payment_id.is_(None),
-        ~Order.provider_payment_id.ilike(f"{_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX}%"),
+        ~Order.provider_payment_id.startswith(_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX),
     )
+
+
+def _load_deploy_smoke_user_ids(session: Session) -> set[int]:
+    rows = session.scalars(_deploy_smoke_users_subquery())
+    return {int(user_id) for user_id in rows if user_id is not None}
+
+
+def _exclude_deploy_smoke_users(column, smoke_user_ids: set[int]):
+    if not smoke_user_ids:
+        return true()
+    return ~column.in_(smoke_user_ids)
 
 
 def _collect_worker_metrics(session: Session) -> dict[str, object]:
@@ -3523,16 +3534,20 @@ async def admin_logout() -> RedirectResponse:
 
 @router.get("/api/overview")
 def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
-    deploy_smoke_users = _deploy_smoke_users_subquery()
-    users_count = session.scalar(select(func.count()).select_from(User).where(~User.id.in_(deploy_smoke_users))) or 0
+    deploy_smoke_user_ids = _load_deploy_smoke_user_ids(session)
+    users_count = session.scalar(
+        select(func.count()).select_from(User).where(_exclude_deploy_smoke_users(User.id, deploy_smoke_user_ids))
+    ) or 0
     orders_count = session.scalar(
         select(func.count()).select_from(Order).where(_deploy_smoke_excluded_orders_filter())
     ) or 0
     reports_count = session.scalar(
-        select(func.count()).select_from(Report).where(~Report.user_id.in_(deploy_smoke_users))
+        select(func.count()).select_from(Report).where(_exclude_deploy_smoke_users(Report.user_id, deploy_smoke_user_ids))
     ) or 0
     feedback_count = session.scalar(
-        select(func.count()).select_from(FeedbackMessage).where(~FeedbackMessage.user_id.in_(deploy_smoke_users))
+        select(func.count())
+        .select_from(FeedbackMessage)
+        .where(_exclude_deploy_smoke_users(FeedbackMessage.user_id, deploy_smoke_user_ids))
     ) or 0
     provider_sources = [
         PaymentConfirmationSource.PROVIDER_WEBHOOK,
@@ -4889,6 +4904,7 @@ def admin_users(
     marketing_consent_status: str | None = Query(default=None),
     session: Session = Depends(_get_db_session),
 ) -> dict:
+    deploy_smoke_user_ids = _load_deploy_smoke_user_ids(session)
     order_agg = (
         select(
             Order.user_id.label("user_id"),
@@ -4934,9 +4950,7 @@ def admin_users(
         )
         .outerjoin(UserProfile, UserProfile.user_id == User.id)
         .outerjoin(order_agg, order_agg.c.user_id == User.id)
-        .where(
-            ~User.id.in_(_deploy_smoke_users_subquery())
-        )
+        .where(_exclude_deploy_smoke_users(User.id, deploy_smoke_user_ids))
         .where(
             or_(
                 UserProfile.user_id.is_(None),

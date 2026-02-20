@@ -390,3 +390,15 @@ cat <DEPLOY_PATH>/.last_deploy_success
 ```
 3. Если маркер есть и сервисы активны (`systemctl status numerolog-api.service numerolog-bot.service`), деплой считается успешно завершённым, даже если SSH-сессия оборвалась в конце.
 4. Если маркера нет, перезапустите workflow и проверьте стабильность сети/фаервола между GitHub Actions и VPS.
+
+## Анти-таймаут проверка админки после деплоя (добавлено 2026-02-20)
+1. Убедиться, что деплой завершился без ошибок миграций и перезапуска API.
+2. Проверить health:
+   - `curl -fsS http://127.0.0.1:8000/health`
+   - `curl -fsS http://127.0.0.1:8000/admin/api/health -H 'Authorization: Basic <base64(login:password)>'`
+3. Проверить KPI overview на время ответа:
+   - `time curl -fsS http://127.0.0.1:8000/admin/api/overview -H 'Authorization: Basic <base64(login:password)>' >/dev/null`
+4. Если ответ дольше 5-10 секунд:
+   - проверить индексы и размер таблицы `orders`;
+   - убедиться, что smoke-check записи не растут бесконтрольно;
+   - перезапустить сервис `systemctl restart numerolog-bot`.
