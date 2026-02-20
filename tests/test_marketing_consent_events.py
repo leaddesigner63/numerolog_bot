@@ -62,10 +62,18 @@ class MarketingConsentEventHandlersTests(unittest.IsolatedAsyncioTestCase):
     async def test_accept_marketing_consent_writes_event(self) -> None:
         callback = SimpleNamespace(
             from_user=SimpleNamespace(id=1001, username="tester"),
+            message=SimpleNamespace(chat=SimpleNamespace(id=5001), answer=AsyncMock()),
             answer=AsyncMock(),
         )
 
-        await profile.accept_marketing_consent(callback)
+        with patch.object(profile.screen_manager, "send_ephemeral_message", new=AsyncMock()) as send_ephemeral:
+            await profile.accept_marketing_consent(callback)
+
+        send_ephemeral.assert_awaited_once_with(
+            callback.message,
+            "Согласие на рассылку подтверждено.",
+            user_id=1001,
+        )
 
         with self.SessionLocal() as session:
             db_profile = session.execute(select(UserProfile).where(UserProfile.user_id == 1)).scalar_one()
@@ -81,10 +89,18 @@ class MarketingConsentEventHandlersTests(unittest.IsolatedAsyncioTestCase):
     async def test_revoke_marketing_consent_writes_event(self) -> None:
         callback = SimpleNamespace(
             from_user=SimpleNamespace(id=1001, username="tester"),
+            message=SimpleNamespace(chat=SimpleNamespace(id=5001), answer=AsyncMock()),
             answer=AsyncMock(),
         )
 
-        await profile.accept_marketing_consent(callback)
+        with patch.object(profile.screen_manager, "send_ephemeral_message", new=AsyncMock()) as send_ephemeral:
+            await profile.accept_marketing_consent(callback)
+
+        send_ephemeral.assert_awaited_once_with(
+            callback.message,
+            "Согласие на рассылку подтверждено.",
+            user_id=1001,
+        )
         await profile.revoke_marketing_consent(callback)
 
         with self.SessionLocal() as session:
