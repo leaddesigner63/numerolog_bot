@@ -34,6 +34,20 @@ class PaymentScreenS3Tests(unittest.TestCase):
         expected_price = settings.tariff_prices_rub.get("T1")
         self.assertIn(f"Стоимость: <tg-spoiler>{expected_price} RUB</tg-spoiler>", content.messages[0])
 
+    def test_s3_shows_start_payment_callback_when_order_not_created_yet(self) -> None:
+        content = screen_s3({"selected_tariff": "T1"})
+
+        buttons = []
+        if content.keyboard and content.keyboard.inline_keyboard:
+            for row in content.keyboard.inline_keyboard:
+                for button in row:
+                    buttons.append((button.text, button.callback_data, button.url))
+
+        callback_values = {callback for _, callback, _ in buttons if callback}
+        url_values = {url for _, _, url in buttons if url}
+        self.assertIn("payment:start", callback_values)
+        self.assertNotIn("https://example.com/pay", url_values)
+
     def test_s3_has_no_manual_payment_confirmation_button(self) -> None:
         content = screen_s3(
             {

@@ -113,11 +113,14 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             session.add(profile)
             session.commit()
 
-    async def test_profile_save_routes_to_checkout_for_t1(self) -> None:
+    async def test_profile_save_routes_to_s3_for_t1_without_creating_order(self) -> None:
         self._create_profile(consent_accepted=True)
         screens.screen_manager.update_state(
             1001,
             selected_tariff=Tariff.T1.value,
+            order_id="777",
+            order_status=OrderStatus.CREATED.value,
+            payment_url="https://old.example/pay",
         )
         callback = _DummyCallback("profile:save")
 
@@ -126,10 +129,15 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             patch.object(screens, "_send_notice", new=AsyncMock()) as send_notice,
             patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
             patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+            patch.object(screens, "_prepare_checkout_order", new=AsyncMock()) as prepare_checkout,
         ):
             await screens.handle_callbacks(callback, state=SimpleNamespace())
 
         show_screen.assert_awaited_with(callback, screen_id="S3")
+        prepare_checkout.assert_not_awaited()
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertIsNone(state_snapshot.data.get("order_id"))
+        self.assertIsNone(state_snapshot.data.get("payment_url"))
 
     async def test_profile_save_requires_personal_data_consent(self) -> None:
         order_id = self._create_order(OrderStatus.PAID, tariff=Tariff.T2)
@@ -245,16 +253,18 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
                     patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
                     patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
                     patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
-                    patch.object(screens, "_prepare_checkout_order", new=AsyncMock(return_value=SimpleNamespace(id=order_id))) as prepare_checkout,
+                    patch.object(screens, "_prepare_checkout_order", new=AsyncMock()) as prepare_checkout,
                     patch.object(screens, "_create_report_job", new=AsyncMock()) as create_job,
                 ):
                     await screens.handle_callbacks(callback, state=SimpleNamespace())
 
                 show_screen.assert_awaited_with(callback, screen_id="S3")
-                prepare_checkout.assert_awaited_once()
+                prepare_checkout.assert_not_awaited()
                 create_job.assert_not_awaited()
+                state_snapshot = screens.screen_manager.update_state(1001)
+                self.assertIsNone(state_snapshot.data.get("order_id"))
 
-    async def test_profile_save_t1_without_order_creates_checkout_and_routes_to_s3(self) -> None:
+    async def test_profile_save_t1_without_order_routes_to_s3_without_checkout(self) -> None:
         self._create_profile(consent_accepted=True)
         screens.screen_manager.update_state(
             1001,
@@ -267,14 +277,36 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
             patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
             patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
-            patch.object(screens, "_prepare_checkout_order", new=AsyncMock(return_value=SimpleNamespace(id=999))) as prepare_checkout,
+            patch.object(screens, "_prepare_checkout_order", new=AsyncMock()) as prepare_checkout,
             patch.object(screens, "_create_report_job", new=AsyncMock()) as create_job,
         ):
             await screens.handle_callbacks(callback, state=SimpleNamespace())
 
         show_screen.assert_awaited_with(callback, screen_id="S3")
-        prepare_checkout.assert_awaited_once()
+        prepare_checkout.assert_not_awaited()
         create_job.assert_not_awaited()
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertIsNone(state_snapshot.data.get("order_id"))
+
+    async def test_payment_start_creates_checkout_order_for_t1(self) -> None:
+        self._create_profile(consent_accepted=True)
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T1.value,
+            order_id=None,
+        )
+        callback = _DummyCallback("payment:start")
+
+        with (
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_prepare_checkout_order", new=AsyncMock(return_value=SimpleNamespace(id=999))) as prepare_checkout,
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        prepare_checkout.assert_awaited_once_with(callback, tariff_value=Tariff.T1.value)
+        show_screen.assert_awaited_with(callback, screen_id="S3")
 
     async def test_report_retry_requires_confirmed_payment(self) -> None:
         order_id = self._create_order(OrderStatus.CREATED)
@@ -556,13 +588,13 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         state_snapshot = screens.screen_manager.update_state(1001)
         self.assertIsNotNone(state_snapshot.data.get("order_id"))
 
-    async def test_profile_save_shows_notice_when_payment_link_config_missing(self) -> None:
+    async def test_payment_start_shows_notice_when_payment_link_config_missing(self) -> None:
         self._create_profile(consent_accepted=True)
         screens.screen_manager.update_state(
             1001,
             selected_tariff=Tariff.T1.value,
         )
-        callback = _DummyCallback("profile:save")
+        callback = _DummyCallback("payment:start")
 
         with (
             patch.object(screens.settings, "payment_enabled", True),

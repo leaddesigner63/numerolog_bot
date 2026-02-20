@@ -473,6 +473,19 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
                     ),
                 ]
             )
+        else:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=_with_button_icons("Начать оплату", "💳"),
+                        callback_data="payment:start",
+                    ),
+                    InlineKeyboardButton(
+                        text=_with_button_icons("Что входит в отчёт", "ℹ️"),
+                        callback_data="s3:report_details",
+                    ),
+                ]
+            )
         rows.append(
             [
                 InlineKeyboardButton(
