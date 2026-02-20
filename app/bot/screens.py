@@ -437,6 +437,8 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             "Финальный шаг перед генерацией отчёта.\n\n"
             f"Тариф: {selected_tariff}.\n"
             f"Стоимость: {price_label}.\n\n"
+            "Что получите: PDF + ключевые выводы + рекомендации по шагам.\n"
+            "Когда получите: обычно 5–15 минут после подтверждения оплаты.\n\n"
             "Короткий дисклеймер: сервис носит информационно-аналитический характер и не является персональной рекомендацией к действию.\n"
             f"Оплачивая, вы подтверждаете согласие с {offer_link}.\n"
             "После оплаты бот автоматически проверит статус и переведёт вас к следующему шагу."
@@ -464,7 +466,11 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
                     InlineKeyboardButton(
                         text=_with_button_icons("Далее", "💳"),
                         url=payment_url,
-                    )
+                    ),
+                    InlineKeyboardButton(
+                        text=_with_button_icons("Что входит в отчёт", "ℹ️"),
+                        callback_data="s3:report_details",
+                    ),
                 ]
             )
         rows.append(
@@ -478,6 +484,39 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
         rows.extend(_global_menu())
     keyboard = _build_keyboard(rows) if rows else None
     return ScreenContent(messages=[text], keyboard=keyboard)
+
+
+def screen_s3_report_details(state: dict[str, Any]) -> ScreenContent:
+    selected_tariff = _format_tariff_label(state.get("selected_tariff", "T1"))
+    order_id = state.get("order_id")
+    order_status = state.get("order_status")
+    order_line = ""
+    if order_id:
+        order_line = f"\nЗаказ №{order_id}"
+        if order_status:
+            order_line += f" • статус: {order_status}"
+
+    text = _with_screen_prefix(
+        "S3_INFO",
+        (
+            f"Что входит в отчёт ({selected_tariff}):\n"
+            "• Персональный PDF-отчёт.\n"
+            "• Ключевые выводы по вашим данным.\n"
+            "• Пошаговые рекомендации для ближайшего периода.\n"
+            "• Сжатый action-план, чтобы быстрее перейти к действиям."
+            f"{order_line}"
+        ),
+    )
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("К оплате", "💳"),
+                callback_data="s3:report_details:back",
+            ),
+        ]
+    ]
+    rows.extend(_global_menu())
+    return ScreenContent(messages=[text], keyboard=_build_keyboard(rows))
 
 
 def _format_birth_place(place: dict[str, Any] | None) -> str:
@@ -1446,6 +1485,7 @@ SCREEN_REGISTRY = {
     "S2": screen_s2,
     "S2_MORE": screen_s2_details,
     "S3": screen_s3,
+    "S3_INFO": screen_s3_report_details,
     "S4": screen_s4,
     "S4_EDIT": screen_s4_edit,
     "S4_CONSENT": screen_s4_consent,

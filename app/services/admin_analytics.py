@@ -34,6 +34,7 @@ _FUNNEL_STEPS: list[tuple[str, set[str]]] = [
     ("S6_OR_S7", {"S6", "S7"}),
 ]
 _FINANCE_ENTRY_SCREENS = {"S3", "S4"}
+_S3_REPORT_DETAILS_TRIGGER = "s3:report_details"
 _PROVIDER_CONFIRMATION_SOURCES = {
     PaymentConfirmationSource.PROVIDER_WEBHOOK,
     PaymentConfirmationSource.PROVIDER_POLL,
@@ -123,6 +124,8 @@ def build_finance_analytics(session: Session, filters: FinanceAnalyticsFilters) 
     paid_users = {item.user_id for item in confirmed_orders}
     conversion = (len(paid_users) / len(reached_users)) if reached_users else 0.0
 
+    report_details_clicks, report_details_users = _count_s3_report_details_clicks(session, filters)
+
     return {
         "summary": {
             "entry_screens": sorted(_FINANCE_ENTRY_SCREENS),
@@ -131,6 +134,8 @@ def build_finance_analytics(session: Session, filters: FinanceAnalyticsFilters) 
             "provider_confirmed_users": len(paid_users),
             "conversion_to_provider_confirmed": round(conversion, 6),
             "provider_confirmed_revenue": round(sum(item.amount for item in confirmed_orders), 2),
+            "s3_report_details_clicks": report_details_clicks,
+            "s3_report_details_users": report_details_users,
             "data_source": "provider_confirmed_only",
         },
         "by_tariff": _build_revenue_by_tariff(confirmed_orders),
@@ -358,6 +363,42 @@ def _count_prompt_subscribes(session: Session, filters: MarketingAnalyticsFilter
         query = query.where(MarketingConsentEvent.event_at <= filters.to_dt)
     return len(session.execute(query).scalars().all())
 
+
+
+
+def _count_s3_report_details_clicks(
+    session: Session,
+    filters: FinanceAnalyticsFilters,
+) -> tuple[int, int]:
+    query: Select[tuple[ScreenTransitionEvent]] = select(ScreenTransitionEvent).where(
+        ScreenTransitionEvent.trigger_value == _S3_REPORT_DETAILS_TRIGGER,
+    )
+    if filters.from_dt:
+        query = query.where(ScreenTransitionEvent.created_at >= filters.from_dt)
+    if filters.to_dt:
+        query = query.where(ScreenTransitionEvent.created_at <= filters.to_dt)
+
+    rows = session.execute(query).scalars().all()
+    if not rows:
+        return 0, 0
+
+    admin_ids = _parse_admin_ids(settings.admin_ids)
+    filtered_rows = [row for row in rows if int(row.telegram_user_id or 0) not in admin_ids]
+    if not filtered_rows:
+        return 0, 0
+
+    if filters.tariff:
+        expected_tariff = str(filters.tariff).upper()
+        filtered_rows = [
+            row
+            for row in filtered_rows
+            if str((row.metadata_json or {}).get("tariff") or "").upper() == expected_tariff
+        ]
+
+    if not filtered_rows:
+        return 0, 0
+
+    return len(filtered_rows), len({int(row.telegram_user_id or 0) for row in filtered_rows if row.telegram_user_id})
 
 def _load_finance_entries(session: Session, filters: FinanceAnalyticsFilters) -> list[EventPoint]:
     event_filters = AnalyticsFilters(from_dt=filters.from_dt, to_dt=filters.to_dt, tariff=filters.tariff)

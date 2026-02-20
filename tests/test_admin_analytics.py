@@ -141,6 +141,22 @@ class AdminAnalyticsTests(unittest.TestCase):
                     trigger_type=ScreenTransitionTriggerType.CALLBACK,
                     metadata_json={"tariff": "T1"},
                 ),
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=1001,
+                    from_screen_id="S3",
+                    to_screen_id="S3_INFO",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                    trigger_value="s3:report_details",
+                    metadata_json={"tariff": "T1"},
+                ),
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=1002,
+                    from_screen_id="S3",
+                    to_screen_id="S3_INFO",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                    trigger_value="s3:report_details",
+                    metadata_json={"tariff": "T1"},
+                ),
                 Order(
                     user_id=1,
                     tariff=Tariff.T1,
@@ -174,6 +190,8 @@ class AdminAnalyticsTests(unittest.TestCase):
         self.assertEqual(result["summary"]["entry_users"], 2)
         self.assertEqual(result["summary"]["provider_confirmed_orders"], 1)
         self.assertEqual(result["summary"]["provider_confirmed_revenue"], 1200.0)
+        self.assertEqual(result["summary"]["s3_report_details_clicks"], 2)
+        self.assertEqual(result["summary"]["s3_report_details_users"], 2)
         self.assertEqual(result["by_tariff"][0]["tariff"], "T1")
 
 
@@ -385,6 +403,22 @@ class AdminAnalyticsTests(unittest.TestCase):
                     from_screen_id="S1",
                     to_screen_id="S4",
                     trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                    metadata_json={"tariff": "T1"},
+                ),
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=1001,
+                    from_screen_id="S3",
+                    to_screen_id="S3_INFO",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                    trigger_value="s3:report_details",
+                    metadata_json={"tariff": "T1"},
+                ),
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=1002,
+                    from_screen_id="S3",
+                    to_screen_id="S3_INFO",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                    trigger_value="s3:report_details",
                     metadata_json={"tariff": "T1"},
                 ),
             ])
