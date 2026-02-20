@@ -4856,7 +4856,7 @@ def admin_reports(
 
 @router.get("/api/users")
 def admin_users(
-    limit: int = 50,
+    limit: int | None = None,
     sort_by: str = Query(default="created_at"),
     sort_dir: str = Query(default="desc"),
     marketing_consent_status: str | None = Query(default=None),
@@ -4938,7 +4938,11 @@ def admin_users(
             )
         )
 
-    rows = session.execute(query.order_by(sort_expression, User.id.desc()).limit(limit)).all()
+    query = query.order_by(sort_expression, User.id.desc())
+    if limit and limit > 0:
+        query = query.limit(limit)
+
+    rows = session.execute(query).all()
     users = []
     for user, profile, confirmed_orders_count, confirmed_revenue_total, manual_paid_orders_count in rows:
         users.append(

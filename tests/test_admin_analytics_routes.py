@@ -391,6 +391,22 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(never_asked.status_code, 200)
         self.assertEqual({item["id"] for item in never_asked.json()["users"]}, {503})
 
+    def test_users_endpoint_returns_all_users_by_default_without_limit(self) -> None:
+        with self.SessionLocal() as session:
+            for idx in range(1, 56):
+                session.add(User(id=800 + idx, telegram_user_id=98000 + idx))
+            session.commit()
+
+        response = self.client.get("/admin/api/users")
+        self.assertEqual(response.status_code, 200)
+        ids = {item["id"] for item in response.json()["users"]}
+        expected_ids = {800 + idx for idx in range(1, 56)}
+        self.assertTrue(expected_ids.issubset(ids))
+
+        limited_response = self.client.get("/admin/api/users", params={"limit": 10})
+        self.assertEqual(limited_response.status_code, 200)
+        self.assertEqual(len(limited_response.json()["users"]), 10)
+
     def test_users_endpoint_excludes_deploy_smoke_users(self) -> None:
         with self.SessionLocal() as session:
             smoke_user = User(id=701, telegram_user_id=9701)
