@@ -14,6 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from app.bot.handlers.start import _create_paid_order_report_job
+from app.core.config import settings
 from app.db.models import (
     Order,
     OrderFulfillmentStatus,
@@ -66,10 +67,11 @@ def _prepare_paid_order_and_job() -> tuple[int, int, int]:
         )
         session.add(profile)
 
+        paid_amount = settings.tariff_prices_rub.get(Tariff.T1.value, 0)
         order = Order(
             user_id=user.id,
             tariff=Tariff.T1,
-            amount=1,
+            amount=paid_amount,
             currency="RUB",
             provider=PaymentProvider.NONE,
             provider_payment_id=f"smoke-{now.strftime('%Y%m%d%H%M%S')}",
