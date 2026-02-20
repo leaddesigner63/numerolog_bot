@@ -45,6 +45,7 @@ app/
   payments/           # платёжные провайдеры и проверки webhook
 scripts/              # вспомогательные скрипты
   deploy.sh           # серверный деплой-скрипт (используется GitHub Actions)
+  check_runtime_services.sh # post-deploy проверка, что API и bot systemd units активны
   test.sh             # полный набор локальных проверок
   fast_checks.py      # быстрые сценарные проверки без внешних зависимостей
   check_landing_content.py # статическая проверка словаря/дисклеймеров лендинга
@@ -547,6 +548,8 @@ python scripts/check_landing_content.py
 ### Что теперь делает деплой автоматически
 
 - `scripts/deploy.sh` перед перезапуском сервисов запускает `scripts/generate_sitemap.py`, поэтому `web/sitemap.xml` всегда публикуется с актуальными `lastmod`, `changefreq` и `priority`.
+- После перезапуска `systemd`-юнитов деплой запускает `scripts/check_runtime_services.sh` и проверяет, что `numerolog-api.service` и `numerolog-bot.service` активны (если задан `SERVICE_NAMES`, проверяются именно эти юниты).
+- Если хотя бы один runtime-сервис неактивен, деплой завершается с ненулевым кодом и помечается как failed.
 - После релиза скрипт пытается пинговать панели вебмастеров в fail-safe режиме: 
   - сначала через `WEBMASTER_PING_SCRIPT` (если указан и исполняемый),
   - затем через `scripts/post_release_ping.sh` (если скрипт есть),
@@ -612,6 +615,31 @@ RestartSec=5
 [Install]
 WantedBy=multi-user.target
 ```
+
+### Post-deploy проверка runtime-сервисов
+
+Скрипт `scripts/check_runtime_services.sh` можно использовать отдельно (локально, на сервере или в CI/CD):
+
+```bash
+bash scripts/check_runtime_services.sh
+```
+
+Проверка кастомных названий unit-файлов:
+
+```bash
+API_SERVICE_NAME="numerolog-api.service" \
+BOT_SERVICE_NAME="numerolog-bot.service" \
+bash scripts/check_runtime_services.sh
+```
+
+Проверка конкретного списка сервисов (в том же формате, что и в `deploy.sh`):
+
+```bash
+SERVICE_NAMES_OVERRIDE="numerolog-api.service numerolog-bot.service" \
+bash scripts/check_runtime_services.sh
+```
+
+Если любой из сервисов неактивен, скрипт вернёт `exit 1` — это удобно для fail-fast шага в pipeline.
 
 ### Управление сервисами
 

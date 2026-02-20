@@ -63,6 +63,7 @@
 4.1. После деплоя `scripts/deploy.sh` автоматически:
    - пересобирает `web/sitemap.xml` на сервере (`scripts/generate_sitemap.py`),
    - перезапускает сервисы,
+   - проверяет runtime-сервисы через `scripts/check_runtime_services.sh` (API + bot unit),
    - выполняет `smoke_check_landing.sh`,
    - запускает пост-релизный пинг вебмастеров, если настроен `WEBMASTER_PING_SCRIPT`, `scripts/post_release_ping.sh` или `WEBMASTER_PING_URLS`.
 
@@ -91,6 +92,12 @@
    ```bash
    systemctl status <service_name>
    journalctl -u <service_name> -n 200 --no-pager
+   ```
+
+4.1. Проверьте post-deploy runtime-check вручную (должен вернуть 0):
+   ```bash
+   cd /opt/numerolog_bot
+   bash scripts/check_runtime_services.sh
    ```
 
 5. Сразу после деплоя проверьте Alembic-ревизию first-touch атрибуции:
