@@ -162,6 +162,13 @@ else
   echo "scripts/smoke_check_landing.sh не найден, smoke-check пропущен."
 fi
 
+if [ -x scripts/smoke_check_report_job_completion.sh ]; then
+  echo "Запуск smoke-check paid order -> ReportJob -> COMPLETED"
+  bash scripts/smoke_check_report_job_completion.sh
+else
+  echo "scripts/smoke_check_report_job_completion.sh не найден или не исполняемый."
+  exit 1
+fi
 
 if [ -n "${WEBMASTER_PING_SCRIPT:-}" ] && [ -x "${WEBMASTER_PING_SCRIPT}" ]; then
   "$WEBMASTER_PING_SCRIPT" || echo "Пинг вебмастеров завершился с ошибкой (продолжаем деплой)."

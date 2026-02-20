@@ -50,6 +50,8 @@ scripts/              # вспомогательные скрипты
   fast_checks.py      # быстрые сценарные проверки без внешних зависимостей
   check_landing_content.py # статическая проверка словаря/дисклеймеров лендинга
   smoke_check_landing.sh # smoke-check доступности лендинга/CTA/ассетов после деплоя
+  smoke_check_report_job_completion.sh # post-deploy smoke-check paid-заказа: создание ReportJob и ожидание COMPLETED
+  smoke_check_report_job_completion.py # сценарий smoke-check paid order -> ReportJob -> COMPLETED с подробным логом
   smoke_check_checkout_flow.sh # smoke-check checkout-флоу; при отсутствии pytest пытается установить зависимости автоматически
   generate_sitemap.py # генерация web/sitemap.xml с lastmod/changefreq/priority
 docs/
