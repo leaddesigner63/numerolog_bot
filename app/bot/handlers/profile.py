@@ -524,10 +524,11 @@ async def accept_profile_consent(callback: CallbackQuery) -> None:
 
 @router.callback_query(F.data == "profile:marketing_consent:accept")
 async def accept_marketing_consent(callback: CallbackQuery) -> None:
-    if not callback.from_user:
+    if not callback.from_user or not callback.message:
         await callback.answer()
         return
 
+    consent_saved = False
     with get_session() as session:
         user = _get_or_create_user(
             session,
@@ -551,6 +552,23 @@ async def accept_marketing_consent(callback: CallbackQuery) -> None:
                 source=profile.marketing_consent_source,
                 metadata_json={"handler": "profile:marketing_consent:accept"},
             )
+            consent_saved = True
+
+    if not consent_saved:
+        await screen_manager.send_ephemeral_message(
+            callback.message,
+            "Сначала заполните «Мои данные».",
+            user_id=callback.from_user.id,
+        )
+        await _show_profile_screen(callback.message, callback.from_user.id)
+        await callback.answer()
+        return
+
+    await screen_manager.send_ephemeral_message(
+        callback.message,
+        "Согласие на рассылку подтверждено.",
+        user_id=callback.from_user.id,
+    )
 
     await callback.answer()
 
