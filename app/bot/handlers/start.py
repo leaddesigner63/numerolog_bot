@@ -5,7 +5,17 @@ from sqlalchemy import select
 
 from app.bot.handlers.screen_manager import screen_manager
 from app.bot.handlers.screens import ensure_payment_waiter
-from app.db.models import Order, OrderStatus, ReportJob, ReportJobStatus, User
+from app.db.models import (
+    Order,
+    OrderStatus,
+    QuestionnaireResponse,
+    QuestionnaireStatus,
+    ReportJob,
+    ReportJobStatus,
+    Tariff,
+    User,
+    UserProfile,
+)
 from app.db.session import get_session
 from app.services.traffic_attribution import save_user_first_touch_attribution
 
@@ -23,11 +33,30 @@ def _extract_start_payload(message: Message) -> str | None:
 def _extract_paywait_order_id(payload: str) -> int | None:
     if not payload.startswith("paywait_"):
         return None
-    raw_order_id = payload.split("paywait_", maxsplit=1)[-1]
+    raw_order_id = payload.split("paywait_", 1)[-1]
     try:
         return int(raw_order_id)
     except (TypeError, ValueError):
         return None
+
+
+def _create_paid_order_report_job(
+    session,
+    *,
+    order: Order,
+    chat_id: int,
+) -> ReportJob:
+    job = ReportJob(
+        user_id=order.user_id,
+        order_id=order.id,
+        tariff=order.tariff,
+        status=ReportJobStatus.PENDING,
+        attempts=0,
+        chat_id=chat_id,
+    )
+    session.add(job)
+    session.flush()
+    return job
 
 
 @router.message(CommandStart())
@@ -62,7 +91,19 @@ async def handle_start(message: Message) -> None:
                         state_snapshot = screen_manager.update_state(message.from_user.id)
                         should_resume_report_flow = order.status == OrderStatus.PAID
                         target_screen = "S3"
+                        latest_job = None
                         if should_resume_report_flow:
+                            profile = session.execute(
+                                select(UserProfile).where(UserProfile.user_id == order.user_id).limit(1)
+                            ).scalar_one_or_none()
+                            questionnaire = None
+                            if order.tariff in {Tariff.T2, Tariff.T3}:
+                                questionnaire = session.execute(
+                                    select(QuestionnaireResponse)
+                                    .where(QuestionnaireResponse.user_id == order.user_id)
+                                    .order_by(QuestionnaireResponse.id.desc())
+                                    .limit(1)
+                                ).scalar_one_or_none()
                             latest_job = session.execute(
                                 select(ReportJob)
                                 .where(
@@ -72,12 +113,37 @@ async def handle_start(message: Message) -> None:
                                 .order_by(ReportJob.id.desc())
                                 .limit(1)
                             ).scalar_one_or_none()
-                            target_screen = (
-                                "S7"
-                                if latest_job
-                                and latest_job.status == ReportJobStatus.COMPLETED
-                                else "S6"
-                            )
+                            if profile is None:
+                                target_screen = "S4"
+                            elif (
+                                order.tariff in {Tariff.T2, Tariff.T3}
+                                and (
+                                    questionnaire is None
+                                    or questionnaire.status != QuestionnaireStatus.COMPLETED
+                                )
+                            ):
+                                target_screen = "S5"
+                            elif latest_job is None:
+                                latest_job = _create_paid_order_report_job(
+                                    session,
+                                    order=order,
+                                    chat_id=message.chat.id,
+                                )
+                                target_screen = "S6"
+                            elif latest_job.status == ReportJobStatus.COMPLETED:
+                                target_screen = "S7"
+                            elif latest_job.status in {
+                                ReportJobStatus.PENDING,
+                                ReportJobStatus.IN_PROGRESS,
+                            }:
+                                target_screen = "S6"
+                            else:
+                                latest_job = _create_paid_order_report_job(
+                                    session,
+                                    order=order,
+                                    chat_id=message.chat.id,
+                                )
+                                target_screen = "S6"
                         state_update = {
                             "order_id": str(order.id),
                             "order_status": order.status.value,
@@ -87,6 +153,9 @@ async def handle_start(message: Message) -> None:
                             "s4_no_inline_keyboard": False,
                             "payment_processing_notice": order.status != OrderStatus.PAID,
                             "profile_flow": "report" if should_resume_report_flow else None,
+                            "report_job_id": str(latest_job.id) if latest_job else None,
+                            "report_job_status": latest_job.status.value if latest_job else None,
+                            "report_job_attempts": latest_job.attempts if latest_job else None,
                         }
                         if state_snapshot.data.get("payment_url") is not None:
                             state_update["payment_url"] = state_snapshot.data.get("payment_url")
