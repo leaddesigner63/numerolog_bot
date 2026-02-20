@@ -6,3 +6,11 @@ def test_smoke_check_uses_tariff_price_for_paid_order() -> None:
 
     assert "settings.tariff_prices_rub.get(Tariff.T1.value, 0)" in script
     assert "amount=paid_amount" in script
+
+
+def test_smoke_check_cleans_up_created_user_data() -> None:
+    script = Path("scripts/smoke_check_report_job_completion.py").read_text(encoding="utf-8")
+
+    assert "def _cleanup_smoke_entities" in script
+    assert "session.delete(user)" in script
+    assert "cleanup_done" in script
