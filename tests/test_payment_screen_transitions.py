@@ -335,6 +335,35 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
             after_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
         self.assertEqual(after_orders_count, before_orders_count)
 
+    async def test_s2_details_opens_detailed_step_for_paid_tariff(self) -> None:
+        screens.screen_manager.update_state(1001, selected_tariff=Tariff.T1.value)
+        callback = _DummyCallback("s2:details")
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S2_MORE")
+
+    async def test_s2_details_back_returns_to_s2_without_losing_tariff(self) -> None:
+        screens.screen_manager.update_state(1001, selected_tariff=Tariff.T3.value)
+        callback = _DummyCallback("s2:details:back")
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S2")
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertEqual(state_snapshot.data.get("selected_tariff"), Tariff.T3.value)
+        self.assertTrue(state_snapshot.data.get("offer_seen"))
+
     async def test_tariff_reuses_paid_unfulfilled_order_and_skips_payment_screen(self) -> None:
         with self.SessionLocal() as session:
             session.add(
