@@ -62,6 +62,7 @@ docs/
     autodeploy_step_by_step.md # пошаговая инструкция по настройке автодеплоя для пользователя
     autodeploy_retention_nudge_step_by_step.md # деплой retention-nudge и post-deploy проверки
     autodeploy_payment_confirmation_step_by_step.md # автодеплой с безопасным подтверждением оплаты (только webhook/polling в production)
+    autodeploy_admin_username_step_by_step.md # автодеплой изменений админки с отображением пользователей по username
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   landing/
     release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)

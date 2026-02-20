@@ -141,6 +141,27 @@ class SupportThreadingTests(unittest.TestCase):
             self.assertEqual(threads[0]["message_count"], 2)
             self.assertEqual(threads[0]["text"], "Второе сообщение")
             self.assertEqual(threads[0]["status"], FeedbackStatus.FAILED.value)
+            self.assertEqual(threads[0]["user_label"], 777003)
+
+    def test_load_feedback_threads_prefers_username_in_user_label(self) -> None:
+        sent_at = datetime.now(timezone.utc)
+        with self.Session() as session:
+            user = User(telegram_user_id=777004, telegram_username="support_name")
+            session.add(user)
+            session.flush()
+
+            root_feedback = FeedbackMessage(
+                user_id=user.id,
+                text="Первое сообщение",
+                status=FeedbackStatus.SENT,
+                sent_at=sent_at,
+            )
+            session.add(root_feedback)
+            session.commit()
+
+            threads = _load_feedback_threads(session, limit=50, archived=False)
+            self.assertEqual(len(threads), 1)
+            self.assertEqual(threads[0]["user_label"], "support_name")
 
 
 if __name__ == "__main__":

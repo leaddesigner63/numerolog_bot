@@ -138,6 +138,8 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertIn("payment_confirmation_source", order_payload)
         self.assertIn("manual_paid_set_by", order_payload)
         self.assertIn("manual_paid_set_at", order_payload)
+        self.assertEqual(order_payload["telegram_username"], "manager")
+        self.assertEqual(order_payload["user_label"], "manager")
 
 
     def test_orders_endpoint_supports_user_and_payment_confirmed_filters(self) -> None:
@@ -264,8 +266,8 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
 
     def test_users_payload_includes_confirmed_order_aggregates_and_sorting(self) -> None:
         with self.SessionLocal() as session:
-            user_a = User(id=130, telegram_user_id=700730)
-            user_b = User(id=131, telegram_user_id=700731)
+            user_a = User(id=130, telegram_user_id=700730, telegram_username="alpha")
+            user_b = User(id=131, telegram_user_id=700731, telegram_username="beta")
             session.add_all([user_a, user_b])
             session.flush()
             session.add_all(
@@ -335,6 +337,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(first["confirmed_revenue_total"], 3000.0)
         self.assertEqual(first["manual_paid_orders_count"], 1)
         self.assertEqual(second["id"], 131)
+        self.assertEqual(first["telegram_username"], "alpha")
 
 
     def test_users_payload_includes_marketing_consent_fields_and_filters(self) -> None:
@@ -788,7 +791,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
 
     def test_reports_payload_includes_order_payment_fields_and_financial_basis(self) -> None:
         with self.SessionLocal() as session:
-            user = User(id=120, telegram_user_id=700720)
+            user = User(id=120, telegram_user_id=700720, telegram_username="report_user")
             provider_order = Order(
                 id=220,
                 user_id=120,
@@ -836,6 +839,8 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
 
         provider_row = next(item for item in payload["reports"] if item["id"] == 320)
         self.assertEqual(provider_row["order_status"], OrderStatus.PAID.value)
+        self.assertEqual(provider_row["telegram_username"], "report_user")
+        self.assertEqual(provider_row["user_label"], "report_user")
         self.assertTrue(provider_row["payment_confirmed"])
         self.assertEqual(provider_row["payment_confirmation_source"], PaymentConfirmationSource.PROVIDER_WEBHOOK.value)
         self.assertIsNotNone(provider_row["payment_confirmed_at"])
@@ -948,6 +953,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertIn("reportsAlerts", html)
         self.assertIn("showProblemReportsFromAlert", html)
         self.assertIn("Фин. основание", html)
+        self.assertIn("Username", html)
 
     def test_admin_ui_contains_human_friendly_unknown_transition_labels(self) -> None:
         with patch.object(admin_routes, "_admin_credentials_ready", return_value=True), patch.object(
