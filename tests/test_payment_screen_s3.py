@@ -18,7 +18,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         message = content.messages[0]
         self.assertIn("Финальный шаг перед генерацией отчёта", message)
         self.assertIn("Тариф:", message)
-        self.assertIn("Стоимость: <tg-spoiler>560 RUB</tg-spoiler>", message)
+        self.assertIn("Стоимость: ||560 RUB||", message)
         self.assertIn("Что получите: PDF + ключевые выводы + рекомендации по шагам", message)
         self.assertIn("Когда получите: обычно 5–15 минут", message)
         self.assertIn("Короткий дисклеймер", message)
@@ -32,7 +32,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
     def test_s3_falls_back_to_settings_price_when_order_amount_missing(self) -> None:
         content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
         expected_price = settings.tariff_prices_rub.get("T1")
-        self.assertIn(f"Стоимость: <tg-spoiler>{expected_price} RUB</tg-spoiler>", content.messages[0])
+        self.assertIn(f"Стоимость: ||{expected_price} RUB||", content.messages[0])
 
     def test_s3_shows_start_payment_callback_when_order_not_created_yet(self) -> None:
         content = screen_s3({"selected_tariff": "T1"})
