@@ -2059,6 +2059,12 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             await _send_notice(callback, "Сначала выберите тариф.")
             await _safe_callback_answer(callback)
             return
+        if tariff in {Tariff.T2.value, Tariff.T3.value}:
+            questionnaire = state_snapshot.data.get("questionnaire") or {}
+            if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
+                await _send_notice(callback, "Анкета ещё не заполнена.")
+                await _safe_callback_answer(callback)
+                return
         if tariff in {Tariff.T1.value, Tariff.T2.value, Tariff.T3.value}:
             order_id = _safe_int(state_snapshot.data.get("order_id"))
             if not order_id:
@@ -2079,14 +2085,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                         callback,
                         screen_id="S3",
                     )
-                await _safe_callback_answer(callback)
-                return
-        if tariff in {Tariff.T2.value, Tariff.T3.value}:
-            questionnaire = state_snapshot.data.get("questionnaire") or {}
-            if questionnaire.get("status") != QuestionnaireStatus.COMPLETED.value:
-                await _send_notice(callback, "Анкета ещё не заполнена.")
-                await _safe_callback_answer(callback)
-                return
+                    await _safe_callback_answer(callback)
+                    return
         with get_session() as session:
             user = _get_or_create_user(session, callback.from_user.id, callback.from_user.username)
             job = _refresh_report_job_state(session, callback.from_user.id)
