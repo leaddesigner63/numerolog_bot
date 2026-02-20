@@ -59,6 +59,7 @@ docs/
     landing_autodeploy.md # подробный runbook по автодеплою лендинга (VPS + Nginx)
     autodeploy_step_by_step.md # пошаговая инструкция по настройке автодеплоя для пользователя
     autodeploy_retention_nudge_step_by_step.md # деплой retention-nudge и post-deploy проверки
+    autodeploy_payment_confirmation_step_by_step.md # автодеплой с безопасным подтверждением оплаты (только webhook/polling в production)
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   landing/
     release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)
@@ -167,8 +168,10 @@ ADMIN_PASSWORD=change_me
 ADMIN_AUTO_REFRESH_SECONDS=0
 # Отключение фильтрации результата (post-фильтр отчёта):
 REPORT_SAFETY_ENABLED=true
-# Отключение проверки оплаты (тестовый режим):
+# Безопасный production-режим: подтверждение оплаты только от провайдера (webhook/polling).
 PAYMENT_ENABLED=true
+# Строго локальный debug-флаг для ручной отладки без провайдера (только ENV=local/dev):
+PAYMENT_DEBUG_AUTO_CONFIRM_LOCAL=false
 # Искусственная задержка перед выдачей отчёта (секунды, с анимацией и таймером):
 REPORT_DELAY_SECONDS=10
 # Report job worker (фоновые задания генерации отчёта)
@@ -292,7 +295,8 @@ pytest -q tests/test_yandex_metrika_counter.py
    - `BOT_TOKEN`
    - `DATABASE_URL`
 3. Для платёжного checkout-at-end дополнительно:
-   - `PAYMENT_ENABLED` (`true/false`)
+   - `PAYMENT_ENABLED=true` (обязательно для production: переход после оплаты только по webhook/polling провайдера)
+   - `PAYMENT_DEBUG_AUTO_CONFIRM_LOCAL=false` (опционально, только локальная отладка при `ENV=local/dev`)
    - `PAYMENT_PROVIDER` (`prodamus`/`cloudpayments`)
    - `PRODAMUS_FORM_URL` и/или `CLOUDPAYMENTS_PUBLIC_ID`
 4. Для отказоустойчивости при неполной конфигурации:

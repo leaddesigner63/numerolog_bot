@@ -43,6 +43,7 @@
    - рабочая копия репозитория в `DEPLOY_PATH`;
    - systemd unit'ы API/бота;
    - `.env` с обязательными `BOT_TOKEN`, `DATABASE_URL`.
+   - для production обязательно `PAYMENT_ENABLED=true` и `PAYMENT_DEBUG_AUTO_CONFIRM_LOCAL=false` (подтверждение оплаты только через провайдера).
 
 ### Переменные окружения для нового checkout-at-end
 
@@ -133,7 +134,7 @@ pytest -q \
 17. Если нужно включить искусственную задержку перед выдачей отчёта, задайте `REPORT_DELAY_SECONDS` в секундах.
 18. Стоимость тарифов задаётся через `.env`: `TARIFF_T0_PRICE_RUB`, `TARIFF_T1_PRICE_RUB`, `TARIFF_T2_PRICE_RUB`, `TARIFF_T3_PRICE_RUB` (без перезаписи кода).
 19. Если нужно отключить post-фильтрацию отчёта (без проверки контентной безопасности), добавьте `REPORT_SAFETY_ENABLED=false`.
-20. Если нужно отключить проверку оплаты (например, для тестового запуска), добавьте `PAYMENT_ENABLED=false`.
+20. Для production фиксируйте `PAYMENT_ENABLED=true`; отключение оплаты допускается только для строго локального debug-сценария (вместе с `PAYMENT_DEBUG_AUTO_CONFIRM_LOCAL=true` и только при `ENV=local/dev`).
 21. Для доступа к веб-админке задайте `ADMIN_LOGIN` и `ADMIN_PASSWORD` и при необходимости ограничьте доступ к `/admin` по сети (фаервол).
 22. Для фонового воркера отчётов можно настроить интервалы опроса и таймаут блокировки:
    - `REPORT_JOB_POLL_INTERVAL_SECONDS` (по умолчанию 5)

@@ -134,6 +134,12 @@ PAYMENT_PROVIDER_POLL_LAST_CHECKED_AT_KEY = "payment_provider_poll_last_checked_
 PAYMENT_PROVIDER_POLL_ORDER_ID_KEY = "payment_provider_poll_order_id"
 
 
+def _is_local_payment_debug_autoconfirm_enabled() -> bool:
+    return settings.env.lower() in {"dev", "local"} and bool(
+        getattr(settings, "payment_debug_auto_confirm_local", False)
+    )
+
+
 def _safe_int(value: str | int | None) -> int | None:
     if value is None:
         return None
@@ -1963,19 +1969,20 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 )
                 await _safe_callback_answer(callback)
                 return
-            if not settings.payment_enabled and order.status != OrderStatus.PAID:
+            if _is_local_payment_debug_autoconfirm_enabled() and order.status != OrderStatus.PAID:
                 order.status = OrderStatus.PAID
                 order.paid_at = now_app_timezone()
                 session.add(order)
 
-            if settings.payment_enabled and order.status != OrderStatus.PAID:
+            if order.status != OrderStatus.PAID:
                 screen_manager.update_state(
                     callback.from_user.id, **_refresh_order_state(order)
                 )
                 await _send_notice(
                     callback,
-                    "Оплата ещё не подтверждена. Как только провайдер подтвердит платёж, бот автоматически переведёт вас к следующему шагу.",
+                    "Оплата ещё не подтверждена провайдером. Без подтверждения провайдера переход к следующему экрану невозможен. Как только подтверждение поступит через webhook/проверку статуса, бот автоматически переведёт вас к следующему шагу.",
                 )
+                await _maybe_run_payment_waiter(callback)
                 await _show_screen_for_callback(
                     callback,
                     screen_id="S3",
