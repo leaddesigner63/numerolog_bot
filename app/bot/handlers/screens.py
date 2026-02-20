@@ -2004,6 +2004,39 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         await _safe_callback_answer(callback)
         return
 
+    if callback.data == "payment:start":
+        _ensure_profile_state(callback.from_user.id)
+        state_snapshot = screen_manager.update_state(callback.from_user.id)
+        tariff = state_snapshot.data.get("selected_tariff")
+        if tariff != Tariff.T1.value:
+            await _send_notice(callback, "Сначала выберите подходящий тариф.")
+            await _safe_callback_answer(callback)
+            return
+        if not state_snapshot.data.get("profile"):
+            await _send_notice(callback, "Сначала заполните «Мои данные».")
+            await _safe_callback_answer(callback)
+            return
+        if not state_snapshot.data.get("personal_data_consent_accepted"):
+            await _send_notice(callback, "Нужно согласие на обработку данных.")
+            await _show_screen_for_callback(
+                callback,
+                screen_id="S4_CONSENT",
+            )
+            await _safe_callback_answer(callback)
+            return
+
+        order = await _prepare_checkout_order(
+            callback,
+            tariff_value=tariff,
+        )
+        if not order:
+            await _send_notice(callback, "Не удалось подготовить заказ для оплаты.")
+            await _safe_callback_answer(callback)
+            return
+        await _show_screen_for_callback(callback, screen_id="S3")
+        await _safe_callback_answer(callback)
+        return
+
     if callback.data == "profile:save":
         _ensure_profile_state(callback.from_user.id)
         state_snapshot = screen_manager.update_state(callback.from_user.id)
@@ -2119,14 +2152,15 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     _refresh_questionnaire_state(session, callback.from_user.id)
                 await _show_screen_for_callback(callback, screen_id="S5")
             else:
-                order = await _prepare_checkout_order(
-                    callback,
-                    tariff_value=tariff,
+                screen_manager.update_state(
+                    callback.from_user.id,
+                    order_id=None,
+                    order_status=None,
+                    order_amount=None,
+                    order_currency=None,
+                    order_provider=None,
+                    payment_url=None,
                 )
-                if not order:
-                    await _send_notice(callback, "Не удалось подготовить заказ для оплаты.")
-                    await _safe_callback_answer(callback)
-                    return
                 await _show_screen_for_callback(callback, screen_id="S3")
             await _safe_callback_answer(callback)
             return
