@@ -7,7 +7,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -123,15 +123,12 @@ def _prepare_paid_order_and_job() -> tuple[int, int, int, int]:
 
 def _cleanup_smoke_entities(*, user_id: int, telegram_user_id: int) -> None:
     with get_session() as session:
-        user = session.get(User, user_id)
-        if user is not None:
-            session.delete(user)
-            session.flush()
-
-        state = session.get(ScreenStateRecord, telegram_user_id)
-        if state is not None:
-            session.delete(state)
-            session.flush()
+        session.execute(delete(UserProfile).where(UserProfile.user_id == user_id))
+        session.execute(delete(User).where(User.id == user_id))
+        session.execute(
+            delete(ScreenStateRecord).where(ScreenStateRecord.telegram_user_id == telegram_user_id)
+        )
+        session.flush()
 
     _log("cleanup_done", user_id=user_id, telegram_user_id=telegram_user_id)
 
