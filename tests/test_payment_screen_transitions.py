@@ -228,6 +228,54 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(jobs_count, 1)
         self.assertEqual(job.order_id, order_id)
 
+    async def test_profile_save_t1_with_unpaid_order_routes_to_s3_without_job_creation(self) -> None:
+        self._create_profile(consent_accepted=True)
+        for status in (OrderStatus.CREATED, OrderStatus.PENDING):
+            with self.subTest(status=status.value):
+                order_id = self._create_order(status)
+                screens.screen_manager._store._states.clear()
+                screens.screen_manager.update_state(
+                    1001,
+                    selected_tariff=Tariff.T1.value,
+                    order_id=str(order_id),
+                )
+                callback = _DummyCallback("profile:save")
+
+                with (
+                    patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+                    patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+                    patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+                    patch.object(screens, "_prepare_checkout_order", new=AsyncMock(return_value=SimpleNamespace(id=order_id))) as prepare_checkout,
+                    patch.object(screens, "_create_report_job", new=AsyncMock()) as create_job,
+                ):
+                    await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+                show_screen.assert_awaited_with(callback, screen_id="S3")
+                prepare_checkout.assert_awaited_once()
+                create_job.assert_not_awaited()
+
+    async def test_profile_save_t1_without_order_creates_checkout_and_routes_to_s3(self) -> None:
+        self._create_profile(consent_accepted=True)
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T1.value,
+            order_id=None,
+        )
+        callback = _DummyCallback("profile:save")
+
+        with (
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_prepare_checkout_order", new=AsyncMock(return_value=SimpleNamespace(id=999))) as prepare_checkout,
+            patch.object(screens, "_create_report_job", new=AsyncMock()) as create_job,
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S3")
+        prepare_checkout.assert_awaited_once()
+        create_job.assert_not_awaited()
+
     async def test_report_retry_requires_confirmed_payment(self) -> None:
         order_id = self._create_order(OrderStatus.CREATED)
         screens.screen_manager.update_state(

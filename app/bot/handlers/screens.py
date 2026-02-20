@@ -2003,10 +2003,10 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                                 )
                                 await _safe_callback_answer(callback)
                                 return
-                    await _show_screen_for_callback(callback, screen_id="S6")
-                    await _maybe_run_report_delay(callback)
-                    await _safe_callback_answer(callback)
-                    return
+                            await _show_screen_for_callback(callback, screen_id="S6")
+                            await _maybe_run_report_delay(callback)
+                            await _safe_callback_answer(callback)
+                            return
 
             if tariff in {Tariff.T2.value, Tariff.T3.value}:
                 with get_session() as session:
