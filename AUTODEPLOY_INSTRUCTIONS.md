@@ -201,6 +201,7 @@ pytest -q \
 При каждом деплое workflow автоматически выполняет `alembic upgrade head`, если в проекте есть `alembic.ini` и установлен Alembic.
 Убедитесь, что в `ENV_FILE` задан `DATABASE_URL` (или в проекте есть `.env` с этим значением), иначе миграции не запустятся.
 Если вы обновляете бота с версии до `0004_expand_telegram_user_id`, миграция расширит `telegram_user_id` до `BIGINT` и устранит ошибку `integer out of range` для больших Telegram ID.
+Для релиза с ревизией `0034_add_order_is_smoke_check` убедитесь, что миграция выполнена: она добавляет флаг `orders.is_smoke_check` и backfill для исторических smoke-заказов.
 
 ## 6. Дополнительные команды деплоя (опционально)
 Workflow вызывает `scripts/deploy.sh` на сервере. Скрипт делает `git reset`, (опционально) обновляет зависимости, выполняет `systemctl daemon-reload` и перезапускает сервис(ы).
