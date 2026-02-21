@@ -181,6 +181,9 @@ PAYMENT_ENABLED=true
 PAYMENT_DEBUG_AUTO_CONFIRM_LOCAL=false
 # Искусственная задержка перед выдачей отчёта (секунды, с анимацией и таймером):
 REPORT_DELAY_SECONDS=10
+# Строгий текстовый режим PDF (без пересборки секций, текст совпадает с TG-версией):
+# пусто = авто: включено для ENV=prod/production, выключено для dev/local
+PDF_STRICT_TEXT_MODE=
 # Report job worker (фоновые задания генерации отчёта)
 REPORT_JOB_POLL_INTERVAL_SECONDS=5
 REPORT_JOB_LOCK_TIMEOUT_SECONDS=600
@@ -850,6 +853,7 @@ sudo systemctl restart numerolog.target
 - `DATABASE_URL`, `PDF_STORAGE_BUCKET`, `PDF_STORAGE_KEY`
 - `PDF_FONT_PATH` (legacy-путь для regular, обратная совместимость)
 - `PDF_FONT_REGULAR_PATH`, `PDF_FONT_BOLD_PATH`, `PDF_FONT_ACCENT_PATH`
+- `PDF_STRICT_TEXT_MODE` (strict-режим рендера PDF; если не задано — автоматически `true` в `ENV=prod/production`)
 - `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `AWS_ENDPOINT_URL` (если используете bucket)
 - `ENV`, `LOG_LEVEL`
 - `MONITORING_WEBHOOK_URL` (вебхук мониторинга для события `report_generate_failed`)

@@ -49,6 +49,7 @@
 ### Переменные окружения для нового checkout-at-end
 
 - Базовые: `BOT_TOKEN`, `DATABASE_URL`, `PAYMENT_ENABLED`, `PAYMENT_PROVIDER`.
+- Для требования «PDF текстово идентичен TG»: задайте `PDF_STRICT_TEXT_MODE=true` (в `ENV=prod/production` strict включится и без явного значения, но явная фиксация в `.env` предпочтительна для предсказуемости релизов).
 - Prodamus: `PRODAMUS_FORM_URL` (+ webhook secret/key по выбранной схеме).
 - CloudPayments: `CLOUDPAYMENTS_PUBLIC_ID` (+ API secret при использовании status API).
 - Если платёжные переменные не заданы, бот не должен падать: пользователь получает уведомление о недоступной ссылке оплаты.

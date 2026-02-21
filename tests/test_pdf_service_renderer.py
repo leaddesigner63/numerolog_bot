@@ -103,6 +103,55 @@ def _normalize_rendered_text(parts: list[str]) -> str:
 
 
 class PdfServiceRendererTests(unittest.TestCase):
+    def test_generate_pdf_strict_text_mode_bypasses_report_document_builder(self) -> None:
+        service = PdfService()
+
+        with (
+            mock.patch.object(settings, "pdf_strict_text_mode", True),
+            mock.patch("app.core.pdf_service.report_document_builder.build") as build_report_document,
+            mock.patch("app.core.pdf_service.PdfThemeRenderer.render", return_value=b"%PDF-strict") as render_pdf,
+        ):
+            pdf = service.generate_pdf("raw text", tariff="T1", meta={"id": "1"})
+
+        self.assertEqual(pdf, b"%PDF-strict")
+        build_report_document.assert_not_called()
+        self.assertIsNone(render_pdf.call_args.kwargs["report_document"])
+
+    def test_generate_pdf_strict_text_mode_ignores_passed_report_document(self) -> None:
+        service = PdfService()
+        passed_document = ReportDocument(title="Тест", subtitle="Подзаголовок")
+
+        with (
+            mock.patch.object(settings, "pdf_strict_text_mode", True),
+            mock.patch("app.core.pdf_service.report_document_builder.build") as build_report_document,
+            mock.patch("app.core.pdf_service.PdfThemeRenderer.render", return_value=b"%PDF-strict") as render_pdf,
+        ):
+            pdf = service.generate_pdf(
+                "raw text",
+                tariff="T1",
+                meta={"id": "2"},
+                report_document=passed_document,
+            )
+
+        self.assertEqual(pdf, b"%PDF-strict")
+        build_report_document.assert_not_called()
+        self.assertIsNone(render_pdf.call_args.kwargs["report_document"])
+
+    def test_generate_pdf_enables_strict_text_mode_by_default_for_production(self) -> None:
+        service = PdfService()
+
+        with (
+            mock.patch.object(settings, "pdf_strict_text_mode", None),
+            mock.patch.object(settings, "env", "production"),
+            mock.patch("app.core.pdf_service.report_document_builder.build") as build_report_document,
+            mock.patch("app.core.pdf_service.PdfThemeRenderer.render", return_value=b"%PDF-prod") as render_pdf,
+        ):
+            pdf = service.generate_pdf("prod raw text", tariff="T2", meta={"id": "3"})
+
+        self.assertEqual(pdf, b"%PDF-prod")
+        build_report_document.assert_not_called()
+        self.assertIsNone(render_pdf.call_args.kwargs["report_document"])
+
     def test_generate_pdf_falls_back_to_legacy_on_renderer_error(self) -> None:
         service = PdfService()
 
