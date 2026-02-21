@@ -1,11 +1,13 @@
 import unittest
 from contextlib import contextmanager
+from unittest.mock import patch
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core import report_service as report_service_module
+from app.core.config import settings
 from app.core.llm_router import LLMResponse
 from app.db.base import Base
 from app.db.models import (
@@ -51,7 +53,7 @@ class ReportServiceOrderFulfillmentTests(unittest.TestCase):
                     id=10,
                     user_id=1,
                     tariff=Tariff.T1,
-                    amount=990,
+                    amount=settings.tariff_prices_rub[Tariff.T1.value],
                     currency="RUB",
                     provider=PaymentProvider.PRODAMUS,
                     status=OrderStatus.PAID,
@@ -107,6 +109,115 @@ class ReportServiceOrderFulfillmentTests(unittest.TestCase):
                 .count()
             )
             self.assertEqual(reports_count, 1)
+
+    def test_resolve_paid_order_id_returns_none_for_owner_mismatch(self) -> None:
+        with self.SessionLocal() as session:
+            session.add(
+                Order(
+                    id=11,
+                    user_id=2,
+                    tariff=Tariff.T1,
+                    amount=settings.tariff_prices_rub[Tariff.T1.value],
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    fulfillment_status=OrderFulfillmentStatus.PENDING,
+                )
+            )
+            session.commit()
+            with patch.object(report_service_module.report_service._logger, "warning") as warning_mock:
+                resolved_order_id = report_service_module.report_service._resolve_paid_order_id(
+                    session,
+                    {"selected_tariff": Tariff.T1.value, "order_id": "11"},
+                    user_id=1,
+                )
+
+        self.assertIsNone(resolved_order_id)
+        warning_mock.assert_any_call(
+            "order_owner_mismatch",
+            extra={"user_id": 1, "order_id": 11, "order_user_id": 2},
+        )
+
+    def test_resolve_paid_order_id_returns_none_for_tariff_mismatch(self) -> None:
+        with self.SessionLocal() as session:
+            session.add(
+                Order(
+                    id=12,
+                    user_id=1,
+                    tariff=Tariff.T2,
+                    amount=settings.tariff_prices_rub[Tariff.T2.value],
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    fulfillment_status=OrderFulfillmentStatus.PENDING,
+                )
+            )
+            session.commit()
+            with patch.object(report_service_module.report_service._logger, "warning") as warning_mock:
+                resolved_order_id = report_service_module.report_service._resolve_paid_order_id(
+                    session,
+                    {"selected_tariff": Tariff.T1.value, "order_id": "12"},
+                    user_id=1,
+                )
+
+        self.assertIsNone(resolved_order_id)
+        warning_mock.assert_any_call(
+            "order_tariff_mismatch",
+            extra={
+                "user_id": 1,
+                "order_id": 12,
+                "order_tariff": Tariff.T2.value,
+                "selected_tariff": Tariff.T1.value,
+            },
+        )
+
+    def test_resolve_paid_order_id_returns_none_for_amount_mismatch(self) -> None:
+        with self.SessionLocal() as session:
+            session.add(
+                Order(
+                    id=13,
+                    user_id=1,
+                    tariff=Tariff.T1,
+                    amount=settings.tariff_prices_rub[Tariff.T1.value] + 1,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    fulfillment_status=OrderFulfillmentStatus.PENDING,
+                )
+            )
+            session.commit()
+            with patch.object(report_service_module.report_service._logger, "warning") as warning_mock:
+                resolved_order_id = report_service_module.report_service._resolve_paid_order_id(
+                    session,
+                    {"selected_tariff": Tariff.T1.value, "order_id": "13"},
+                    user_id=1,
+                )
+
+        self.assertIsNone(resolved_order_id)
+        warning_mock.assert_any_call(
+            "order_amount_mismatch",
+            extra={
+                "user_id": 1,
+                "order_id": 13,
+                "order_amount": float(settings.tariff_prices_rub[Tariff.T1.value] + 1),
+                "expected_amount": float(settings.tariff_prices_rub[Tariff.T1.value]),
+            },
+        )
+
+
+    def test_persist_report_does_not_force_store_paid_tariff_without_order(self) -> None:
+        report_service_module.report_service._persist_report(
+            user_id=1,
+            state={"selected_tariff": Tariff.T1.value},
+            response=LLMResponse(text="fallback", provider="safety_fallback", model="template"),
+            safety_flags={},
+            force_store=True,
+        )
+
+        with self.SessionLocal() as session:
+            reports_count = session.query(Report).count()
+            self.assertEqual(reports_count, 0)
+
 
 
 if __name__ == "__main__":
