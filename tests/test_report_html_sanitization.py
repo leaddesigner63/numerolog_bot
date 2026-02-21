@@ -54,7 +54,7 @@ class ReportHtmlSanitizationTests(unittest.TestCase):
         self.assertEqual(cleaned, "ЗаголовокАбзац\nТекст")
 
     def test_sanitize_report_text_logs_quality_incident_when_changed(self) -> None:
-        with self.assertLogs("app.bot.screens", level="WARNING") as logs:
+        with self.assertLogs("app.core.report_text_pipeline", level="WARNING") as logs:
             _sanitize_report_text("<b>ok</b>", tariff="T1")
 
         self.assertTrue(any("report_text_postprocess_quality_incident" in entry for entry in logs.output))

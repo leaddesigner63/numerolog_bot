@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import html
 import logging
 import re
 from datetime import datetime
@@ -13,6 +12,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from app.bot.keyboards import enforce_long_button_rows
 from app.bot.questionnaire.config import load_questionnaire_config
 from app.core.config import settings
+from app.core.report_text_pipeline import build_canonical_report_text
 from app.core.tariff_labels import tariff_button_title
 
 
@@ -95,45 +95,13 @@ TARIFF_META: dict[str, dict[str, Any]] = {
 }
 
 
-_REPORT_BR_TAG_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
-_REPORT_ANY_TAG_RE = re.compile(r"</?[A-Za-z][A-Za-z0-9:_-]*(?:\s[^<>]*)?>")
-
-
 logger = logging.getLogger(__name__)
 _BOT_MENTION_PREFIX_RE = re.compile(r"^\s*@\w+\s+")
 _QUESTIONNAIRE_PREVIEW_LIMIT = 180
 
 
 def _sanitize_report_text(report_text: str, *, tariff: str = "unknown") -> str:
-    if not report_text:
-        return ""
-    decoded_text = report_text
-    for _ in range(3):
-        unescaped = html.unescape(decoded_text)
-        if unescaped == decoded_text:
-            break
-        decoded_text = unescaped
-    normalized_breaks = _REPORT_BR_TAG_RE.sub("\n", decoded_text)
-    without_tags = re.sub(r"</?[A-Za-z][^>\n]*>", "", normalized_breaks)
-    without_known_tags = _REPORT_ANY_TAG_RE.sub("", without_tags)
-    without_dangling_tags = re.sub(
-        r"</?[A-Za-z][A-Za-z0-9:_-]*(?:\s*>)?",
-        "",
-        without_known_tags,
-    )
-    cleaned = without_dangling_tags.replace("<", "").replace(">", "")
-
-    if cleaned != report_text:
-        logger.warning(
-            "report_text_postprocess_quality_incident",
-            extra={
-                "tariff": tariff,
-                "original_length": len(report_text),
-                "cleaned_length": len(cleaned),
-            },
-        )
-
-    return cleaned
+    return build_canonical_report_text(report_text, tariff)
 
 
 def _global_menu() -> list[list[InlineKeyboardButton]]:
@@ -1073,7 +1041,7 @@ def screen_s6(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s7(state: dict[str, Any]) -> ScreenContent:
-    report_text = _sanitize_report_text(
+    report_text = build_canonical_report_text(
         (state.get("report_text") or "").strip(),
         tariff=str(state.get("selected_tariff") or "unknown"),
     )
@@ -1339,7 +1307,7 @@ def screen_s12(state: dict[str, Any]) -> ScreenContent:
 
 def screen_s13(state: dict[str, Any]) -> ScreenContent:
     report_meta = state.get("report_meta") or {}
-    report_text = _sanitize_report_text(
+    report_text = build_canonical_report_text(
         (state.get("report_text") or "").strip(),
         tariff=str(report_meta.get("tariff") or state.get("selected_tariff") or "unknown"),
     )
