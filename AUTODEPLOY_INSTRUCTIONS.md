@@ -186,6 +186,17 @@ pytest -q \
 
 Если нужно изменить набор полностью сохраняемых каталогов, задайте секрет `PRESERVE_PATHS` в GitHub Actions (например: `app/assets/screen_images app/assets/pdf storage/screen_images`).
 
+## 5. Предмиграционная очистка дублей `reports.order_id` (обязательно для релиза с ревизией `0033_add_unique_report_order_id`)
+1. Перед `alembic upgrade head` выполните:
+   ```bash
+   python scripts/db/archive_duplicate_reports_by_order.py --dry-run
+   ```
+2. Если скрипт нашёл дубли, выполните реальный прогон:
+   ```bash
+   python scripts/db/archive_duplicate_reports_by_order.py
+   ```
+3. Полный порядок релиза описан в `docs/release_notes/2026-02-21-report-order-id-unique.md`.
+
 ## 5. Миграции базы данных
 При каждом деплое workflow автоматически выполняет `alembic upgrade head`, если в проекте есть `alembic.ini` и установлен Alembic.
 Убедитесь, что в `ENV_FILE` задан `DATABASE_URL` (или в проекте есть `.env` с этим значением), иначе миграции не запустятся.

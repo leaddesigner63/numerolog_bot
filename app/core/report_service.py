@@ -27,6 +27,7 @@ from app.db.models import (
 )
 from app.db.session import get_session
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 
 REPORT_FRAMEWORK_TEMPLATE = """
@@ -375,7 +376,21 @@ class ReportService:
                 safety_flags=safety_flags,
             )
             session.add(report)
-            session.flush()
+            try:
+                session.flush()
+            except IntegrityError:
+                session.rollback()
+                if order_id and self._order_has_report(session, order_id):
+                    self._logger.info(
+                        "report_unique_conflict_for_order",
+                        extra={"user_id": user_id, "order_id": order_id},
+                    )
+                    return
+                self._logger.exception(
+                    "report_unique_conflict_unknown",
+                    extra={"user_id": user_id, "order_id": order_id},
+                )
+                return
             if order_id:
                 order = session.get(Order, order_id)
                 if order:
