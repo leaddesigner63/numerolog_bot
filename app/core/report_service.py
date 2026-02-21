@@ -7,6 +7,7 @@ from typing import Any
 
 from app.core.config import settings
 from app.core.llm_router import LLMResponse, LLMUnavailableError, llm_router
+from app.core.monitoring import send_monitoring_event
 from app.core.prompt_settings import resolve_tariff_prompt
 from app.core.report_safety import report_safety
 from app.core.report_text_pipeline import build_canonical_report_text
@@ -39,6 +40,14 @@ REPORT_FRAMEWORK_TEMPLATE = """
 """.strip()
 
 PAID_TARIFFS = {Tariff.T1, Tariff.T2, Tariff.T3}
+
+
+class ReportPersistenceBlockedError(RuntimeError):
+    """Controlled failure when report persistence is blocked by business rules."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
 
 
 class ReportService:
@@ -250,7 +259,10 @@ class ReportService:
                 job = session.get(ReportJob, job_id)
                 if job:
                     job.status = ReportJobStatus.FAILED
-                    job.last_error = str(exc)
+                    if isinstance(exc, ReportPersistenceBlockedError):
+                        job.last_error = exc.reason
+                    else:
+                        job.last_error = str(exc)
                     session.add(job)
             return None
 
@@ -353,14 +365,17 @@ class ReportService:
                 order_id = self._resolve_paid_order_id(session, state, user_id)
                 if not order_id:
                     if force_store:
-                        self._logger.warning(
-                            "paid_order_force_store_blocked",
-                            extra={"user_id": user_id, "tariff": tariff.value},
+                        self._register_paid_force_store_block(
+                            user_id=user_id,
+                            tariff=tariff,
+                            state=state,
                         )
                     self._logger.warning(
                         "paid_order_missing",
                         extra={"user_id": user_id, "tariff": tariff.value},
                     )
+                    if force_store:
+                        raise ReportPersistenceBlockedError("paid_force_store_invalid_order")
                     return
                 if order_id and self._order_has_report(session, order_id):
                     self._logger.info(
@@ -406,6 +421,30 @@ class ReportService:
                         order.consumed_at = consumed_at
                     order.fulfilled_report_id = report.id
                     session.add(order)
+
+    def _register_paid_force_store_block(
+        self,
+        *,
+        user_id: int,
+        tariff: Tariff,
+        state: dict[str, Any],
+    ) -> None:
+        payload = {
+            "user_id": user_id,
+            "tariff": tariff.value,
+            "order_id": state.get("order_id"),
+        }
+        self._logger.warning("paid_order_force_store_blocked", extra=payload)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        loop.create_task(
+            send_monitoring_event(
+                "paid_order_force_store_blocked",
+                payload,
+            )
+        )
 
     def _resolve_paid_order_id(self, session, state: dict[str, Any], user_id: int) -> int | None:
         order_id = state.get("order_id")
