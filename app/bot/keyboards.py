@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from aiogram.types import InlineKeyboardButton
 
-_LONG_BUTTON_TEXT_THRESHOLD = 10
+_LONG_BUTTON_TEXT_THRESHOLD = 8
 _MAX_BUTTONS_PER_LONG_TEXT_ROW = 2
 
 
