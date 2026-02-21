@@ -70,7 +70,14 @@ _DEPLOY_SMOKE_PROFILE_NAME = "Smoke Check"
 
 
 def _deploy_smoke_users_subquery():
-    smoke_users_by_order = select(Order.user_id).where(Order.provider_payment_id.startswith(_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX))
+    smoke_order_filter = or_(
+        Order.is_smoke_check.is_(True),
+        and_(
+            Order.provider_payment_id.is_not(None),
+            Order.provider_payment_id.startswith(_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX),
+        ),
+    )
+    smoke_users_by_order = select(Order.user_id).where(smoke_order_filter)
     smoke_users_by_profile = select(UserProfile.user_id).where(
         func.coalesce(UserProfile.name, "") == _DEPLOY_SMOKE_PROFILE_NAME
     )
@@ -78,9 +85,12 @@ def _deploy_smoke_users_subquery():
 
 
 def _deploy_smoke_excluded_orders_filter():
-    return or_(
-        Order.provider_payment_id.is_(None),
-        ~Order.provider_payment_id.startswith(_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX),
+    return and_(
+        or_(Order.is_smoke_check.is_(False), Order.is_smoke_check.is_(None)),
+        or_(
+            Order.provider_payment_id.is_(None),
+            ~Order.provider_payment_id.startswith(_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX),
+        ),
     )
 
 
