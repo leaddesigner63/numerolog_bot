@@ -200,6 +200,30 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(payload["orders"][0]["user_id"], 140)
         self.assertTrue(payload["orders"][0]["payment_confirmed"])
 
+    def test_orders_endpoint_excludes_legacy_deploy_smoke_orders_without_flag(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=145, telegram_user_id=700745)
+            session.add(user)
+            session.flush()
+            session.add(
+                Order(
+                    id=263,
+                    user_id=145,
+                    tariff=Tariff.T1,
+                    amount=1000,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    provider_payment_id="smoke-legacy-20260101010101",
+                    status=OrderStatus.PAID,
+                )
+            )
+            session.commit()
+
+        response = self.client.get("/admin/api/orders")
+        self.assertEqual(response.status_code, 200)
+        order_ids = {item["id"] for item in response.json()["orders"]}
+        self.assertNotIn(263, order_ids)
+
     def test_orders_endpoint_excludes_deploy_smoke_orders(self) -> None:
         with self.SessionLocal() as session:
             user = User(id=144, telegram_user_id=700744)
@@ -214,7 +238,8 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
                         amount=1000,
                         currency="RUB",
                         provider=PaymentProvider.PRODAMUS,
-                        provider_payment_id="smoke-20260101010101",
+                        provider_payment_id="real-flagged-20260101010101",
+                        is_smoke_check=True,
                         status=OrderStatus.PAID,
                     ),
                     Order(
@@ -442,7 +467,8 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
                         amount=1000,
                         currency="RUB",
                         provider=PaymentProvider.PRODAMUS,
-                        provider_payment_id="smoke-20260101010101",
+                        provider_payment_id="real-flagged-20260101010101",
+                        is_smoke_check=True,
                         status=OrderStatus.PAID,
                         payment_confirmed=True,
                         payment_confirmation_source=PaymentConfirmationSource.SYSTEM,
@@ -677,7 +703,8 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
                         amount=1000,
                         currency="RUB",
                         provider=PaymentProvider.PRODAMUS,
-                        provider_payment_id="smoke-20260101010101",
+                        provider_payment_id="real-flagged-20260101010101",
+                        is_smoke_check=True,
                         status=OrderStatus.PAID,
                         payment_confirmed=True,
                         payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
