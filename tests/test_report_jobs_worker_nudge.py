@@ -9,7 +9,15 @@ from sqlalchemy.pool import StaticPool
 
 from app.bot import report_jobs_worker as worker_module
 from app.db.base import Base
-from app.db.models import ScreenStateRecord, User, UserProfile
+from app.db.models import (
+    Order,
+    OrderStatus,
+    PaymentProvider,
+    ScreenStateRecord,
+    Tariff,
+    User,
+    UserProfile,
+)
 
 
 class ReportJobsWorkerNudgeTests(unittest.IsolatedAsyncioTestCase):
@@ -87,6 +95,115 @@ class ReportJobsWorkerNudgeTests(unittest.IsolatedAsyncioTestCase):
             data = dict(row.data or {})
             self.assertIsNotNone(data.get("resume_nudge_sent_at"))
             self.assertEqual(data.get("resume_nudge_campaign"), "resume_after_stall_v1")
+
+    async def test_send_checkout_value_nudge_once_for_s2_after_due_at(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=2, telegram_user_id=19002, telegram_username="checkout")
+            session.add(user)
+            session.add(
+                UserProfile(
+                    user_id=2,
+                    name="name",
+                    birth_date="01.01.1990",
+                    birth_place_city="Moscow",
+                    birth_place_country="RU",
+                    marketing_consent_document_version="v1",
+                    marketing_consent_accepted_at=datetime.now(timezone.utc),
+                )
+            )
+            session.add(
+                ScreenStateRecord(
+                    telegram_user_id=19002,
+                    screen_id="S2",
+                    message_ids=[],
+                    user_message_ids=[],
+                    last_question_message_id=None,
+                    data={"order_id": "777"},
+                )
+            )
+            session.commit()
+
+        send_mock = AsyncMock(return_value=type("R", (), {"sent": True, "reason": "sent"})())
+        worker = worker_module.ReportJobWorker()
+        with patch.object(worker_module, "send_marketing_message", new=send_mock), patch.object(
+            worker_module.screen_manager,
+            "_record_transition_event",
+            return_value=None,
+        ), patch.object(worker_module.random, "randint", return_value=12):
+            await worker._process_checkout_value_nudges(bot=AsyncMock())
+
+        with self.SessionLocal() as session:
+            row = session.get(ScreenStateRecord, 19002)
+            data = dict(row.data or {})
+            data["checkout_value_nudge_due_at"] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
+            row.data = data
+            session.add(row)
+            session.commit()
+
+        with patch.object(worker_module, "send_marketing_message", new=send_mock), patch.object(
+            worker_module.screen_manager,
+            "_record_transition_event",
+            return_value=None,
+        ):
+            await worker._process_checkout_value_nudges(bot=AsyncMock())
+            await worker._process_checkout_value_nudges(bot=AsyncMock())
+
+        self.assertEqual(send_mock.await_count, 1)
+
+        with self.SessionLocal() as session:
+            row = session.get(ScreenStateRecord, 19002)
+            data = dict(row.data or {})
+            self.assertEqual(data.get("checkout_value_nudge_campaign"), "checkout_value_nudge_v1")
+            self.assertEqual(data.get("checkout_value_nudge_delay_minutes"), 12)
+            self.assertEqual(data.get("checkout_value_nudge_target_screen_id"), "S2")
+            self.assertIsNotNone(data.get("checkout_value_nudge_sent_at"))
+
+    async def test_checkout_value_nudge_skips_paid_users(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=3, telegram_user_id=19003, telegram_username="paid")
+            session.add(user)
+            session.add(
+                UserProfile(
+                    user_id=3,
+                    name="name",
+                    birth_date="01.01.1990",
+                    birth_place_city="Moscow",
+                    birth_place_country="RU",
+                    marketing_consent_document_version="v1",
+                    marketing_consent_accepted_at=datetime.now(timezone.utc),
+                )
+            )
+            session.add(
+                Order(
+                    user_id=3,
+                    tariff=Tariff.T1,
+                    amount=560,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                )
+            )
+            session.add(
+                ScreenStateRecord(
+                    telegram_user_id=19003,
+                    screen_id="S4",
+                    message_ids=[],
+                    user_message_ids=[],
+                    last_question_message_id=None,
+                    data={
+                        "checkout_value_nudge_due_at": (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat(),
+                        "checkout_value_nudge_target_screen_id": "S4",
+                    },
+                )
+            )
+            session.commit()
+
+        send_mock = AsyncMock(return_value=type("R", (), {"sent": True, "reason": "sent"})())
+        worker = worker_module.ReportJobWorker()
+        with patch.object(worker_module, "send_marketing_message", new=send_mock):
+            await worker._process_checkout_value_nudges(bot=AsyncMock())
+
+        self.assertEqual(send_mock.await_count, 0)
 
 
 if __name__ == "__main__":

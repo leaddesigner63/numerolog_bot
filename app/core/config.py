@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     report_job_lock_timeout_seconds: int = 600
     resume_nudge_delay_hours: int = 6
     resume_nudge_campaign: str = "resume_after_stall_v1"
+    checkout_value_nudge_min_delay_minutes: int = 10
+    checkout_value_nudge_max_delay_minutes: int = 30
+    checkout_value_nudge_campaign: str = "checkout_value_nudge_v1"
 
     # Прокси ТОЛЬКО для LLM-запросов (Gemini/OpenAI). Берется из .env:
     # LLM_PROXY_URL=http://user:pass@host:3128
