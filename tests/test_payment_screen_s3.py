@@ -20,7 +20,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertIn("Тариф:", message)
         self.assertIn("Стоимость: ||560 RUB||", message)
         self.assertIn("Что получите: PDF + ключевые выводы + рекомендации по шагам", message)
-        self.assertIn("Когда получите: обычно 5–15 минут", message)
+        self.assertIn("Когда получите: Сразу после подтверждения оплаты", message)
         self.assertIn("Короткий дисклеймер", message)
         self.assertIn("Оплачивая, вы подтверждаете согласие", message)
 
