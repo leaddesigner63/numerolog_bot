@@ -124,7 +124,7 @@ def main() -> int:
                     select(func.count(MarketingConsentEvent.id)).where(MarketingConsentEvent.user_id.in_(smoke_user_ids))
                 ).scalar_one(),
                 "free_limits": session.execute(
-                    select(func.count(FreeLimit.id)).where(FreeLimit.user_id.in_(smoke_user_ids))
+                    select(func.count(FreeLimit.user_id)).where(FreeLimit.user_id.in_(smoke_user_ids))
                 ).scalar_one(),
                 "support_dialog_messages": session.execute(
                     select(func.count(SupportDialogMessage.id)).where(SupportDialogMessage.user_id.in_(smoke_user_ids))
