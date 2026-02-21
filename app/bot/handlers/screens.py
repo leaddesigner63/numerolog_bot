@@ -12,7 +12,7 @@ from aiogram.types import BufferedInputFile, CallbackQuery
 from sqlalchemy import select, func
 
 from app.bot.questionnaire.config import load_questionnaire_config, resolve_next_question_id
-from app.bot.screens import build_report_wait_message
+from app.bot.screens import build_payment_wait_message, build_report_wait_message
 from app.bot.handlers.profile import (
     accept_marketing_consent_prompt,
     accept_profile_consent,
@@ -380,11 +380,14 @@ async def _edit_report_wait_message(
 
 async def _run_payment_waiter(bot: Bot, chat_id: int, user_id: int) -> None:
     poll_interval = max(settings.report_delay_seconds, 1)
+    frames = ["⏳", "⌛", "🔄", "✨"]
+    tick = 0
     while True:
         state = screen_manager.update_state(user_id)
         order_id = _safe_int(state.data.get("order_id"))
         if not order_id:
             return
+        message_id = state.message_ids[-1] if state.message_ids else None
         with get_session() as session:
             order = session.get(Order, order_id)
             if not order:
@@ -489,6 +492,36 @@ async def _run_payment_waiter(bot: Bot, chat_id: int, user_id: int) -> None:
                             _run_report_delay(bot=bot, chat_id=chat_id, user_id=user_id)
                         )
                 return
+
+        if message_id:
+            frame = frames[tick % len(frames)]
+            screen_manager.update_state(
+                user_id,
+                payment_processing_notice=True,
+                payment_wait_frame=frame,
+            )
+            content = screen_manager.render_screen("S3", user_id)
+            text = build_payment_wait_message(frame=frame)
+            try:
+                await _edit_report_wait_message(
+                    bot=bot,
+                    chat_id=chat_id,
+                    message_id=message_id,
+                    text=text,
+                    reply_markup=content.keyboard,
+                    parse_mode=content.parse_mode,
+                )
+            except Exception as exc:
+                logger.info(
+                    "payment_wait_edit_failed",
+                    extra={
+                        "user_id": user_id,
+                        "message_id": message_id,
+                        "error": str(exc),
+                    },
+                )
+                return
+            tick += 1
         await asyncio.sleep(poll_interval)
 
 

@@ -136,6 +136,7 @@ class PaymentWaiterProviderPollTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(show_screen.await_args.kwargs["trigger_value"], "payment_confirmed")
         create_report_job.assert_called_once()
 
+
     async def test_poll_none_keeps_user_on_s3(self) -> None:
         screens.settings.report_delay_seconds = 0
         order_id = self._create_order()
@@ -147,6 +148,7 @@ class PaymentWaiterProviderPollTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(screens, "get_payment_provider", return_value=provider),
             patch.object(screens.screen_manager, "show_screen", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_edit_report_wait_message", new=AsyncMock()) as edit_wait,
             patch.object(screens.asyncio, "sleep", new=AsyncMock(side_effect=RuntimeError("stop"))),
         ):
             with self.assertRaises(RuntimeError):
@@ -167,6 +169,7 @@ class PaymentWaiterProviderPollTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(state.screen_id, "S3")
 
         show_screen.assert_not_awaited()
+        edit_wait.assert_not_awaited()
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 import unittest
 
-from app.bot.screens import build_report_wait_message
+from app.bot.screens import build_payment_wait_message, build_report_wait_message
 
 
 class ReportWaitMessageTests(unittest.TestCase):
@@ -28,6 +28,12 @@ class ReportWaitMessageTests(unittest.TestCase):
         self.assertIn("40%", text)
         self.assertNotIn("Осталось:", text)
 
+
+    def test_payment_wait_message_contains_frame(self) -> None:
+        text = build_payment_wait_message(frame="✨")
+
+        self.assertIn("S3:", text)
+        self.assertIn("✨ Платеж обрабатывается, пожалуйста подождите.", text)
 
 if __name__ == "__main__":
     unittest.main()
