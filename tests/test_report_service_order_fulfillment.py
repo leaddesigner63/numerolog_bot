@@ -206,14 +206,16 @@ class ReportServiceOrderFulfillmentTests(unittest.TestCase):
 
 
     def test_persist_report_does_not_force_store_paid_tariff_without_order(self) -> None:
-        report_service_module.report_service._persist_report(
-            user_id=1,
-            state={"selected_tariff": Tariff.T1.value},
-            response=LLMResponse(text="fallback", provider="safety_fallback", model="template"),
-            safety_flags={},
-            force_store=True,
-        )
+        with self.assertRaises(report_service_module.ReportPersistenceBlockedError) as exc:
+            report_service_module.report_service._persist_report(
+                user_id=1,
+                state={"selected_tariff": Tariff.T1.value},
+                response=LLMResponse(text="fallback", provider="safety_fallback", model="template"),
+                safety_flags={},
+                force_store=True,
+            )
 
+        self.assertEqual(str(exc.exception), "paid_force_store_invalid_order")
         with self.SessionLocal() as session:
             reports_count = session.query(Report).count()
             self.assertEqual(reports_count, 0)

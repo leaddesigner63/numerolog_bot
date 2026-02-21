@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, patch
@@ -136,6 +137,38 @@ class ReportJobPaidOrderStrictLookupTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(job)
             self.assertEqual(job.status, ReportJobStatus.FAILED)
             self.assertEqual(job.last_error, "report_not_saved_for_order")
+
+    async def test_generate_report_by_job_marks_controlled_failure_and_emits_metric_when_fallback_has_invalid_order(self) -> None:
+        with patch.object(
+            report_service_module.llm_router,
+            "generate",
+            return_value=LLMResponse(
+                text="нумерология и прогноз",
+                provider="gemini",
+                model="flash",
+            ),
+        ), patch.object(
+            report_service_module.report_service,
+            "_resolve_paid_order_id",
+            return_value=None,
+        ), patch.object(
+            report_service_module,
+            "send_monitoring_event",
+            new=AsyncMock(),
+        ) as metric_mock:
+            result = await report_service_module.report_service.generate_report_by_job(job_id=1)
+            await asyncio.sleep(0)
+
+        self.assertIsNone(result)
+        with self.SessionLocal() as session:
+            job = session.get(ReportJob, 1)
+            self.assertIsNotNone(job)
+            self.assertEqual(job.status, ReportJobStatus.FAILED)
+            self.assertEqual(job.last_error, "paid_force_store_invalid_order")
+            self.assertEqual(session.query(Report).filter(Report.order_id == 10).count(), 0)
+
+        metric_mock.assert_awaited_once()
+        self.assertEqual(metric_mock.await_args.args[0], "paid_order_force_store_blocked")
 
 
 if __name__ == "__main__":
