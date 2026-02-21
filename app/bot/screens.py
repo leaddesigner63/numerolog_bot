@@ -192,6 +192,10 @@ def build_report_wait_message(
     )
 
 
+def build_payment_wait_message(frame: str = "⏳") -> str:
+    return _with_screen_prefix("S3", f"{frame} Платеж обрабатывается, пожалуйста подождите.")
+
+
 def _common_disclaimer_short() -> str:
     return (
         "Важно:\n"
@@ -400,7 +404,8 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
 
     text_parts = []
     if payment_processing_notice:
-        text_parts.append("Платеж обрабатывается, пожалуйста подождите.")
+        payment_wait_frame = str(state.get("payment_wait_frame") or "⏳")
+        text_parts.append(build_payment_wait_message(frame=payment_wait_frame))
     else:
         text_parts.append(
             "Финальный шаг перед генерацией отчёта.\n\n"
@@ -416,7 +421,9 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
         if not payment_url:
             text_parts.append("\n\nПлатёжная ссылка пока недоступна. Проверьте настройки провайдера.")
 
-    text = _with_screen_prefix("S3", "".join(text_parts))
+    text = "".join(text_parts)
+    if not payment_processing_notice:
+        text = _with_screen_prefix("S3", text)
     text = _apply_spoiler_markdown(text, price_label)
 
     rows: list[list[InlineKeyboardButton]] = []
