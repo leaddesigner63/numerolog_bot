@@ -96,6 +96,20 @@ class ReportJobsWorkerNudgeTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNotNone(data.get("resume_nudge_sent_at"))
             self.assertEqual(data.get("resume_nudge_campaign"), "resume_after_stall_v1")
 
+    def test_build_resume_deeplink_strips_at_sign_from_bot_username(self) -> None:
+        worker = worker_module.ReportJobWorker()
+        with patch.object(worker_module.settings, "telegram_bot_username", "@AlreadyUbot"):
+            link = worker._build_resume_deeplink(state_data={"order_id": "321"})
+
+        self.assertEqual(link, "https://t.me/AlreadyUbot?start=resume_nudge_321")
+
+    def test_build_resume_deeplink_handles_whitespace_username(self) -> None:
+        worker = worker_module.ReportJobWorker()
+        with patch.object(worker_module.settings, "telegram_bot_username", "  @AlreadyUbot  "):
+            link = worker._build_resume_deeplink(state_data={})
+
+        self.assertEqual(link, "https://t.me/AlreadyUbot?start=resume_nudge")
+
     async def test_send_checkout_value_nudge_once_for_s2_after_due_at(self) -> None:
         with self.SessionLocal() as session:
             user = User(id=2, telegram_user_id=19002, telegram_username="checkout")

@@ -230,7 +230,7 @@ class ReportJobWorker:
                     )
 
     def _build_resume_deeplink(self, *, state_data: dict) -> str:
-        bot_username = getattr(settings, "telegram_bot_username", None)
+        bot_username = str(getattr(settings, "telegram_bot_username", "") or "").strip().lstrip("@")
         order_id = state_data.get("order_id")
         payload = "resume_nudge"
         if order_id:
