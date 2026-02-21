@@ -29,6 +29,7 @@ _UNKNOWN_SCREEN = "UNKNOWN"
 _SCREEN_ID_PATTERN = re.compile(r"^S\d+(?:_T[0-3])?$")
 _FUNNEL_TARIFFS = ("T0", "T1", "T2", "T3")
 _TARIFF_CLICK_PLACEMENTS = {f"tariff_{tariff.lower()}": tariff for tariff in _FUNNEL_TARIFFS}
+_TARIFF_CALLBACK_PATTERN = re.compile(r"^tariff:(T[0-3])$", re.IGNORECASE)
 _FUNNEL_TEMPLATE_T0_T1: list[tuple[str, set[str]]] = [
     ("S0", {"S0"}),
     ("S1", {"S1"}),
@@ -186,27 +187,26 @@ def build_marketing_subscription_analytics(session: Session, filters: MarketingA
 
 def build_traffic_analytics(session: Session, filters: TrafficAnalyticsFilters) -> dict:
     first_touch = _load_first_touch_entries(session, filters)
-    if not first_touch:
-        return {
-            "users_started_total": 0,
-            "users_by_source": [],
-            "users_by_source_campaign": [],
-            "conversions": [],
-            "paid_per_tariff_click": [],
-        }
-
     base_user_ids = {item.telegram_user_id for item in first_touch}
     paid_telegram_user_ids = _load_paid_telegram_user_ids(session, filters, base_user_ids)
-    users_by_source = _build_users_by_source(first_touch, paid_telegram_user_ids)
-    users_by_source_campaign = _build_users_by_source_campaign(first_touch, paid_telegram_user_ids)
-    conversions = _build_first_touch_conversions(session, filters, base_user_ids, paid_telegram_user_ids)
-    paid_per_tariff_click = _build_paid_per_tariff_click(first_touch, paid_telegram_user_ids)
+    paid_telegram_user_ids_by_tariff = _load_paid_telegram_user_ids_by_tariff(session, filters)
+    users_by_source = _build_users_by_source(first_touch, paid_telegram_user_ids) if first_touch else []
+    users_by_source_campaign = (
+        _build_users_by_source_campaign(first_touch, paid_telegram_user_ids) if first_touch else []
+    )
+    conversions = _build_first_touch_conversions(session, filters, base_user_ids, paid_telegram_user_ids) if first_touch else []
+    paid_per_tariff_click = _build_paid_per_tariff_click_from_transitions(session, filters, paid_telegram_user_ids_by_tariff)
+    paid_per_tariff_click_first_touch = _build_paid_per_tariff_click_from_first_touch(
+        first_touch,
+        paid_telegram_user_ids_by_tariff,
+    )
     return {
         "users_started_total": len(base_user_ids),
         "users_by_source": users_by_source,
         "users_by_source_campaign": users_by_source_campaign,
         "conversions": conversions,
         "paid_per_tariff_click": paid_per_tariff_click,
+        "paid_per_tariff_click_first_touch": paid_per_tariff_click_first_touch,
     }
 
 
@@ -302,7 +302,10 @@ def _build_users_by_source_campaign(items: list[UserFirstTouchAttribution], paid
     ]
 
 
-def _build_paid_per_tariff_click(items: list[UserFirstTouchAttribution], paid_telegram_user_ids: set[int]) -> list[dict]:
+def _build_paid_per_tariff_click_from_first_touch(
+    items: list[UserFirstTouchAttribution],
+    paid_telegram_user_ids_by_tariff: dict[str, set[int]],
+) -> list[dict]:
     grouped: dict[str, set[int]] = {tariff: set() for tariff in _FUNNEL_TARIFFS}
     for item in items:
         placement = str(item.placement or "").strip().lower()
@@ -315,11 +318,93 @@ def _build_paid_per_tariff_click(items: list[UserFirstTouchAttribution], paid_te
         {
             "tariff": tariff,
             "tariff_click_users": len(user_ids),
-            "paid_users": len(user_ids & paid_telegram_user_ids),
-            "paid_per_tariff_click": round((len(user_ids & paid_telegram_user_ids) / len(user_ids)) if user_ids else 0.0, 6),
+            "paid_users": len(user_ids & paid_telegram_user_ids_by_tariff.get(tariff, set())),
+            "paid_per_tariff_click": round(
+                (
+                    len(user_ids & paid_telegram_user_ids_by_tariff.get(tariff, set())) / len(user_ids)
+                )
+                if user_ids
+                else 0.0,
+                6,
+            ),
         }
         for tariff, user_ids in grouped.items()
     ]
+
+
+def _build_paid_per_tariff_click_from_transitions(
+    session: Session,
+    filters: TrafficAnalyticsFilters,
+    paid_telegram_user_ids_by_tariff: dict[str, set[int]],
+) -> list[dict]:
+    grouped: dict[str, set[int]] = {tariff: set() for tariff in _FUNNEL_TARIFFS}
+    admin_ids = _parse_admin_ids(settings.admin_ids)
+    query: Select[tuple[ScreenTransitionEvent]] = select(ScreenTransitionEvent).where(
+        ScreenTransitionEvent.trigger_type == ScreenTransitionTriggerType.CALLBACK,
+    )
+    if filters.from_dt:
+        query = query.where(ScreenTransitionEvent.created_at >= filters.from_dt)
+    if filters.to_dt:
+        query = query.where(ScreenTransitionEvent.created_at <= filters.to_dt)
+
+    rows = session.execute(query).scalars().all()
+    for row in rows:
+        telegram_user_id = int(row.telegram_user_id or 0)
+        if not telegram_user_id or telegram_user_id in admin_ids:
+            continue
+        tariff = _extract_tariff_from_trigger_value(row.trigger_value)
+        if not tariff:
+            continue
+        if filters.tariff and tariff != filters.tariff.upper():
+            continue
+        grouped[tariff].add(telegram_user_id)
+
+    return [
+        {
+            "tariff": tariff,
+            "tariff_click_users": len(user_ids),
+            "paid_users": len(user_ids & paid_telegram_user_ids_by_tariff.get(tariff, set())),
+            "paid_per_tariff_click": round(
+                (
+                    len(user_ids & paid_telegram_user_ids_by_tariff.get(tariff, set())) / len(user_ids)
+                )
+                if user_ids
+                else 0.0,
+                6,
+            ),
+        }
+        for tariff, user_ids in grouped.items()
+    ]
+
+
+def _extract_tariff_from_trigger_value(trigger_value: str | None) -> str | None:
+    candidate = str(trigger_value or "").strip()
+    match = _TARIFF_CALLBACK_PATTERN.match(candidate)
+    if not match:
+        return None
+    return match.group(1).upper()
+
+
+def _load_paid_telegram_user_ids_by_tariff(
+    session: Session,
+    filters: TrafficAnalyticsFilters,
+) -> dict[str, set[int]]:
+    order_filters = FinanceAnalyticsFilters(from_dt=filters.from_dt, to_dt=filters.to_dt, tariff=filters.tariff)
+    paid_orders = _load_provider_confirmed_orders(session, order_filters)
+    if not paid_orders:
+        return {tariff: set() for tariff in _FUNNEL_TARIFFS}
+
+    user_by_id = {
+        user.id: user.telegram_user_id
+        for user in session.execute(select(User).where(User.id.in_({item.user_id for item in paid_orders}))).scalars().all()
+    }
+    grouped: dict[str, set[int]] = {tariff: set() for tariff in _FUNNEL_TARIFFS}
+    for order in paid_orders:
+        telegram_user_id = user_by_id.get(order.user_id)
+        if telegram_user_id is None:
+            continue
+        grouped.setdefault(order.tariff, set()).add(telegram_user_id)
+    return grouped
 
 
 def _build_first_touch_conversions(

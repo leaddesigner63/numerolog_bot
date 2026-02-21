@@ -722,11 +722,73 @@ class AdminAnalyticsTests(unittest.TestCase):
             result = build_traffic_analytics(session, TrafficAnalyticsFilters(from_dt=base_time - timedelta(days=1), to_dt=base_time + timedelta(days=1)))
 
         by_tariff = {item["tariff"]: item for item in result["paid_per_tariff_click"]}
-        self.assertEqual(by_tariff["T1"]["tariff_click_users"], 2)
-        self.assertEqual(by_tariff["T1"]["paid_users"], 1)
-        self.assertEqual(by_tariff["T1"]["paid_per_tariff_click"], 0.5)
-        self.assertEqual(by_tariff["T2"]["tariff_click_users"], 1)
+        self.assertEqual(by_tariff["T1"]["tariff_click_users"], 0)
+        self.assertEqual(by_tariff["T1"]["paid_users"], 0)
+        self.assertEqual(by_tariff["T1"]["paid_per_tariff_click"], 0.0)
+        self.assertEqual(by_tariff["T2"]["tariff_click_users"], 0)
         self.assertEqual(by_tariff["T2"]["paid_users"], 0)
+
+        by_tariff_first_touch = {item["tariff"]: item for item in result["paid_per_tariff_click_first_touch"]}
+        self.assertEqual(by_tariff_first_touch["T1"]["tariff_click_users"], 2)
+        self.assertEqual(by_tariff_first_touch["T1"]["paid_users"], 1)
+        self.assertEqual(by_tariff_first_touch["T1"]["paid_per_tariff_click"], 0.5)
+        self.assertEqual(by_tariff_first_touch["T2"]["tariff_click_users"], 1)
+        self.assertEqual(by_tariff_first_touch["T2"]["paid_users"], 0)
+
+
+    def test_traffic_analytics_tariff_click_from_transition_when_first_touch_placement_empty(self) -> None:
+        base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        from app.db.models import PaymentConfirmationSource, PaymentProvider, Tariff, User, UserFirstTouchAttribution, Order, OrderStatus
+
+        with self.Session() as session:
+            session.add(User(id=501, telegram_user_id=5501))
+            session.add(
+                UserFirstTouchAttribution(
+                    telegram_user_id=5501,
+                    source="vk",
+                    campaign="cmp_z",
+                    placement="",
+                    start_payload="lnd.src_vk.cmp_cmp_z",
+                    captured_at=base_time,
+                )
+            )
+            session.add(
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=5501,
+                    from_screen_id="S1",
+                    to_screen_id="S3",
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                    trigger_value="tariff:T2",
+                    metadata_json={"tariff": "T2"},
+                )
+            )
+            session.add(
+                Order(
+                    user_id=501,
+                    tariff=Tariff.T2,
+                    amount=990,
+                    currency="RUB",
+                    provider=PaymentProvider.PRODAMUS,
+                    status=OrderStatus.PAID,
+                    payment_confirmed=True,
+                    payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                    payment_confirmed_at=base_time + timedelta(hours=1),
+                )
+            )
+            session.flush()
+            event = session.query(ScreenTransitionEvent).one()
+            event.created_at = base_time
+            session.commit()
+
+            result = build_traffic_analytics(session, TrafficAnalyticsFilters(from_dt=base_time - timedelta(days=1), to_dt=base_time + timedelta(days=1)))
+
+        by_tariff = {item["tariff"]: item for item in result["paid_per_tariff_click"]}
+        self.assertEqual(by_tariff["T2"]["tariff_click_users"], 1)
+        self.assertEqual(by_tariff["T2"]["paid_users"], 1)
+        self.assertEqual(by_tariff["T2"]["paid_per_tariff_click"], 1.0)
+
+        by_tariff_first_touch = {item["tariff"]: item for item in result["paid_per_tariff_click_first_touch"]}
+        self.assertEqual(by_tariff_first_touch["T2"]["tariff_click_users"], 0)
 
 
 if __name__ == "__main__":
