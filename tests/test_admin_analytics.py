@@ -182,6 +182,61 @@ class AdminAnalyticsTests(unittest.TestCase):
         self.assertEqual(result["funnel_by_tariff"]["T2"][2]["users"], 1)
         self.assertEqual(result["funnel_by_tariff"]["T0"], [])
 
+    def test_tariff_filter_t2_uses_metadata_trigger_and_context_fallback(self) -> None:
+        base_time = datetime(2026, 1, 2, tzinfo=timezone.utc)
+        with self.Session() as session:
+            session.add_all(
+                [
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=301,
+                        from_screen_id="S1",
+                        to_screen_id="S2",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        trigger_value="tariff:T2",
+                        metadata_json={},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=301,
+                        from_screen_id="S2",
+                        to_screen_id="S3",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=301,
+                        from_screen_id="S3",
+                        to_screen_id="S4",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"reason": "service_transition"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=302,
+                        from_screen_id="S1",
+                        to_screen_id="S2",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T1"},
+                    ),
+                ]
+            )
+            session.flush()
+            events = session.query(ScreenTransitionEvent).order_by(ScreenTransitionEvent.id.asc()).all()
+            for idx, event in enumerate(events):
+                event.created_at = base_time + timedelta(minutes=idx)
+            session.commit()
+
+            result = build_screen_transition_analytics(
+                session,
+                AnalyticsFilters(tariff="T2"),
+            )
+
+        self.assertEqual(result["summary"]["events"], 3)
+        self.assertEqual(result["summary"]["users"], 1)
+
+        matrix_pairs = {(item["from_screen"], item["to_screen"]) for item in result["transition_matrix"]}
+        self.assertIn(("S1", "S2"), matrix_pairs)
+        self.assertIn(("S2", "S3"), matrix_pairs)
+        self.assertIn(("S3", "S4"), matrix_pairs)
+
     def test_finance_layer_provider_confirmed_only(self) -> None:
         base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
         from app.db.models import (

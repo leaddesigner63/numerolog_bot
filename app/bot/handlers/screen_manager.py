@@ -220,7 +220,10 @@ class ScreenManager:
         state = self._store.get_state(user_id)
         from_screen = state.screen_id
         to_screen = screen_id
-        safe_metadata = dict(metadata_json or {})
+        safe_metadata = self._enrich_metadata_with_tariff(
+            metadata_json=metadata_json,
+            state_data=state.data,
+        )
 
         try:
             content = self.render_screen(screen_id, user_id, state.data)
@@ -519,6 +522,11 @@ class ScreenManager:
         transition_status: ScreenTransitionStatus | str | None,
         metadata_json: dict[str, Any] | None = None,
     ) -> None:
+        state_data = self._store.get_state(user_id).data
+        safe_metadata = self._enrich_metadata_with_tariff(
+            metadata_json=metadata_json,
+            state_data=state_data,
+        )
         try:
             with get_session() as session:
                 event = ScreenTransitionEvent.build_fail_safe(
@@ -528,7 +536,7 @@ class ScreenManager:
                     trigger_type=trigger_type,
                     trigger_value=trigger_value,
                     transition_status=transition_status,
-                    metadata_json=dict(metadata_json or {}),
+                    metadata_json=safe_metadata,
                 )
                 session.add(event)
                 session.flush()
@@ -554,7 +562,11 @@ class ScreenManager:
         transition_status: ScreenTransitionStatus | str | None,
         metadata_json: dict[str, Any] | None,
     ) -> None:
-        safe_metadata = dict(metadata_json or {})
+        state_data = self._store.get_state(user_id).data
+        safe_metadata = self._enrich_metadata_with_tariff(
+            metadata_json=metadata_json,
+            state_data=state_data,
+        )
         if from_screen is None and to_screen == "S1":
             safe_metadata.setdefault("reason", "funnel_entry")
             self._record_transition_event(
@@ -711,6 +723,20 @@ class ScreenManager:
 
     def get_state(self, user_id: int) -> ScreenState:
         return self._store.get_state(user_id)
+
+    def _enrich_metadata_with_tariff(
+        self,
+        *,
+        metadata_json: dict[str, Any] | None,
+        state_data: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        safe_metadata = dict(metadata_json or {})
+        if safe_metadata.get("tariff"):
+            return safe_metadata
+        selected_tariff = (state_data or {}).get("selected_tariff")
+        if selected_tariff:
+            safe_metadata["tariff"] = selected_tariff
+        return safe_metadata
 
 
     def record_transition_event_safe(
