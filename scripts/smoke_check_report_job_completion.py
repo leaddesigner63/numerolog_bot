@@ -7,7 +7,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import Text, cast, delete, or_, select
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -16,16 +16,24 @@ if str(PROJECT_ROOT) not in sys.path:
 from app.bot.handlers.start import _create_paid_order_report_job
 from app.core.config import settings
 from app.db.models import (
+    AdminFinanceEvent,
+    FeedbackMessage,
+    FreeLimit,
+    MarketingConsentEvent,
     Order,
     OrderFulfillmentStatus,
     OrderStatus,
     PaymentConfirmationSource,
     PaymentProvider,
+    QuestionnaireResponse,
+    Report,
     ReportJob,
     ReportJobStatus,
     ScreenStateRecord,
+    SupportDialogMessage,
     Tariff,
     User,
+    UserFirstTouchAttribution,
     UserProfile,
 )
 from app.db.session import get_session
@@ -92,6 +100,7 @@ def _prepare_paid_order_and_job() -> tuple[int, int, int, int]:
                 data={},
             )
         state.data = {
+            "smoke_marker": "report_job_completion",
             "selected_tariff": Tariff.T1.value,
             "order_id": str(order.id),
             "profile": {
@@ -121,16 +130,144 @@ def _prepare_paid_order_and_job() -> tuple[int, int, int, int]:
         return user.id, telegram_user_id, order.id, job.id
 
 
-def _cleanup_smoke_entities(*, user_id: int, telegram_user_id: int) -> None:
+def _collect_smoke_entity_ids() -> tuple[set[int], set[int], set[int], set[int]]:
     with get_session() as session:
-        session.execute(delete(UserProfile).where(UserProfile.user_id == user_id))
-        session.execute(delete(User).where(User.id == user_id))
-        session.execute(
-            delete(ScreenStateRecord).where(ScreenStateRecord.telegram_user_id == telegram_user_id)
+        smoke_order_ids = set(
+            session.execute(
+                select(Order.id).where(Order.provider_payment_id.like("smoke-%"))
+            )
+            .scalars()
+            .all()
         )
-        session.flush()
+        smoke_order_user_ids = set(
+            session.execute(
+                select(Order.user_id).where(Order.provider_payment_id.like("smoke-%"))
+            )
+            .scalars()
+            .all()
+        )
 
-    _log("cleanup_done", user_id=user_id, telegram_user_id=telegram_user_id)
+        smoke_profile_user_ids = set(
+            session.execute(select(UserProfile.user_id).where(UserProfile.name == "Smoke Check"))
+            .scalars()
+            .all()
+        )
+
+        smoke_state_telegram_ids = set(
+            session.execute(
+                select(ScreenStateRecord.telegram_user_id).where(
+                    cast(ScreenStateRecord.data, Text).like('%"smoke_marker": "report_job_completion"%')
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        smoke_state_user_ids = set(
+            session.execute(
+                select(User.id).where(User.telegram_user_id.in_(smoke_state_telegram_ids))
+            )
+            .scalars()
+            .all()
+        )
+
+        smoke_user_ids = smoke_order_user_ids | smoke_profile_user_ids | smoke_state_user_ids
+        smoke_telegram_ids = set(
+            session.execute(select(User.telegram_user_id).where(User.id.in_(smoke_user_ids))).scalars().all()
+        ) | smoke_state_telegram_ids
+        smoke_order_ids |= set(
+            session.execute(select(Order.id).where(Order.user_id.in_(smoke_user_ids))).scalars().all()
+        )
+        smoke_report_ids = set(
+            session.execute(
+                select(Report.id).where(or_(Report.user_id.in_(smoke_user_ids), Report.order_id.in_(smoke_order_ids)))
+            )
+            .scalars()
+            .all()
+        )
+        smoke_job_ids = set(
+            session.execute(
+                select(ReportJob.id).where(
+                    or_(ReportJob.user_id.in_(smoke_user_ids), ReportJob.order_id.in_(smoke_order_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+    _log(
+        "cleanup_targets",
+        users=len(smoke_user_ids),
+        telegram_users=len(smoke_telegram_ids),
+        orders=len(smoke_order_ids),
+        reports=len(smoke_report_ids),
+        report_jobs=len(smoke_job_ids),
+    )
+    return smoke_user_ids, smoke_telegram_ids, smoke_order_ids, smoke_report_ids
+
+
+def _cleanup_smoke_entities() -> None:
+    smoke_user_ids, smoke_telegram_ids, smoke_order_ids, smoke_report_ids = _collect_smoke_entity_ids()
+
+    if not smoke_user_ids and not smoke_telegram_ids and not smoke_order_ids and not smoke_report_ids:
+        _log("cleanup_done", deleted_total=0)
+        return
+
+    deleted_counts: dict[str, int] = {}
+
+    def _delete(table_name: str, stmt) -> None:
+        with get_session() as session:
+            result = session.execute(stmt)
+            deleted_counts[table_name] = int(result.rowcount or 0)
+
+    _delete(
+        "support_dialog_messages",
+        delete(SupportDialogMessage).where(SupportDialogMessage.user_id.in_(smoke_user_ids)),
+    )
+
+    _delete(
+        "admin_finance_events",
+        delete(AdminFinanceEvent).where(AdminFinanceEvent.order_id.in_(smoke_order_ids)),
+    )
+    _delete(
+        "feedback_messages",
+        delete(FeedbackMessage).where(FeedbackMessage.user_id.in_(smoke_user_ids)),
+    )
+    _delete(
+        "questionnaire_responses",
+        delete(QuestionnaireResponse).where(QuestionnaireResponse.user_id.in_(smoke_user_ids)),
+    )
+    _delete(
+        "marketing_consent_events",
+        delete(MarketingConsentEvent).where(MarketingConsentEvent.user_id.in_(smoke_user_ids)),
+    )
+    _delete("free_limits", delete(FreeLimit).where(FreeLimit.user_id.in_(smoke_user_ids)))
+    _delete(
+        "user_first_touch_attribution",
+        delete(UserFirstTouchAttribution).where(
+            UserFirstTouchAttribution.telegram_user_id.in_(smoke_telegram_ids)
+        ),
+    )
+    _delete(
+        "report_jobs",
+        delete(ReportJob).where(or_(ReportJob.user_id.in_(smoke_user_ids), ReportJob.order_id.in_(smoke_order_ids))),
+    )
+    _delete(
+        "reports",
+        delete(Report).where(or_(Report.user_id.in_(smoke_user_ids), Report.id.in_(smoke_report_ids))),
+    )
+    _delete("orders", delete(Order).where(Order.id.in_(smoke_order_ids)))
+    _delete("user_profile", delete(UserProfile).where(UserProfile.user_id.in_(smoke_user_ids)))
+    _delete("users", delete(User).where(User.id.in_(smoke_user_ids)))
+    _delete(
+        "screen_states",
+        delete(ScreenStateRecord).where(ScreenStateRecord.telegram_user_id.in_(smoke_telegram_ids)),
+    )
+
+    for table_name, count in deleted_counts.items():
+        _log("cleanup_table", table=table_name, deleted=count)
+
+    _log("cleanup_done", deleted_total=sum(deleted_counts.values()))
 
 
 def _wait_for_completion(*, job_id: int, timeout_seconds: int, poll_interval_seconds: int) -> int:
@@ -187,6 +324,16 @@ def _wait_for_completion(*, job_id: int, timeout_seconds: int, poll_interval_sec
 
 
 def main() -> int:
+    if len(sys.argv) > 1 and sys.argv[1] == "cleanup-only":
+        _log("cleanup_only_start")
+        try:
+            _cleanup_smoke_entities()
+        except Exception as exc:
+            _log("cleanup_error", error=f"{exc.__class__.__name__}: {exc}")
+            return 1
+        _log("cleanup_only_done")
+        return 0
+
     timeout_seconds = max(30, _env_int("SMOKE_REPORT_JOB_TIMEOUT_SECONDS", 180))
     poll_interval_seconds = max(1, _env_int("SMOKE_REPORT_JOB_POLL_INTERVAL_SECONDS", 5))
 
@@ -205,15 +352,18 @@ def main() -> int:
         return 1
 
     _log("job_created", order_id=order_id, job_id=job_id)
-    result = _wait_for_completion(
-        job_id=job_id,
-        timeout_seconds=timeout_seconds,
-        poll_interval_seconds=poll_interval_seconds,
-    )
-
-    if user_id is not None and telegram_user_id is not None:
+    result = 1
+    try:
+        result = _wait_for_completion(
+            job_id=job_id,
+            timeout_seconds=timeout_seconds,
+            poll_interval_seconds=poll_interval_seconds,
+        )
+    except Exception as exc:
+        _log("wait_error", job_id=job_id, error=f"{exc.__class__.__name__}: {exc}")
+    finally:
         try:
-            _cleanup_smoke_entities(user_id=user_id, telegram_user_id=telegram_user_id)
+            _cleanup_smoke_entities()
         except Exception as exc:
             _log(
                 "cleanup_error",
