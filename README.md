@@ -40,7 +40,7 @@ app/
     report_safety.py  # фильтрация запрещённых слов, гарантий и красных зон
     report_service.py # сервис генерации отчёта и каркаса T0-T3
   db/                 # модели и подключение к БД
-    models.py         # включает report_jobs, service_heartbeats, support_dialog_messages, screen_transition_events и user_first_touch_attribution (first-touch атрибуция /start-пейлоада)
+    models.py         # включает report_jobs, service_heartbeats, support_dialog_messages, screen_transition_events, user_first_touch_attribution и технический флаг orders.is_smoke_check
   services/           # сервисы бизнес-логики API/бота
     admin_analytics.py # агрегации аналитики переходов + финансы + traffic first-touch (source/campaign/conversion)
     traffic_attribution.py # парсинг /start payload и сохранение first-touch атрибуции в user_first_touch_attribution
