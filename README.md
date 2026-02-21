@@ -55,6 +55,7 @@ scripts/              # вспомогательные скрипты
   smoke_check_landing.sh # smoke-check доступности лендинга/CTA/ассетов после деплоя
   smoke_check_report_job_completion.sh # post-deploy smoke-check paid-заказа: создание ReportJob и ожидание COMPLETED
   smoke_check_report_job_completion.py # сценарий smoke-check paid order -> ReportJob -> COMPLETED с подробным логом; устойчив к запуску из любого рабочего каталога и очищает созданные smoke-данные после проверки
+  db/check_smoke_residuals.py # обязательный post-check остатков smoke-данных в ключевых таблицах после cleanup; печатает детализацию и возвращает ошибку при count > 0
   smoke_check_checkout_flow.sh # smoke-check checkout-флоу; при отсутствии pytest пытается установить зависимости автоматически
   db/archive_duplicate_reports_by_order.py # архивирование дублей reports.order_id перед миграцией уникального индекса
   db/backfill_screen_transition_tariff.py # one-off backfill metadata.tariff в screen_transition_events из trigger_value/соседних событий
@@ -1098,6 +1099,7 @@ journalctl -u <service> -n 200 --no-pager
 
 - Workflow `deploy_production` использует SSH keepalive (`ServerAliveInterval`/`ServerAliveCountMax`) и fallback-проверку маркера `$DEPLOY_PATH/.last_deploy_success`, чтобы ложные сетевые обрывы в конце сессии не ломали релиз.
 - Маркер успешного деплоя записывается в конце `scripts/deploy.sh`.
+- После обязательного `cleanup-only` шага деплой всегда запускает `scripts/db/check_smoke_residuals.py`; если в ключевых таблицах остались smoke-записи (`count > 0`), деплой завершается с ошибкой и детализацией по таблицам.
 
 ## Обновление стабильности админки (2026-02-20)
 - В фильтрах исключения deploy smoke-check вынесена предварительная загрузка `user_id` в память одного запроса, чтобы не выполнять повторно тяжёлый подзапрос для каждого KPI в `/admin/api/overview`.

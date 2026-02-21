@@ -217,6 +217,29 @@ else
   exit 1
 fi
 
+if [ -f scripts/db/check_smoke_residuals.py ]; then
+  POSTCHECK_PYTHON="python3"
+  if [ -x .venv/bin/python ]; then
+    POSTCHECK_PYTHON=".venv/bin/python"
+  elif [ -x venv/bin/python ]; then
+    POSTCHECK_PYTHON="venv/bin/python"
+  fi
+
+  echo "Запуск post-check остатков smoke-данных после cleanup"
+  set +e
+  PYTHONPATH="$DEPLOY_PATH:${PYTHONPATH:-}" "$POSTCHECK_PYTHON" scripts/db/check_smoke_residuals.py
+  postcheck_status=$?
+  set -e
+
+  if [ "$postcheck_status" -ne 0 ]; then
+    echo "ОШИБКА: post-check smoke-остатков после cleanup завершился неуспешно (код=$postcheck_status)."
+    exit 1
+  fi
+else
+  echo "scripts/db/check_smoke_residuals.py не найден. Обязательный post-check smoke-остатков после cleanup не выполнен."
+  exit 1
+fi
+
 if [ "$smoke_status" -ne 0 ]; then
   echo "ОШИБКА: smoke-check paid order -> ReportJob -> COMPLETED завершился с ошибкой (код=$smoke_status)."
   exit "$smoke_status"
