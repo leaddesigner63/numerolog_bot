@@ -22,7 +22,7 @@ app/
       screen_manager.py # менеджер экранов (очищает чат, ведёт safe-лог переходов экранов и funnel entry/exit)
       screen_images.py # команда /fill_screen_images для генерации картинок экранов
       fallback.py     # обработчик сообщений/кнопок без сценария (очистка и возврат на старт)
-    report_jobs_worker.py # фоновые задания генерации отчётов (pending/in_progress) + heartbeat в service_heartbeats
+    report_jobs_worker.py # фоновые задания генерации отчётов (pending/in_progress), heartbeat и авто-нуджи (resume + checkout-value)
     markdown.py       # рендеринг Markdown-разметки в Telegram-HTML
     keyboards.py      # общее правило раскладки inline-кнопок (длинные кнопки: максимум 2 в строке)
     screens.py        # сценарные экраны S0-S15 + S_MARKETING_CONSENT (согласие на рассылку)
@@ -191,6 +191,11 @@ PDF_STRICT_TEXT_MODE=
 # Report job worker (фоновые задания генерации отчёта)
 REPORT_JOB_POLL_INTERVAL_SECONDS=5
 REPORT_JOB_LOCK_TIMEOUT_SECONDS=600
+RESUME_NUDGE_DELAY_HOURS=6
+RESUME_NUDGE_CAMPAIGN=resume_after_stall_v1
+CHECKOUT_VALUE_NUDGE_MIN_DELAY_MINUTES=10
+CHECKOUT_VALUE_NUDGE_MAX_DELAY_MINUTES=30
+CHECKOUT_VALUE_NUDGE_CAMPAIGN=checkout_value_nudge_v1
 # Стоимость тарифов в рублях (настраивается через .env)
 TARIFF_T0_PRICE_RUB=0
 TARIFF_T1_PRICE_RUB=560

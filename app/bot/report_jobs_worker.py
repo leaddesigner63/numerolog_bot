@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import random
 import socket
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -41,6 +42,7 @@ class ReportJobWorker:
             try:
                 await self._process_pending_jobs(bot)
                 await self._process_stalled_users(bot)
+                await self._process_checkout_value_nudges(bot)
             except Exception as exc:
                 self._logger.warning(
                     "report_job_worker_failed",
@@ -138,6 +140,92 @@ class ReportJobWorker:
                 except Exception as exc:
                     self._logger.warning(
                         "resume_nudge_process_failed",
+                        extra={"telegram_user_id": state_row.telegram_user_id, "error": str(exc)},
+                    )
+
+    async def _process_checkout_value_nudges(self, bot: Bot) -> None:
+        now = datetime.now(timezone.utc)
+        target_screens = {"S2", "S4"}
+        min_delay_minutes = max(
+            int(getattr(settings, "checkout_value_nudge_min_delay_minutes", 10) or 10),
+            1,
+        )
+        max_delay_minutes = max(
+            int(getattr(settings, "checkout_value_nudge_max_delay_minutes", 30) or 30),
+            min_delay_minutes,
+        )
+        campaign = str(
+            getattr(settings, "checkout_value_nudge_campaign", "checkout_value_nudge_v1")
+            or "checkout_value_nudge_v1"
+        )
+
+        with get_session() as session:
+            state_rows = session.execute(select(ScreenStateRecord)).scalars().all()
+            for state_row in state_rows:
+                try:
+                    state_data = dict(state_row.data or {})
+                    if state_data.get("checkout_value_nudge_sent_at"):
+                        continue
+
+                    if state_row.screen_id in target_screens and not state_data.get("checkout_value_nudge_first_seen_at"):
+                        delay_minutes = random.randint(min_delay_minutes, max_delay_minutes)
+                        due_at = now + timedelta(minutes=delay_minutes)
+                        state_data["checkout_value_nudge_first_seen_at"] = now.isoformat()
+                        state_data["checkout_value_nudge_due_at"] = due_at.isoformat()
+                        state_data["checkout_value_nudge_target_screen_id"] = state_row.screen_id
+                        state_data["checkout_value_nudge_delay_minutes"] = delay_minutes
+                        state_row.data = state_data
+                        session.add(state_row)
+
+                    due_at = self._parse_dt(state_data.get("checkout_value_nudge_due_at"))
+                    if not due_at or now < due_at:
+                        continue
+
+                    user = session.execute(
+                        select(User).where(User.telegram_user_id == state_row.telegram_user_id)
+                    ).scalar_one_or_none()
+                    if user is None:
+                        continue
+                    if self._has_paid_order(session, user.id):
+                        continue
+
+                    deep_link = self._build_resume_deeplink(state_data=state_data)
+                    message_text = (
+                        "Ваш персональный разбор уже почти готов — после оплаты откроется вся практическая ценность и рекомендации.\n"
+                        f"{deep_link}"
+                    )
+                    send_result = await send_marketing_message(
+                        bot=bot,
+                        session=session,
+                        user_id=user.id,
+                        campaign=campaign,
+                        message_text=message_text,
+                    )
+                    if not send_result.sent:
+                        continue
+
+                    sent_at = now.isoformat()
+                    state_data["checkout_value_nudge_sent_at"] = sent_at
+                    state_data["checkout_value_nudge_campaign"] = campaign
+                    state_row.data = state_data
+                    session.add(state_row)
+                    screen_manager.record_transition_event_safe(
+                        user_id=state_row.telegram_user_id,
+                        from_screen=state_data.get("checkout_value_nudge_target_screen_id"),
+                        to_screen=state_data.get("checkout_value_nudge_target_screen_id") or "UNKNOWN",
+                        trigger_type="system",
+                        trigger_value="checkout_value_nudge:sent",
+                        transition_status="success",
+                        metadata_json={
+                            "campaign": campaign,
+                            "reason": "checkout_value_nudge_sent",
+                            "tariff": state_data.get("selected_tariff"),
+                            "delay_minutes": state_data.get("checkout_value_nudge_delay_minutes"),
+                        },
+                    )
+                except Exception as exc:
+                    self._logger.warning(
+                        "checkout_value_nudge_process_failed",
                         extra={"telegram_user_id": state_row.telegram_user_id, "error": str(exc)},
                     )
 
