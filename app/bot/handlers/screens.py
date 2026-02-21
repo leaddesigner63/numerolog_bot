@@ -32,6 +32,7 @@ from app.bot.screen_images import (
     S4_SCENARIO_STATE_KEY,
 )
 from app.core.config import settings
+from app.core.report_text_pipeline import build_canonical_report_text
 from app.core.timezone import APP_TIMEZONE, as_app_timezone, format_app_datetime, now_app_timezone
 from app.core.pdf_service import pdf_service
 from app.core.report_document import report_document_builder
@@ -1301,13 +1302,21 @@ def _get_report_pdf_bytes(session, report: Report) -> bytes | None:
         pdf_bytes = pdf_service.load_pdf(report.pdf_storage_key)
     if pdf_bytes is None:
         try:
-            report_document = report_document_builder.build(
+            canonical_report_text = build_canonical_report_text(
                 report.report_text or "",
+                tariff=(
+                    report.tariff.value
+                    if isinstance(report.tariff, Tariff)
+                    else str(report.tariff or "unknown")
+                ),
+            )
+            report_document = report_document_builder.build(
+                canonical_report_text,
                 tariff=report.tariff,
                 meta=_get_report_pdf_meta(report),
             )
             pdf_bytes = pdf_service.generate_pdf(
-                report.report_text or "",
+                canonical_report_text,
                 tariff=report.tariff,
                 meta=_get_report_pdf_meta(report),
                 report_document=report_document,
