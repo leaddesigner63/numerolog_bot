@@ -263,6 +263,7 @@ class Order(Base):
         Enum(PaymentProvider, values_callable=_enum_values, name="paymentprovider")
     )
     provider_payment_id: Mapped[str | None] = mapped_column(String(255), index=True)
+    is_smoke_check: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
     status: Mapped[OrderStatus] = mapped_column(
         Enum(OrderStatus, values_callable=_enum_values, name="orderstatus"), index=True
     )
