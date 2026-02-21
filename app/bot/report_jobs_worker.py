@@ -255,6 +255,7 @@ class ReportJobWorker:
                 screen_manager.update_state(
                     telegram_user_id,
                     report_text=report.report_text,
+                    report_text_canonical=screens_handler._get_report_text_canonical(report),
                     report_model=report.model_used.value if report.model_used else None,
                 )
                 await screens_handler.show_post_report_screen(

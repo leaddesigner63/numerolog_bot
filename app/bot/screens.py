@@ -1041,7 +1041,8 @@ def screen_s6(state: dict[str, Any]) -> ScreenContent:
 
 
 def screen_s7(state: dict[str, Any]) -> ScreenContent:
-    report_text = build_canonical_report_text(
+    canonical_text_from_state = (state.get("report_text_canonical") or "").strip()
+    report_text = canonical_text_from_state or build_canonical_report_text(
         (state.get("report_text") or "").strip(),
         tariff=str(state.get("selected_tariff") or "unknown"),
     )
@@ -1307,7 +1308,8 @@ def screen_s12(state: dict[str, Any]) -> ScreenContent:
 
 def screen_s13(state: dict[str, Any]) -> ScreenContent:
     report_meta = state.get("report_meta") or {}
-    report_text = build_canonical_report_text(
+    canonical_text_from_state = (state.get("report_text_canonical") or "").strip()
+    report_text = canonical_text_from_state or build_canonical_report_text(
         (state.get("report_text") or "").strip(),
         tariff=str(report_meta.get("tariff") or state.get("selected_tariff") or "unknown"),
     )

@@ -324,6 +324,7 @@ class Report(Base):
         Enum(Tariff, values_callable=_enum_values, name="tariff"), index=True
     )
     report_text: Mapped[str] = mapped_column(Text)
+    report_text_canonical: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

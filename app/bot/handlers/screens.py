@@ -138,6 +138,7 @@ def _reset_tariff_runtime_state(telegram_user_id: int) -> None:
         report_job_status=None,
         report_job_attempts=None,
         report_text=None,
+        report_text_canonical=None,
         report_model=None,
         report_meta=None,
     )
@@ -670,6 +671,7 @@ async def _show_reports_list_with_refresh(callback: CallbackQuery) -> None:
     screen_manager.update_state(
         callback.from_user.id,
         report_text=None,
+        report_text_canonical=None,
         report_meta=None,
     )
     await _show_screen_for_callback(
@@ -950,11 +952,34 @@ def _refresh_report_state(
         .first()
     )
     if report:
+        canonical_report_text = report.report_text_canonical or build_canonical_report_text(
+            report.report_text or "",
+            tariff=(
+                report.tariff.value
+                if isinstance(report.tariff, Tariff)
+                else str(report.tariff or "unknown")
+            ),
+        )
         screen_manager.update_state(
             telegram_user_id,
             report_text=report.report_text,
+            report_text_canonical=canonical_report_text,
             report_model=report.model_used.value if report.model_used else None,
         )
+
+
+def _get_report_text_canonical(report: Report) -> str:
+    report_text_canonical = getattr(report, "report_text_canonical", None)
+    if report_text_canonical:
+        return report_text_canonical
+    return build_canonical_report_text(
+        getattr(report, "report_text", "") or "",
+        tariff=(
+            report.tariff.value
+            if isinstance(report.tariff, Tariff)
+            else str(report.tariff or "unknown")
+        ),
+    )
 
 
 def _refresh_report_job_state(
@@ -1302,14 +1327,7 @@ def _get_report_pdf_bytes(session, report: Report) -> bytes | None:
         pdf_bytes = pdf_service.load_pdf(report.pdf_storage_key)
     if pdf_bytes is None:
         try:
-            canonical_report_text = build_canonical_report_text(
-                report.report_text or "",
-                tariff=(
-                    report.tariff.value
-                    if isinstance(report.tariff, Tariff)
-                    else str(report.tariff or "unknown")
-                ),
-            )
+            canonical_report_text = _get_report_text_canonical(report)
             report_document = report_document_builder.build(
                 canonical_report_text,
                 tariff=report.tariff,
@@ -2240,6 +2258,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             screen_manager.update_state(
                 callback.from_user.id,
                 report_text=None,
+                report_text_canonical=None,
                 report_model=None,
                 report_meta=None,
                 profile_flow=None,
@@ -2508,6 +2527,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             screen_manager.update_state(
                 callback.from_user.id,
                 report_text=report.report_text,
+                report_text_canonical=_get_report_text_canonical(report),
                 report_meta=_report_meta_payload(report),
             )
         await _ensure_report_delivery(callback, "S13")
@@ -2535,6 +2555,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 callback.from_user.id,
                 report_meta=_report_meta_payload(report),
                 report_text=report.report_text,
+                report_text_canonical=_get_report_text_canonical(report),
                 report_delete_scope="single",
             )
         await _show_screen_for_callback(
@@ -2562,6 +2583,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             report_delete_scope="all",
             report_meta=None,
             report_text=None,
+            report_text_canonical=None,
         )
         await _show_screen_for_callback(
             callback,
@@ -2593,6 +2615,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         screen_manager.update_state(
             callback.from_user.id,
             report_text=None,
+            report_text_canonical=None,
             report_meta=None,
             report_delete_scope=None,
         )
@@ -2616,6 +2639,7 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         screen_manager.update_state(
             callback.from_user.id,
             report_text=None,
+            report_text_canonical=None,
             report_meta=None,
             report_delete_scope=None,
         )
