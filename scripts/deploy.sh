@@ -162,12 +162,64 @@ else
   echo "scripts/smoke_check_landing.sh не найден, smoke-check пропущен."
 fi
 
+smoke_status=0
 if [ -x scripts/smoke_check_report_job_completion.sh ]; then
-  echo "Запуск smoke-check paid order -> ReportJob -> COMPLETED"
+  echo "Запуск smoke-check paid order -> ReportJob -> COMPLETED (этап после деплоя)"
+  set +e
   bash scripts/smoke_check_report_job_completion.sh
+  smoke_status=$?
+  set -e
+  if [ "$smoke_status" -ne 0 ]; then
+    echo "Smoke-check ReportJob завершился с ошибкой (код=$smoke_status). Переходим к обязательной очистке после деплоя."
+  fi
 else
   echo "scripts/smoke_check_report_job_completion.sh не найден или не исполняемый."
   exit 1
+fi
+
+cleanup_before_line=""
+cleanup_after_line=""
+if [ -x scripts/smoke_check_report_job_completion.sh ]; then
+  echo "Запуск обязательной cleanup-only очистки smoke-данных после деплоя"
+  cleanup_before_log="$(mktemp)"
+  set +e
+  bash scripts/smoke_check_report_job_completion.sh cleanup-only 2>&1 | tee "$cleanup_before_log"
+  cleanup_status=${PIPESTATUS[0]}
+  set -e
+  cleanup_before_line="$(awk '/stage=cleanup_targets/{line=$0} END{print line}' "$cleanup_before_log")"
+  rm -f -- "$cleanup_before_log"
+
+  if [ "$cleanup_status" -ne 0 ]; then
+    echo "ОШИБКА: cleanup-only очистка после деплоя завершилась неуспешно (код=$cleanup_status)."
+    exit 1
+  fi
+
+  cleanup_after_log="$(mktemp)"
+  set +e
+  bash scripts/smoke_check_report_job_completion.sh cleanup-only 2>&1 | tee "$cleanup_after_log"
+  cleanup_verify_status=${PIPESTATUS[0]}
+  set -e
+  cleanup_after_line="$(awk '/stage=cleanup_targets/{line=$0} END{print line}' "$cleanup_after_log")"
+  rm -f -- "$cleanup_after_log"
+
+  if [ "$cleanup_verify_status" -ne 0 ]; then
+    echo "ОШИБКА: проверка cleanup-only после деплоя завершилась неуспешно (код=$cleanup_verify_status)."
+    exit 1
+  fi
+
+  before_counts="${cleanup_before_line#*stage=cleanup_targets }"
+  after_counts="${cleanup_after_line#*stage=cleanup_targets }"
+  [ "$before_counts" = "$cleanup_before_line" ] && before_counts="unknown"
+  [ "$after_counts" = "$cleanup_after_line" ] && after_counts="unknown"
+  echo "Итог cleanup smoke-записей после деплоя: до очистки -> ${before_counts}; после очистки -> ${after_counts}."
+else
+  echo "scripts/smoke_check_report_job_completion.sh не найден или не исполняемый (не удалось выполнить cleanup-only после деплоя)."
+  exit 1
+fi
+
+if [ "$smoke_status" -ne 0 ]; then
+  echo "ОШИБКА: smoke-check paid order -> ReportJob -> COMPLETED завершился с ошибкой (код=$smoke_status)."
+  exit "$smoke_status"
 fi
 
 if [ -n "${WEBMASTER_PING_SCRIPT:-}" ] && [ -x "${WEBMASTER_PING_SCRIPT}" ]; then
