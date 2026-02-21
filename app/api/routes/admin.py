@@ -1175,7 +1175,11 @@ def admin_ui(request: Request) -> HTMLResponse:
           <div style="height: 12px;"></div>
           <div id="analyticsTrafficCampaign" class="muted">Нет данных</div>
           <div style="height: 12px;"></div>
+          <div class="muted">Клики тарифов в боте (из callback переходов tariff:T0..T3):</div>
           <div id="analyticsTrafficTariff" class="muted">Нет данных</div>
+          <div style="height: 12px;"></div>
+          <div class="muted">First-touch атрибуция входа (placement tariff_t*):</div>
+          <div id="analyticsTrafficTariffFirstTouch" class="muted">Нет данных</div>
         </div>
         <div class="analytics-block">
           <div class="analytics-title">Воронка по шагам (агрегат + тарифы)</div>
@@ -3092,7 +3096,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       `;
     }
 
-    function renderTrafficTables(sourceRows, campaignRows, tariffRows) {
+    function renderTrafficTables(sourceRows, campaignRows, tariffRows, firstTouchTariffRows) {
       renderAnalyticsTable(
         "analyticsTrafficSource",
         ["Источник", "Пользователи", "Конверсия в оплату"],
@@ -3113,8 +3117,18 @@ def admin_ui(request: Request) -> HTMLResponse:
       );
       renderAnalyticsTable(
         "analyticsTrafficTariff",
-        ["Тариф", "Tariff click (users)", "Paid (users)", "Paid / tariff_click"],
+        ["Тариф", "Клик тарифа в боте (users)", "Paid по тому же тарифу (users)", "Paid / tariff_click"],
         (tariffRows || []).map((row) => [
+          {value: row.tariff || "—"},
+          {value: Number(row.tariff_click_users) || 0},
+          {value: Number(row.paid_users) || 0},
+          {value: formatPercent(row.paid_per_tariff_click)},
+        ])
+      );
+      renderAnalyticsTable(
+        "analyticsTrafficTariffFirstTouch",
+        ["Тариф", "First-touch placement click (users)", "Paid по тому же тарифу (users)", "Paid / first_touch_click"],
+        (firstTouchTariffRows || []).map((row) => [
           {value: row.tariff || "—"},
           {value: Number(row.tariff_click_users) || 0},
           {value: Number(row.paid_users) || 0},
@@ -3280,6 +3294,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         const trafficBySource = trafficSourceRes?.data?.by_source || [];
         const trafficByCampaign = trafficCampaignRes?.data?.by_campaign || [];
         const trafficByTariffClick = trafficSummary?.paid_per_tariff_click || [];
+        const trafficByTariffClickFirstTouch = trafficSummary?.paid_per_tariff_click_first_touch || [];
 
         const isEmpty = !matrixRows.length && !funnelRows.length && !dropoffRows.length;
         if (isEmpty) {
@@ -3300,7 +3315,7 @@ def admin_ui(request: Request) -> HTMLResponse:
 
         renderKpis(summary, funnelRows, dropoffRows);
         renderTrafficKpis(trafficSummary, trafficBySource);
-        renderTrafficTables(trafficBySource, trafficByCampaign, trafficByTariffClick);
+        renderTrafficTables(trafficBySource, trafficByCampaign, trafficByTariffClick, trafficByTariffClickFirstTouch);
         renderFunnelChart(funnelAggregateRows, funnelByTariff);
         renderFinanceSummary(financeSummary);
         renderAnalyticsTable(
@@ -3780,6 +3795,7 @@ class TrafficSummaryItem(BaseModel):
     users_started_total: int
     conversions: list[dict]
     paid_per_tariff_click: list[dict] = Field(default_factory=list)
+    paid_per_tariff_click_first_touch: list[dict] = Field(default_factory=list)
 
 
 class TrafficSourceItem(BaseModel):
@@ -3951,6 +3967,7 @@ def _safe_build_traffic_analytics(session: Session, filters: TrafficAnalyticsFil
         "users_by_source_campaign": [],
         "conversions": [],
         "paid_per_tariff_click": [],
+        "paid_per_tariff_click_first_touch": [],
     }
     try:
         return build_traffic_analytics(session, filters), []
@@ -4400,6 +4417,7 @@ def admin_traffic_summary(
             "users_started_total": result.get("users_started_total", 0),
             "conversions": result.get("conversions", []),
             "paid_per_tariff_click": result.get("paid_per_tariff_click", []),
+            "paid_per_tariff_click_first_touch": result.get("paid_per_tariff_click_first_touch", []),
         }
     ).model_dump(mode="json")
     return {

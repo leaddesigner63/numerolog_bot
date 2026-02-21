@@ -85,6 +85,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
                         from_screen_id="S0",
                         to_screen_id="S1",
                         trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        trigger_value="tariff:T2",
                         metadata_json={"tariff": "T2"},
                     ),
                     ScreenTransitionEvent.build_fail_safe(
@@ -92,6 +93,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
                         from_screen_id="S1",
                         to_screen_id="S5",
                         trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        trigger_value="tariff:T2",
                         metadata_json={"tariff": "T2"},
                     ),
                 ]
@@ -1295,6 +1297,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
                         from_screen_id="S1",
                         to_screen_id="S3",
                         trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        trigger_value="tariff:T2",
                         metadata_json={"tariff": "T2"},
                     ),
                     ScreenTransitionEvent.build_fail_safe(
@@ -1302,6 +1305,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
                         from_screen_id="S1",
                         to_screen_id="S3",
                         trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        trigger_value="tariff:T2",
                         metadata_json={"tariff": "T2"},
                     ),
                 ]
@@ -1337,6 +1341,8 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(by_tariff_click["T2"]["tariff_click_users"], 2)
         self.assertEqual(by_tariff_click["T2"]["paid_users"], 1)
         self.assertEqual(by_tariff_click["T2"]["paid_per_tariff_click"], 0.5)
+        by_tariff_click_first_touch = {item["tariff"]: item for item in summary_payload["data"]["summary"]["paid_per_tariff_click_first_touch"]}
+        self.assertEqual(by_tariff_click_first_touch["T2"]["tariff_click_users"], 2)
 
         by_source = self.client.get("/admin/api/analytics/traffic/by-source", params={"tariff": "T2", "top_n": 10})
         self.assertEqual(by_source.status_code, 200)
