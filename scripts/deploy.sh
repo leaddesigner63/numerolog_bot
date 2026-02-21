@@ -162,11 +162,38 @@ else
   echo "scripts/smoke_check_landing.sh не найден, smoke-check пропущен."
 fi
 
+WORKER_HEALTHCHECK_URL="${WORKER_HEALTHCHECK_URL:-http://127.0.0.1:8000/health/report-worker}"
+WORKER_HEALTHCHECK_ATTEMPTS="${WORKER_HEALTHCHECK_ATTEMPTS:-20}"
+WORKER_HEALTHCHECK_INTERVAL_SECONDS="${WORKER_HEALTHCHECK_INTERVAL_SECONDS:-3}"
+if command -v curl >/dev/null 2>&1; then
+  worker_health_ok=0
+  for ((attempt=1; attempt<=WORKER_HEALTHCHECK_ATTEMPTS; attempt++)); do
+    worker_response="$(curl --silent --show-error --max-time 5 "$WORKER_HEALTHCHECK_URL" || true)"
+    if [ -n "$worker_response" ] && echo "$worker_response" | grep -q '"alive":true'; then
+      echo "[OK] Worker healthcheck доступен: $WORKER_HEALTHCHECK_URL"
+      worker_health_ok=1
+      break
+    fi
+    echo "[WAIT] Worker healthcheck недоступен ($attempt/$WORKER_HEALTHCHECK_ATTEMPTS): $WORKER_HEALTHCHECK_URL"
+    sleep "$WORKER_HEALTHCHECK_INTERVAL_SECONDS"
+  done
+
+  if [ "$worker_health_ok" -ne 1 ]; then
+    echo "[FAIL] Worker healthcheck не прошёл: $WORKER_HEALTHCHECK_URL"
+    if command -v journalctl >/dev/null 2>&1; then
+      journalctl -u numerolog-bot.service -n 80 --no-pager || true
+    fi
+    exit 1
+  fi
+else
+  echo "[WARNING] curl не найден, worker healthcheck пропущен."
+fi
+
 smoke_status=0
 if [ -x scripts/smoke_check_report_job_completion.sh ]; then
   echo "Запуск smoke-check paid order -> ReportJob -> COMPLETED (этап после деплоя)"
   set +e
-  bash scripts/smoke_check_report_job_completion.sh
+  SMOKE_REPORT_JOB_TIMEOUT_SECONDS="${SMOKE_REPORT_JOB_TIMEOUT_SECONDS:-420}" bash scripts/smoke_check_report_job_completion.sh
   smoke_status=$?
   set -e
   if [ "$smoke_status" -ne 0 ]; then

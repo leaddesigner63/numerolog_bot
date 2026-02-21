@@ -277,7 +277,13 @@ python -m app.bot.polling
 RUNTIME_API_HEALTHCHECK_URL=http://127.0.0.1:8000/health
 RUNTIME_API_HEALTHCHECK_ATTEMPTS=20
 RUNTIME_API_HEALTHCHECK_INTERVAL_SECONDS=2
+WORKER_HEALTHCHECK_URL=http://127.0.0.1:8000/health/report-worker
+WORKER_HEALTHCHECK_ATTEMPTS=20
+WORKER_HEALTHCHECK_INTERVAL_SECONDS=3
+SMOKE_REPORT_JOB_TIMEOUT_SECONDS=420
 ```
+
+`deploy.sh` также ждёт `"alive": true` на worker-health endpoint перед запуском smoke-check paid order → ReportJob → COMPLETED. Это снижает ложные падения SSH-деплоя, когда API уже поднялся, а polling/worker ещё не успел обновить heartbeat.
 
 ## Яндекс.Метрика: проверка и эксплуатация
 
