@@ -13,6 +13,7 @@ from app.db.models import (
     OrderFulfillmentStatus,
     OrderStatus,
     PaymentProvider,
+    Report,
     Tariff,
     User,
 )
@@ -78,6 +79,34 @@ class ReportServiceOrderFulfillmentTests(unittest.TestCase):
             self.assertEqual(order.fulfillment_status, OrderFulfillmentStatus.COMPLETED)
             self.assertIsNotNone(order.fulfilled_at)
             self.assertIsNotNone(order.fulfilled_report_id)
+
+    def test_persist_report_handles_unique_conflict_for_order(self) -> None:
+        with self.SessionLocal() as session:
+            session.add(
+                Report(
+                    user_id=1,
+                    order_id=10,
+                    tariff=Tariff.T1,
+                    report_text="already-exists",
+                    report_text_canonical="already-exists",
+                )
+            )
+            session.commit()
+
+        report_service_module.report_service._persist_report(
+            user_id=1,
+            state={"selected_tariff": Tariff.T1.value, "order_id": "10"},
+            response=LLMResponse(text="новый", provider="gemini", model="flash"),
+            safety_flags={},
+        )
+
+        with self.SessionLocal() as session:
+            reports_count = (
+                session.query(Report)
+                .filter(Report.order_id == 10)
+                .count()
+            )
+            self.assertEqual(reports_count, 1)
 
 
 if __name__ == "__main__":

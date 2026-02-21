@@ -7,12 +7,14 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     Integer,
     BigInteger,
     JSON,
     Numeric,
     String,
     Text,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -317,6 +319,15 @@ class Order(Base):
 
 class Report(Base):
     __tablename__ = "reports"
+    __table_args__ = (
+        Index(
+            "ux_reports_order_id_not_null",
+            "order_id",
+            unique=True,
+            postgresql_where=text("order_id IS NOT NULL"),
+            sqlite_where=text("order_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(

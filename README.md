@@ -56,6 +56,7 @@ scripts/              # вспомогательные скрипты
   smoke_check_report_job_completion.sh # post-deploy smoke-check paid-заказа: создание ReportJob и ожидание COMPLETED
   smoke_check_report_job_completion.py # сценарий smoke-check paid order -> ReportJob -> COMPLETED с подробным логом; устойчив к запуску из любого рабочего каталога и очищает созданные smoke-данные после проверки
   smoke_check_checkout_flow.sh # smoke-check checkout-флоу; при отсутствии pytest пытается установить зависимости автоматически
+  db/archive_duplicate_reports_by_order.py # архивирование дублей reports.order_id перед миграцией уникального индекса
   generate_sitemap.py # генерация web/sitemap.xml с lastmod/changefreq/priority
 docs/
   screen_images_update_matrix.md # матрица актуализации экранных ассетов и список сценариев для замены изображений
@@ -222,11 +223,20 @@ python -m http.server 8080 --directory web
 
 - Для изменения логики раскладки кнопок используйте отдельный runbook: [`docs/deploy/autodeploy_keyboard_layout_step_by_step.md`](docs/deploy/autodeploy_keyboard_layout_step_by_step.md).
 
-5. Выполните миграции:
+5. Для релиза уникальности `reports.order_id` сначала выполните предмиграционную очистку дублей:
+
+```bash
+python scripts/db/archive_duplicate_reports_by_order.py --dry-run
+python scripts/db/archive_duplicate_reports_by_order.py
+```
+
+Далее выполните миграции:
 
 ```bash
 alembic upgrade head
 ```
+
+Подробный порядок релиза: `docs/release_notes/2026-02-21-report-order-id-unique.md`.
 
 6. Запустите API:
 
