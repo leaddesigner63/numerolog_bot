@@ -48,6 +48,28 @@ class InMemoryScreenStateStore:
         return self.state
 
 
+class ScreenManagerTariffMetadataTests(unittest.TestCase):
+    def test_enrich_metadata_uses_selected_tariff_from_state(self) -> None:
+        manager = ScreenManager(store=InMemoryScreenStateStore())
+
+        resolved = manager._enrich_metadata_with_tariff(
+            metadata_json={"reason": "service_transition"},
+            state_data={"selected_tariff": "T2"},
+        )
+
+        self.assertEqual(resolved.get("tariff"), "T2")
+
+    def test_enrich_metadata_keeps_existing_tariff(self) -> None:
+        manager = ScreenManager(store=InMemoryScreenStateStore())
+
+        resolved = manager._enrich_metadata_with_tariff(
+            metadata_json={"tariff": "T1"},
+            state_data={"selected_tariff": "T2"},
+        )
+
+        self.assertEqual(resolved.get("tariff"), "T1")
+
+
 class ScreenCleanupRetryTests(unittest.IsolatedAsyncioTestCase):
     async def test_retry_delete_message_eventually_succeeds(self) -> None:
         manager = ScreenManager()

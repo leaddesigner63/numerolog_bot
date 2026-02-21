@@ -348,11 +348,15 @@ def _build_paid_per_tariff_click_from_transitions(
         query = query.where(ScreenTransitionEvent.created_at <= filters.to_dt)
 
     rows = session.execute(query).scalars().all()
+    last_known_tariff_by_user: dict[int, str] = {}
     for row in rows:
         telegram_user_id = int(row.telegram_user_id or 0)
         if not telegram_user_id or telegram_user_id in admin_ids:
             continue
-        tariff = _extract_tariff_from_trigger_value(row.trigger_value)
+        tariff = _resolve_event_tariff(
+            row,
+            user_tariff_context=last_known_tariff_by_user,
+        )
         if not tariff:
             continue
         if filters.tariff and tariff != filters.tariff.upper():
@@ -383,6 +387,33 @@ def _extract_tariff_from_trigger_value(trigger_value: str | None) -> str | None:
     if not match:
         return None
     return match.group(1).upper()
+
+
+def _resolve_event_tariff(
+    event: ScreenTransitionEvent,
+    *,
+    user_tariff_context: dict[int, str] | None = None,
+    update_context: bool = True,
+) -> str | None:
+    metadata = event.metadata_json if isinstance(event.metadata_json, dict) else {}
+    metadata_tariff = str(metadata.get("tariff") or "").strip().upper()
+    if metadata_tariff in _FUNNEL_TARIFFS:
+        if update_context:
+            if user_tariff_context is not None:
+                user_tariff_context[int(event.telegram_user_id or 0)] = metadata_tariff
+        return metadata_tariff
+
+    trigger_tariff = _extract_tariff_from_trigger_value(event.trigger_value)
+    if trigger_tariff in _FUNNEL_TARIFFS:
+        if update_context:
+            if user_tariff_context is not None:
+                user_tariff_context[int(event.telegram_user_id or 0)] = trigger_tariff
+        return trigger_tariff
+
+    fallback_tariff = (user_tariff_context or {}).get(int(event.telegram_user_id or 0))
+    if fallback_tariff in _FUNNEL_TARIFFS:
+        return fallback_tariff
+    return None
 
 
 def _load_paid_telegram_user_ids_by_tariff(
@@ -645,14 +676,17 @@ def _load_events(session: Session, filters: AnalyticsFilters) -> list[EventPoint
 
     tariff_filter = filters.tariff.upper() if filters.tariff else None
     events: list[EventPoint] = []
+    last_known_tariff_by_user: dict[int, str] = {}
     screen_filter = filters.screen_ids
     for row in rows:
         telegram_user_id = row.telegram_user_id or 0
         if telegram_user_id in admin_ids:
             continue
-        metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
-        tariff_value = metadata.get("tariff")
-        if tariff_filter and str(tariff_value or "").upper() != tariff_filter:
+        resolved_tariff = _resolve_event_tariff(
+            row,
+            user_tariff_context=last_known_tariff_by_user,
+        )
+        if tariff_filter and str(resolved_tariff or "").upper() != tariff_filter:
             continue
         from_screen = _normalize_screen_id(row.from_screen_id)
         to_screen = _normalize_screen_id(row.to_screen_id)
@@ -666,7 +700,7 @@ def _load_events(session: Session, filters: AnalyticsFilters) -> list[EventPoint
                 from_screen=from_screen,
                 to_screen=to_screen,
                 trigger_type=(row.trigger_type.value if hasattr(row.trigger_type, "value") else str(row.trigger_type)),
-                tariff=str(tariff_value) if tariff_value is not None else None,
+                tariff=resolved_tariff,
                 created_at=created_at,
             )
         )

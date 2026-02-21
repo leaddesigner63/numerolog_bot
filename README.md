@@ -57,6 +57,7 @@ scripts/              # вспомогательные скрипты
   smoke_check_report_job_completion.py # сценарий smoke-check paid order -> ReportJob -> COMPLETED с подробным логом; устойчив к запуску из любого рабочего каталога и очищает созданные smoke-данные после проверки
   smoke_check_checkout_flow.sh # smoke-check checkout-флоу; при отсутствии pytest пытается установить зависимости автоматически
   db/archive_duplicate_reports_by_order.py # архивирование дублей reports.order_id перед миграцией уникального индекса
+  db/backfill_screen_transition_tariff.py # one-off backfill metadata.tariff в screen_transition_events из trigger_value/соседних событий
   generate_sitemap.py # генерация web/sitemap.xml с lastmod/changefreq/priority
 docs/
   screen_images_update_matrix.md # матрица актуализации экранных ассетов и список сценариев для замены изображений
