@@ -112,62 +112,32 @@ class AdminAnalyticsTests(unittest.TestCase):
         self.assertIn(("S1", "UNKNOWN"), duration_pairs)
 
 
+    def _seed_funnel_fixture_flow(self, session, *, user_id: int, tariff: str, final_screen: str) -> None:
+        events = [
+            ("S0", "S1"),
+            ("S1", "S2"),
+            ("S2", "S4_PROFILE"),
+            ("S4_AFTER_PAYMENT", "S3"),
+            ("S3", final_screen),
+        ]
+        session.add_all(
+            [
+                ScreenTransitionEvent.build_fail_safe(
+                    telegram_user_id=user_id,
+                    from_screen_id=from_screen,
+                    to_screen_id=to_screen,
+                    trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                    metadata_json={"tariff": tariff},
+                )
+                for from_screen, to_screen in events
+            ]
+        )
+
     def test_funnel_templates_by_tariff(self) -> None:
         base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
         with self.Session() as session:
-            session.add_all(
-                [
-                    ScreenTransitionEvent.build_fail_safe(
-                        telegram_user_id=11,
-                        from_screen_id="S0",
-                        to_screen_id="S1",
-                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
-                        metadata_json={"tariff": "T1"},
-                    ),
-                    ScreenTransitionEvent.build_fail_safe(
-                        telegram_user_id=11,
-                        from_screen_id="S1",
-                        to_screen_id="S3",
-                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
-                        metadata_json={"tariff": "T1"},
-                    ),
-                    ScreenTransitionEvent.build_fail_safe(
-                        telegram_user_id=11,
-                        from_screen_id="S3",
-                        to_screen_id="S6",
-                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
-                        metadata_json={"tariff": "T1"},
-                    ),
-                    ScreenTransitionEvent.build_fail_safe(
-                        telegram_user_id=22,
-                        from_screen_id="S0",
-                        to_screen_id="S1",
-                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
-                        metadata_json={"tariff": "T2"},
-                    ),
-                    ScreenTransitionEvent.build_fail_safe(
-                        telegram_user_id=22,
-                        from_screen_id="S1",
-                        to_screen_id="S5",
-                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
-                        metadata_json={"tariff": "T2"},
-                    ),
-                    ScreenTransitionEvent.build_fail_safe(
-                        telegram_user_id=22,
-                        from_screen_id="S5",
-                        to_screen_id="S3",
-                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
-                        metadata_json={"tariff": "T2"},
-                    ),
-                    ScreenTransitionEvent.build_fail_safe(
-                        telegram_user_id=22,
-                        from_screen_id="S3",
-                        to_screen_id="S7",
-                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
-                        metadata_json={"tariff": "T2"},
-                    ),
-                ]
-            )
+            self._seed_funnel_fixture_flow(session, user_id=11, tariff="T1", final_screen="S6")
+            self._seed_funnel_fixture_flow(session, user_id=22, tariff="T2", final_screen="S7")
             session.flush()
             events = session.query(ScreenTransitionEvent).order_by(ScreenTransitionEvent.id.asc()).all()
             for idx, event in enumerate(events):
@@ -177,10 +147,38 @@ class AdminAnalyticsTests(unittest.TestCase):
             result = build_screen_transition_analytics(session, AnalyticsFilters())
 
         self.assertIn("funnel_by_tariff", result)
-        self.assertEqual([item["step"] for item in result["funnel_by_tariff"]["T1"]], ["S0", "S1", "S3", "S6_OR_S7"])
-        self.assertEqual([item["step"] for item in result["funnel_by_tariff"]["T2"]], ["S0", "S1", "S5", "S3", "S6_OR_S7"])
+        self.assertEqual([item["step"] for item in result["funnel_by_tariff"]["T1"]], ["S0", "S1", "S2", "S4", "S3", "S6_OR_S7"])
+        self.assertEqual([item["step"] for item in result["funnel_by_tariff"]["T2"]], ["S0", "S1", "S2", "S4", "S3", "S6_OR_S7"])
         self.assertEqual(result["funnel_by_tariff"]["T2"][2]["users"], 1)
         self.assertEqual(result["funnel_by_tariff"]["T0"], [])
+
+    def test_funnel_conversion_between_s2_s4_s3_for_paid_flows(self) -> None:
+        base_time = datetime(2026, 1, 2, tzinfo=timezone.utc)
+        with self.Session() as session:
+            self._seed_funnel_fixture_flow(session, user_id=101, tariff="T1", final_screen="S6")
+            self._seed_funnel_fixture_flow(session, user_id=202, tariff="T3", final_screen="S7")
+            session.flush()
+            events = session.query(ScreenTransitionEvent).order_by(ScreenTransitionEvent.id.asc()).all()
+            for idx, event in enumerate(events):
+                event.created_at = base_time + timedelta(minutes=idx)
+            session.commit()
+
+            result = build_screen_transition_analytics(session, AnalyticsFilters())
+
+        t1_steps = {item["step"]: item for item in result["funnel_by_tariff"]["T1"]}
+        t3_steps = {item["step"]: item for item in result["funnel_by_tariff"]["T3"]}
+
+        self.assertEqual(t1_steps["S2"]["users"], 1)
+        self.assertEqual(t1_steps["S4"]["users"], 1)
+        self.assertEqual(t1_steps["S3"]["users"], 1)
+        self.assertEqual(t1_steps["S4"]["conversion_from_previous"], 1.0)
+        self.assertEqual(t1_steps["S3"]["conversion_from_previous"], 1.0)
+
+        self.assertEqual(t3_steps["S2"]["users"], 1)
+        self.assertEqual(t3_steps["S4"]["users"], 1)
+        self.assertEqual(t3_steps["S3"]["users"], 1)
+        self.assertEqual(t3_steps["S4"]["conversion_from_previous"], 1.0)
+        self.assertEqual(t3_steps["S3"]["conversion_from_previous"], 1.0)
 
     def test_tariff_filter_t2_uses_metadata_trigger_and_context_fallback(self) -> None:
         base_time = datetime(2026, 1, 2, tzinfo=timezone.utc)

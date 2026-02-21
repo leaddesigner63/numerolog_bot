@@ -30,16 +30,20 @@ _SCREEN_ID_PATTERN = re.compile(r"^S\d+(?:_T[0-3])?$")
 _FUNNEL_TARIFFS = ("T0", "T1", "T2", "T3")
 _TARIFF_CLICK_PLACEMENTS = {f"tariff_{tariff.lower()}": tariff for tariff in _FUNNEL_TARIFFS}
 _TARIFF_CALLBACK_PATTERN = re.compile(r"^tariff:(T[0-3])$", re.IGNORECASE)
+_SCREEN_BASE_ID_PATTERN = re.compile(r"^(S\d+)(?:_[A-Z0-9]+)+$")
 _FUNNEL_TEMPLATE_T0_T1: list[tuple[str, set[str]]] = [
     ("S0", {"S0"}),
     ("S1", {"S1"}),
+    ("S2", {"S2"}),
+    ("S4", {"S4"}),
     ("S3", {"S3"}),
     ("S6_OR_S7", {"S6", "S7"}),
 ]
 _FUNNEL_TEMPLATE_T2_T3: list[tuple[str, set[str]]] = [
     ("S0", {"S0"}),
     ("S1", {"S1"}),
-    ("S5", {"S5"}),
+    ("S2", {"S2"}),
+    ("S4", {"S4"}),
     ("S3", {"S3"}),
     ("S6_OR_S7", {"S6", "S7"}),
 ]
@@ -730,6 +734,9 @@ def _normalize_screen_id(screen_id: str | None) -> str:
         return _UNKNOWN_SCREEN
     if _SCREEN_ID_PATTERN.match(value):
         return value
+    base_match = _SCREEN_BASE_ID_PATTERN.match(value)
+    if base_match:
+        return base_match.group(1)
     return _UNKNOWN_SCREEN
 
 
