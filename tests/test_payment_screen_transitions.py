@@ -1,5 +1,6 @@
 import unittest
 from contextlib import contextmanager
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -418,6 +419,10 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
                     report_text="Существующий отчёт",
                 )
             )
+            paid_order = session.get(Order, paid_order_id)
+            if paid_order:
+                paid_order.consumed_at = datetime.now(timezone.utc)
+                session.add(paid_order)
             session.commit()
             before_orders_count = session.execute(select(func.count(Order.id))).scalar_one()
 
@@ -936,6 +941,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
                 provider=PaymentProvider.PRODAMUS,
                 status=OrderStatus.PAID,
                 fulfillment_status=OrderFulfillmentStatus.COMPLETED,
+                consumed_at=datetime.now(timezone.utc),
             )
             session.add(consumed_order)
             session.flush()

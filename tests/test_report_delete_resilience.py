@@ -7,6 +7,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
+from datetime import datetime, timezone
+
 from app.db.models import Order, OrderFulfillmentStatus, OrderStatus, PaymentProvider, Report, Tariff, User
 
 
@@ -73,6 +75,7 @@ class ReportDeleteResilienceTests(unittest.TestCase):
                     provider=PaymentProvider.PRODAMUS,
                     status=OrderStatus.PAID,
                     fulfillment_status=OrderFulfillmentStatus.COMPLETED,
+                    consumed_at=datetime.now(timezone.utc),
                     fulfilled_report_id=report.id,
                 )
                 session.add(order)
@@ -86,7 +89,8 @@ class ReportDeleteResilienceTests(unittest.TestCase):
 
             self.assertTrue(deleted)
             self.assertIsNone(refreshed_order.fulfilled_report_id)
-            self.assertEqual(refreshed_order.fulfillment_status, OrderFulfillmentStatus.PENDING)
+            self.assertEqual(refreshed_order.fulfillment_status, OrderFulfillmentStatus.COMPLETED)
+            self.assertIsNotNone(refreshed_order.consumed_at)
         finally:
             Base.metadata.drop_all(engine)
             engine.dispose()

@@ -292,6 +292,11 @@ class Order(Base):
         default=OrderFulfillmentStatus.PENDING,
     )
     fulfilled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        index=True,
+        nullable=True,
+    )
     fulfilled_report_id: Mapped[int | None] = mapped_column(
         ForeignKey("reports.id", ondelete="SET NULL"),
         index=True,

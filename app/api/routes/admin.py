@@ -4791,8 +4791,11 @@ async def admin_order_status(
     if isinstance(new_status, str):
         if new_status == OrderFulfillmentStatus.COMPLETED.value:
             order.fulfillment_status = OrderFulfillmentStatus.COMPLETED
+            completed_at = datetime.now(timezone.utc)
             if not order.fulfilled_at:
-                order.fulfilled_at = datetime.now(timezone.utc)
+                order.fulfilled_at = completed_at
+            if not order.consumed_at:
+                order.consumed_at = completed_at
             updated = True
             action = "manual_status_change"
         else:
@@ -4893,8 +4896,11 @@ async def admin_orders_bulk_status(
         action: str | None = None
         if fulfillment_update is not None:
             order.fulfillment_status = fulfillment_update
-            if fulfillment_update == OrderFulfillmentStatus.COMPLETED and not order.fulfilled_at:
-                order.fulfilled_at = now
+            if fulfillment_update == OrderFulfillmentStatus.COMPLETED:
+                if not order.fulfilled_at:
+                    order.fulfilled_at = now
+                if not order.consumed_at:
+                    order.consumed_at = now
             action = "manual_status_change"
         if status_update is not None:
             order.status = status_update

@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 from unittest.mock import patch
 
 from sqlalchemy import create_engine
@@ -115,6 +116,25 @@ class ReportJobRequiresPaidOrderTests(unittest.TestCase):
             user = session.get(User, 1)
             order = session.get(Order, 11)
             order.amount = 1
+            session.add(order)
+            with patch("app.bot.handlers.screens.screen_manager.update_state"):
+                job = _create_report_job(
+                    session,
+                    user=user,
+                    tariff_value=Tariff.T1.value,
+                    order_id=11,
+                    chat_id=1001,
+                )
+            session.commit()
+
+            self.assertIsNone(job)
+            self.assertEqual(session.query(ReportJob).count(), 0)
+
+    def test_create_report_job_rejects_consumed_paid_order(self) -> None:
+        with self.SessionLocal() as session:
+            user = session.get(User, 1)
+            order = session.get(Order, 11)
+            order.consumed_at = datetime.now(timezone.utc)
             session.add(order)
             with patch("app.bot.handlers.screens.screen_manager.update_state"):
                 job = _create_report_job(
