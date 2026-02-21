@@ -61,7 +61,7 @@ _transition_analytics_cache: dict[tuple, tuple[float, dict]] = {}
 _finance_analytics_cache_lock = threading.Lock()
 _finance_analytics_cache: dict[FinanceAnalyticsFilters, tuple[float, dict]] = {}
 _traffic_analytics_cache_lock = threading.Lock()
-_traffic_analytics_cache: dict[TrafficAnalyticsFilters, tuple[float, tuple[dict, list[str]]]] = {}
+_traffic_analytics_cache: dict[tuple[TrafficAnalyticsFilters, str], tuple[float, tuple[dict, list[str]]]] = {}
 _marketing_analytics_cache_lock = threading.Lock()
 _marketing_analytics_cache: dict[MarketingAnalyticsFilters, tuple[float, dict]] = {}
 _WORKER_SERVICE_NAME = "report_jobs_worker"
@@ -4031,17 +4031,28 @@ def _get_marketing_subscription_analytics(session: Session, filters: MarketingAn
     return result
 
 
+def _build_traffic_cache_key(session: Session, filters: TrafficAnalyticsFilters) -> tuple[TrafficAnalyticsFilters, str]:
+    get_bind = getattr(session, "get_bind", None)
+    if callable(get_bind):
+        bind = get_bind()
+        cache_scope = str(id(bind)) if bind is not None else "no-bind"
+    else:
+        cache_scope = f"session-{id(session)}"
+    return filters, cache_scope
+
+
 def _get_traffic_analytics(session: Session, filters: TrafficAnalyticsFilters) -> tuple[dict, list[str]]:
     now = time.monotonic()
+    cache_key = _build_traffic_cache_key(session, filters)
     with _traffic_analytics_cache_lock:
-        cached_item = _traffic_analytics_cache.get(filters)
+        cached_item = _traffic_analytics_cache.get(cache_key)
         if cached_item and now - cached_item[0] <= _TRANSITION_ANALYTICS_CACHE_TTL_SECONDS:
             return cached_item[1]
 
     result = _safe_build_traffic_analytics(session, filters)
 
     with _traffic_analytics_cache_lock:
-        _traffic_analytics_cache[filters] = (now, result)
+        _traffic_analytics_cache[cache_key] = (now, result)
     return result
 
 
