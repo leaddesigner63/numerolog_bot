@@ -190,6 +190,15 @@ class ScreenS4KeyboardTests(unittest.TestCase):
 
         self.assertIn("✅ Продолжить", labels)
 
+    def test_unpaid_tariff_shows_single_tariffs_button(self) -> None:
+        content = screen_s4({"selected_tariff": "T1", "order_status": "pending"})
+
+        self.assertIsNotNone(content.keyboard)
+        labels = [button.text for row in content.keyboard.inline_keyboard for button in row]
+
+        self.assertEqual(labels.count("🧾 Тарифы"), 1)
+        self.assertEqual(labels.count("➡️ Тарифы"), 0)
+
 
 if __name__ == "__main__":
     unittest.main()

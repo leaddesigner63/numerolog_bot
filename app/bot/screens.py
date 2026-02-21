@@ -697,6 +697,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         return ScreenContent(messages=[text], keyboard=None)
 
     rows: list[list[InlineKeyboardButton]] = []
+    has_tariffs_button = False
     if has_profile:
         rows.append(
             [
@@ -749,6 +750,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 )
             ]
         )
+        has_tariffs_button = True
     else:
         rows.append(
             [
@@ -796,7 +798,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     if (not is_t0 or has_profile) and not show_profile_flow_compact_keyboard:
         rows.extend(_global_menu())
 
-    if not show_profile_flow_compact_keyboard:
+    if not show_profile_flow_compact_keyboard and not has_tariffs_button:
         rows.append(
             [
                 InlineKeyboardButton(
