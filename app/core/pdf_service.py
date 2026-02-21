@@ -267,11 +267,14 @@ class PdfService:
         report_document: ReportDocument | None = None,
     ) -> bytes:
         renderer = PdfThemeRenderer(logger=self._logger)
-        structured_document = report_document or report_document_builder.build(
-            text,
-            tariff=tariff,
-            meta=meta,
-        )
+        strict_text_mode_enabled = settings.pdf_strict_text_mode_enabled
+        structured_document: ReportDocument | None = None
+        if not strict_text_mode_enabled:
+            structured_document = report_document or report_document_builder.build(
+                text,
+                tariff=tariff,
+                meta=meta,
+            )
         try:
             return renderer.render(text, tariff, meta, report_document=structured_document)
         except Exception as exc:

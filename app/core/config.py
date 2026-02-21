@@ -87,6 +87,7 @@ class Settings(BaseSettings):
     pdf_font_bold_path: str | None = None
     pdf_font_accent_path: str | None = None
     pdf_subsection_fallback_heuristic_enabled: bool = False
+    pdf_strict_text_mode: bool | None = None
 
     monitoring_webhook_url: str | None = None
     admin_login: str | None = None
@@ -113,5 +114,11 @@ class Settings(BaseSettings):
             "T2": self.tariff_t2_price_rub,
             "T3": self.tariff_t3_price_rub,
         }
+
+    @property
+    def pdf_strict_text_mode_enabled(self) -> bool:
+        if self.pdf_strict_text_mode is not None:
+            return self.pdf_strict_text_mode
+        return str(self.env or "").lower() in {"prod", "production"}
 
 settings = Settings()
