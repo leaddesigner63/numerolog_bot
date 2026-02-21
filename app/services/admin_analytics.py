@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from statistics import median
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -59,6 +59,17 @@ _PROVIDER_CONFIRMATION_SOURCES = {
     PaymentConfirmationSource.PROVIDER_WEBHOOK,
     PaymentConfirmationSource.PROVIDER_POLL,
 }
+_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX = "smoke-"
+
+
+def _deploy_smoke_order_filter(model=Order):
+    return or_(
+        model.is_smoke_check.is_(True),
+        and_(
+            model.provider_payment_id.is_not(None),
+            model.provider_payment_id.startswith(_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX),
+        ),
+    )
 
 
 @dataclass(frozen=True)
@@ -585,6 +596,7 @@ def _load_provider_confirmed_orders(session: Session, filters: FinanceAnalyticsF
     query: Select[tuple[Order]] = select(Order).where(
         Order.status == OrderStatus.PAID,
         Order.payment_confirmation_source.in_(list(_PROVIDER_CONFIRMATION_SOURCES)),
+        ~_deploy_smoke_order_filter(Order),
     )
     if filters.from_dt:
         query = query.where(Order.payment_confirmed_at >= filters.from_dt)
