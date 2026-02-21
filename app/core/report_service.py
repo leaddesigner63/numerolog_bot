@@ -379,8 +379,11 @@ class ReportService:
             if order_id:
                 order = session.get(Order, order_id)
                 if order:
+                    consumed_at = datetime.now(timezone.utc)
                     order.fulfillment_status = OrderFulfillmentStatus.COMPLETED
-                    order.fulfilled_at = datetime.now(timezone.utc)
+                    order.fulfilled_at = consumed_at
+                    if not order.consumed_at:
+                        order.consumed_at = consumed_at
                     order.fulfilled_report_id = report.id
                     session.add(order)
 

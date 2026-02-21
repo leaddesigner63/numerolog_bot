@@ -1068,6 +1068,8 @@ def _create_report_job(
             return None
         if order.status != OrderStatus.PAID:
             return None
+        if order.consumed_at is not None:
+            return None
         expected_amount = _tariff_prices().get(tariff)
         if expected_amount is not None and float(order.amount or 0) != float(expected_amount):
             return None
@@ -1306,9 +1308,6 @@ def _delete_report_with_assets(session, report: Report) -> bool:
             )
         for linked_order in linked_orders:
             linked_order.fulfilled_report_id = None
-            if linked_order.fulfillment_status == OrderFulfillmentStatus.COMPLETED:
-                linked_order.fulfillment_status = OrderFulfillmentStatus.PENDING
-                linked_order.fulfilled_at = None
             session.add(linked_order)
         session.delete(report)
         session.flush()
@@ -1476,10 +1475,7 @@ def _get_reusable_paid_order(
                 Order.amount == expected_amount,
                 Order.status == OrderStatus.PAID,
                 Order.fulfillment_status == OrderFulfillmentStatus.PENDING,
-                Order.fulfilled_report_id.is_(None),
-                ~select(Report.id)
-                .where(Report.order_id == Order.id)
-                .exists(),
+                Order.consumed_at.is_(None),
             )
             .order_by(Order.paid_at.desc(), Order.created_at.desc(), Order.id.desc())
             .limit(1)
@@ -1568,18 +1564,7 @@ async def _prepare_checkout_order(
                     order = None
                     state_order_not_usable = True
                 if order and order.status == OrderStatus.PAID:
-                    paid_order_consumed = bool(order.fulfilled_report_id) or (
-                        order.fulfillment_status == OrderFulfillmentStatus.COMPLETED
-                    )
-                    if not paid_order_consumed:
-                        paid_order_consumed = (
-                            session.execute(
-                                select(Report.id)
-                                .where(Report.order_id == order.id)
-                                .limit(1)
-                            ).scalar_one_or_none()
-                            is not None
-                        )
+                    paid_order_consumed = order.consumed_at is not None
                     if paid_order_consumed:
                         order = None
                         state_order_not_usable = True
