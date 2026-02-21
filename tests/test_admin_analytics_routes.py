@@ -816,7 +816,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertIn("T3", payload["data"]["funnel_by_tariff"])
 
         t2_steps = [row["step"] for row in payload["data"]["funnel_by_tariff"]["T2"]]
-        self.assertEqual(t2_steps, ["S0", "S1", "S5", "S3", "S6_OR_S7"])
+        self.assertEqual(t2_steps, ["S0", "S1", "S2", "S4", "S3", "S6_OR_S7"])
 
     def test_transitions_validation_errors(self) -> None:
         bad_screen = self.client.get(
