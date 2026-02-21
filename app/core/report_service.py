@@ -351,7 +351,12 @@ class ReportService:
         with get_session() as session:
             if tariff in PAID_TARIFFS:
                 order_id = self._resolve_paid_order_id(session, state, user_id)
-                if not order_id and not force_store:
+                if not order_id:
+                    if force_store:
+                        self._logger.warning(
+                            "paid_order_force_store_blocked",
+                            extra={"user_id": user_id, "tariff": tariff.value},
+                        )
                     self._logger.warning(
                         "paid_order_missing",
                         extra={"user_id": user_id, "tariff": tariff.value},
@@ -412,6 +417,40 @@ class ReportService:
             self._logger.warning(
                 "report_order_not_paid",
                 extra={"user_id": user_id, "order_id": order_id},
+            )
+            return None
+        if order.user_id != user_id:
+            self._logger.warning(
+                "order_owner_mismatch",
+                extra={
+                    "user_id": user_id,
+                    "order_id": order.id,
+                    "order_user_id": order.user_id,
+                },
+            )
+            return None
+        selected_tariff = state.get("selected_tariff")
+        if selected_tariff and order.tariff.value != selected_tariff:
+            self._logger.warning(
+                "order_tariff_mismatch",
+                extra={
+                    "user_id": user_id,
+                    "order_id": order.id,
+                    "order_tariff": order.tariff.value,
+                    "selected_tariff": selected_tariff,
+                },
+            )
+            return None
+        expected_amount = settings.tariff_prices_rub.get(order.tariff.value)
+        if expected_amount is not None and float(order.amount or 0) != float(expected_amount):
+            self._logger.warning(
+                "order_amount_mismatch",
+                extra={
+                    "user_id": user_id,
+                    "order_id": order.id,
+                    "order_amount": float(order.amount or 0),
+                    "expected_amount": float(expected_amount),
+                },
             )
             return None
         return order.id
