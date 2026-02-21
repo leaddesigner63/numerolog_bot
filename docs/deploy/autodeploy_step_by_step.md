@@ -65,9 +65,12 @@
    - перезапускает сервисы,
    - проверяет runtime-сервисы через `scripts/check_runtime_services.sh` (API + bot unit),
    - выполняет `smoke_check_landing.sh`,
+   - запускает smoke-check paid order -> ReportJob -> COMPLETED,
+   - выполняет обязательный `cleanup-only` для удаления smoke-данных,
+   - запускает обязательный post-check `scripts/db/check_smoke_residuals.py` (должен вернуть `0` по всем ключевым таблицам; при `count > 0` деплой падает с детализацией),
    - запускает пост-релизный пинг вебмастеров, если настроен `WEBMASTER_PING_SCRIPT`, `scripts/post_release_ping.sh` или `WEBMASTER_PING_URLS`.
 
-Важно: `smoke_check_report_job_completion.py` после выполнения автоматически удаляет созданного smoke-пользователя, его профиль, заказ и связанные сущности через каскад БД, чтобы тестовые данные не попадали в боевую админку.
+Важно: post-deploy очистка smoke-данных обязательна. После `cleanup-only` дополнительно выполняется контрольный шаг `scripts/db/check_smoke_residuals.py`; релиз считается успешным только если остатков smoke-данных нет ни в одной ключевой таблице.
 
 ## 5) Сделайте тестовый деплой
 
