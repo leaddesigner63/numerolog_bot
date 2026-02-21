@@ -9,6 +9,7 @@ from app.core.config import settings
 from app.core.llm_router import LLMResponse, LLMUnavailableError, llm_router
 from app.core.prompt_settings import resolve_tariff_prompt
 from app.core.report_safety import report_safety
+from app.core.report_text_pipeline import build_canonical_report_text
 from app.db.models import (
     Order,
     OrderFulfillmentStatus,
@@ -366,6 +367,10 @@ class ReportService:
                 order_id=order_id,
                 tariff=tariff,
                 report_text=response.text,
+                report_text_canonical=build_canonical_report_text(
+                    response.text,
+                    tariff=tariff.value,
+                ),
                 model_used=self._map_model(response.provider),
                 safety_flags=safety_flags,
             )

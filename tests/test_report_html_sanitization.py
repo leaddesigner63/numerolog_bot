@@ -35,6 +35,19 @@ class ReportHtmlSanitizationTests(unittest.TestCase):
         self.assertNotIn("<i>", content.messages[0])
         self.assertNotIn("</i>", content.messages[0])
 
+    def test_screen_s7_prefers_report_text_canonical(self) -> None:
+        content = screen_s7(
+            {
+                "report_text": "<i>Сырой</i>",
+                "report_text_canonical": "Канонический",
+                "report_job_status": "completed",
+                "selected_tariff": "T1",
+            }
+        )
+
+        self.assertIn("Канонический", content.messages[0])
+        self.assertNotIn("Сырой", content.messages[0])
+
     def test_screen_s13_strips_html_like_tags_from_report_body(self) -> None:
         content = screen_s13(
             {
@@ -45,6 +58,18 @@ class ReportHtmlSanitizationTests(unittest.TestCase):
 
         self.assertIn("Раздел", content.messages[0])
         self.assertNotIn("<i>", content.messages[0])
+
+    def test_screen_s13_prefers_report_text_canonical(self) -> None:
+        content = screen_s13(
+            {
+                "report_text": "<i>Сырой</i>",
+                "report_text_canonical": "Канонический",
+                "report_meta": {"id": 1, "tariff": "T1", "created_at": "2026-02-08 10:00"},
+            }
+        )
+
+        self.assertIn("Канонический", content.messages[0])
+        self.assertNotIn("Сырой", content.messages[0])
 
     def test_sanitize_report_text_removes_unknown_html_tags(self) -> None:
         source = "<h3>Заголовок</h3><div>Абзац</div><br><custom-tag attr='x'>Текст</custom-tag>"
