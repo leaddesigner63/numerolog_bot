@@ -54,10 +54,16 @@ from app.db.session import get_session_factory
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
 
-_TRANSITION_ANALYTICS_CACHE_TTL_SECONDS = 5
+_TRANSITION_ANALYTICS_CACHE_TTL_SECONDS = max(1, settings.admin_analytics_cache_ttl_seconds)
 _TRANSITION_ANALYTICS_CACHE_MAX_SIZE = 64
 _transition_analytics_cache_lock = threading.Lock()
 _transition_analytics_cache: dict[tuple, tuple[float, dict]] = {}
+_finance_analytics_cache_lock = threading.Lock()
+_finance_analytics_cache: dict[FinanceAnalyticsFilters, tuple[float, dict]] = {}
+_traffic_analytics_cache_lock = threading.Lock()
+_traffic_analytics_cache: dict[TrafficAnalyticsFilters, tuple[float, tuple[dict, list[str]]]] = {}
+_marketing_analytics_cache_lock = threading.Lock()
+_marketing_analytics_cache: dict[MarketingAnalyticsFilters, tuple[float, dict]] = {}
 _WORKER_SERVICE_NAME = "report_jobs_worker"
 _DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX = "smoke-"
 _DEPLOY_SMOKE_PROFILE_NAME = "Smoke Check"
@@ -3995,6 +4001,50 @@ def _get_transition_analytics(session: Session, filters: AnalyticsFilters) -> di
     return result
 
 
+
+
+def _get_finance_analytics(session: Session, filters: FinanceAnalyticsFilters) -> dict:
+    now = time.monotonic()
+    with _finance_analytics_cache_lock:
+        cached_item = _finance_analytics_cache.get(filters)
+        if cached_item and now - cached_item[0] <= _TRANSITION_ANALYTICS_CACHE_TTL_SECONDS:
+            return cached_item[1]
+
+    result = _safe_build_finance_analytics(session, filters)
+
+    with _finance_analytics_cache_lock:
+        _finance_analytics_cache[filters] = (now, result)
+    return result
+
+
+def _get_marketing_subscription_analytics(session: Session, filters: MarketingAnalyticsFilters) -> dict:
+    now = time.monotonic()
+    with _marketing_analytics_cache_lock:
+        cached_item = _marketing_analytics_cache.get(filters)
+        if cached_item and now - cached_item[0] <= _TRANSITION_ANALYTICS_CACHE_TTL_SECONDS:
+            return cached_item[1]
+
+    result = _safe_build_marketing_subscription_analytics(session, filters)
+
+    with _marketing_analytics_cache_lock:
+        _marketing_analytics_cache[filters] = (now, result)
+    return result
+
+
+def _get_traffic_analytics(session: Session, filters: TrafficAnalyticsFilters) -> tuple[dict, list[str]]:
+    now = time.monotonic()
+    with _traffic_analytics_cache_lock:
+        cached_item = _traffic_analytics_cache.get(filters)
+        if cached_item and now - cached_item[0] <= _TRANSITION_ANALYTICS_CACHE_TTL_SECONDS:
+            return cached_item[1]
+
+    result = _safe_build_traffic_analytics(session, filters)
+
+    with _traffic_analytics_cache_lock:
+        _traffic_analytics_cache[filters] = (now, result)
+    return result
+
+
 def _slice_top_n(items: list[dict], top_n: int) -> list[dict]:
     if top_n <= 0:
         return items
@@ -4248,7 +4298,7 @@ def admin_finance_summary(
     session: Session = Depends(_get_db_session),
 ) -> dict:
     filters = _build_finance_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
-    result = _safe_build_finance_analytics(session, filters)
+    result = _get_finance_analytics(session, filters)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "data": {"summary": FinanceSummaryItem.model_validate(result["summary"]).model_dump(mode="json")},
@@ -4264,7 +4314,7 @@ def admin_finance_by_tariff(
     session: Session = Depends(_get_db_session),
 ) -> dict:
     filters = _build_finance_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
-    result = _safe_build_finance_analytics(session, filters)
+    result = _get_finance_analytics(session, filters)
     items = [FinanceTariffItem.model_validate(item).model_dump(mode="json") for item in result["by_tariff"]]
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -4281,7 +4331,7 @@ def admin_finance_nudge_by_tariff(
     session: Session = Depends(_get_db_session),
 ) -> dict:
     filters = _build_finance_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
-    result = _safe_build_finance_analytics(session, filters)
+    result = _get_finance_analytics(session, filters)
     items = [
         FinanceNudgeByTariffItem.model_validate(item).model_dump(mode="json")
         for item in result.get("resume_after_nudge_by_tariff", [])
@@ -4301,7 +4351,7 @@ def admin_finance_timeseries(
     session: Session = Depends(_get_db_session),
 ) -> dict:
     filters = _build_finance_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
-    result = _safe_build_finance_analytics(session, filters)
+    result = _get_finance_analytics(session, filters)
     items = [FinanceTimeseriesItem.model_validate(item).model_dump(mode="json") for item in result["timeseries"]]
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -4317,7 +4367,7 @@ def admin_marketing_subscriptions_summary(
     session: Session = Depends(_get_db_session),
 ) -> dict:
     filters = _build_marketing_filters(from_dt=from_dt, to_dt=to_dt, period=period)
-    result = _safe_build_marketing_subscription_analytics(session, filters)
+    result = _get_marketing_subscription_analytics(session, filters)
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "data": {"summary": result},
@@ -4333,7 +4383,7 @@ def admin_traffic_summary(
     session: Session = Depends(_get_db_session),
 ) -> dict:
     filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
-    result, warnings = _safe_build_traffic_analytics(session, filters)
+    result, warnings = _get_traffic_analytics(session, filters)
     summary = TrafficSummaryItem.model_validate(
         {
             "users_started_total": result.get("users_started_total", 0),
@@ -4359,7 +4409,7 @@ def admin_traffic_by_source(
     session: Session = Depends(_get_db_session),
 ) -> dict:
     filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
-    result, warnings = _safe_build_traffic_analytics(session, filters)
+    result, warnings = _get_traffic_analytics(session, filters)
     rows = [
         TrafficSourceItem.model_validate(item).model_dump(mode="json")
         for item in _slice_top_n(result.get("users_by_source", []), top_n)
@@ -4384,7 +4434,7 @@ def admin_traffic_by_campaign(
     session: Session = Depends(_get_db_session),
 ) -> dict:
     filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
-    result, warnings = _safe_build_traffic_analytics(session, filters)
+    result, warnings = _get_traffic_analytics(session, filters)
     top_rows = _slice_top_n(result.get("users_by_source_campaign", []), top_n)
     paged_rows, pagination = _paginate_items(top_rows, page=page, page_size=page_size)
     rows = [TrafficSourceCampaignItem.model_validate(item).model_dump(mode="json") for item in paged_rows]

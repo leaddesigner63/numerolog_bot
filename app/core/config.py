@@ -76,10 +76,11 @@ class Settings(BaseSettings):
     tariff_t3_price_rub: int = 5930
 
     database_url: str | None = None
-    database_pool_size: int = 5
-    database_max_overflow: int = 5
+    database_pool_size: int = 20
+    database_max_overflow: int = 20
     database_pool_timeout_seconds: int = 30
     database_pool_recycle_seconds: int = 1800
+    admin_analytics_cache_ttl_seconds: int = 5
     pdf_storage_bucket: str | None = None
     pdf_storage_key: str | None = None
     pdf_font_path: str | None = None

@@ -20,6 +20,7 @@ def get_engine() -> Engine:
     return create_engine(
         settings.database_url,
         pool_pre_ping=True,
+        pool_use_lifo=True,
         pool_size=max(1, settings.database_pool_size),
         max_overflow=max(0, settings.database_max_overflow),
         pool_timeout=max(1, settings.database_pool_timeout_seconds),
