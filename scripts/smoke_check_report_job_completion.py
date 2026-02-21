@@ -83,6 +83,7 @@ def _prepare_paid_order_and_job() -> tuple[int, int, int, int]:
             currency="RUB",
             provider=PaymentProvider.NONE,
             provider_payment_id=f"smoke-{now.strftime('%Y%m%d%H%M%S')}",
+            is_smoke_check=True,
             status=OrderStatus.PAID,
             paid_at=now,
             payment_confirmed=True,
@@ -134,14 +135,14 @@ def _collect_smoke_entity_ids() -> tuple[set[int], set[int], set[int], set[int]]
     with get_session() as session:
         smoke_order_ids = set(
             session.execute(
-                select(Order.id).where(Order.provider_payment_id.like("smoke-%"))
+                select(Order.id).where(or_(Order.is_smoke_check.is_(True), Order.provider_payment_id.like("smoke-%")))
             )
             .scalars()
             .all()
         )
         smoke_order_user_ids = set(
             session.execute(
-                select(Order.user_id).where(Order.provider_payment_id.like("smoke-%"))
+                select(Order.user_id).where(or_(Order.is_smoke_check.is_(True), Order.provider_payment_id.like("smoke-%")))
             )
             .scalars()
             .all()
