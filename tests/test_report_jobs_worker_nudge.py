@@ -1,3 +1,5 @@
+import io
+import logging
 import unittest
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
@@ -8,6 +10,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.bot import report_jobs_worker as worker_module
+from app.core.logging import ExtraFieldsFormatter
 from app.db.base import Base
 from app.db.models import (
     Order,
@@ -218,6 +221,119 @@ class ReportJobsWorkerNudgeTests(unittest.IsolatedAsyncioTestCase):
             await worker._process_checkout_value_nudges(bot=AsyncMock())
 
         self.assertEqual(send_mock.await_count, 0)
+
+    async def test_resume_nudge_logs_traceback_and_context_on_failure(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=4, telegram_user_id=19011, telegram_username="resume_fail")
+            session.add(user)
+            session.add(
+                UserProfile(
+                    user_id=4,
+                    name="name",
+                    birth_date="01.01.1990",
+                    birth_place_city="Moscow",
+                    birth_place_country="RU",
+                    marketing_consent_document_version="v1",
+                    marketing_consent_accepted_at=datetime.now(timezone.utc),
+                )
+            )
+            session.add(
+                ScreenStateRecord(
+                    telegram_user_id=19011,
+                    screen_id="S3",
+                    message_ids=[],
+                    user_message_ids=[],
+                    last_question_message_id=None,
+                    data={
+                        "last_critical_step_at": (datetime.now(timezone.utc) - timedelta(hours=8)).isoformat(),
+                        "last_critical_screen_id": "S3",
+                    },
+                )
+            )
+            session.commit()
+
+        logger = logging.getLogger(worker_module.__name__)
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(ExtraFieldsFormatter("%(levelname)s|%(name)s|%(message)s%(extra_fields)s"))
+        old_handlers = logger.handlers[:]
+        old_level = logger.level
+        old_propagate = logger.propagate
+        logger.handlers = [handler]
+        logger.setLevel(logging.WARNING)
+        logger.propagate = False
+
+        worker = worker_module.ReportJobWorker()
+        try:
+            with patch.object(worker_module, "send_marketing_message", new=AsyncMock(side_effect=RuntimeError("resume boom"))):
+                await worker._process_stalled_users(bot=AsyncMock())
+        finally:
+            logger.handlers = old_handlers
+            logger.level = old_level
+            logger.propagate = old_propagate
+
+        output = stream.getvalue()
+        self.assertIn("resume_nudge_process_failed", output)
+        self.assertIn("telegram_user_id=19011", output)
+        self.assertIn("error=resume boom", output)
+        self.assertIn("Traceback", output)
+        self.assertIn("RuntimeError: resume boom", output)
+
+    async def test_checkout_value_nudge_logs_traceback_and_context_on_failure(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=5, telegram_user_id=19012, telegram_username="checkout_fail")
+            session.add(user)
+            session.add(
+                UserProfile(
+                    user_id=5,
+                    name="name",
+                    birth_date="01.01.1990",
+                    birth_place_city="Moscow",
+                    birth_place_country="RU",
+                    marketing_consent_document_version="v1",
+                    marketing_consent_accepted_at=datetime.now(timezone.utc),
+                )
+            )
+            session.add(
+                ScreenStateRecord(
+                    telegram_user_id=19012,
+                    screen_id="S7",
+                    message_ids=[],
+                    user_message_ids=[],
+                    last_question_message_id=None,
+                    data={
+                        "checkout_value_nudge_due_at": (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat(),
+                    },
+                )
+            )
+            session.commit()
+
+        logger = logging.getLogger(worker_module.__name__)
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(ExtraFieldsFormatter("%(levelname)s|%(name)s|%(message)s%(extra_fields)s"))
+        old_handlers = logger.handlers[:]
+        old_level = logger.level
+        old_propagate = logger.propagate
+        logger.handlers = [handler]
+        logger.setLevel(logging.WARNING)
+        logger.propagate = False
+
+        worker = worker_module.ReportJobWorker()
+        try:
+            with patch.object(worker_module, "send_marketing_message", new=AsyncMock(side_effect=RuntimeError("checkout boom"))):
+                await worker._process_checkout_value_nudges(bot=AsyncMock())
+        finally:
+            logger.handlers = old_handlers
+            logger.level = old_level
+            logger.propagate = old_propagate
+
+        output = stream.getvalue()
+        self.assertIn("checkout_value_nudge_process_failed", output)
+        self.assertIn("telegram_user_id=19012", output)
+        self.assertIn("error=checkout boom", output)
+        self.assertIn("Traceback", output)
+        self.assertIn("RuntimeError: checkout boom", output)
 
 
 if __name__ == "__main__":
