@@ -271,12 +271,12 @@ python -m app.bot.polling
 
 ### Анти-флап для админки после деплоя
 
-`deploy.sh` всегда запускает `scripts/check_runtime_services.sh`, который теперь проверяет не только `systemctl is-active`, но и HTTP-доступность API через `RUNTIME_API_HEALTHCHECK_URL` (по умолчанию `http://127.0.0.1:8000/health`) с ретраями. Это предотвращает сценарий, когда systemd уже считает сервис активным, но Uvicorn ещё не поднял роуты и `/admin` временно недоступен.
+`deploy.sh` всегда запускает `scripts/check_runtime_services.sh`, который теперь проверяет не только `systemctl is-active`, но и HTTP-доступность API через `RUNTIME_API_HEALTHCHECK_URL` (по умолчанию `http://127.0.0.1:8000/health/ready`) с ретраями. Это предотвращает сценарий, когда systemd уже считает сервис активным, но Uvicorn ещё не поднял роуты и `/admin` временно недоступен.
 
 При необходимости задайте в окружении деплоя:
 
 ```bash
-RUNTIME_API_HEALTHCHECK_URL=http://127.0.0.1:8000/health
+RUNTIME_API_HEALTHCHECK_URL=http://127.0.0.1:8000/health/ready
 RUNTIME_API_HEALTHCHECK_ATTEMPTS=20
 RUNTIME_API_HEALTHCHECK_INTERVAL_SECONDS=2
 WORKER_HEALTHCHECK_URL=http://127.0.0.1:8000/health/report-worker
