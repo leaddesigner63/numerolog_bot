@@ -9,22 +9,36 @@ from sqlalchemy.orm import Session, sessionmaker
 from app.core.config import settings
 
 
+logger = logging.getLogger(__name__)
+
+
 @lru_cache(maxsize=1)
 def get_engine() -> Engine:
     if not settings.database_url:
-        logger = logging.getLogger(__name__)
         logger.error("database_url_missing")
         raise RuntimeError(
             "DATABASE_URL is not configured. Set DATABASE_URL to a PostgreSQL DSN before startup."
         )
+    pool_size = max(1, settings.database_pool_size)
+    max_overflow = max(0, settings.database_max_overflow)
+    pool_timeout = max(1, settings.database_pool_timeout_seconds)
+    pool_recycle = max(1, settings.database_pool_recycle_seconds)
+    logger.info(
+        "database_pool_config"
+        " pool_size=%s max_overflow=%s pool_timeout_seconds=%s pool_recycle_seconds=%s",
+        pool_size,
+        max_overflow,
+        pool_timeout,
+        pool_recycle,
+    )
     return create_engine(
         settings.database_url,
         pool_pre_ping=True,
         pool_use_lifo=True,
-        pool_size=max(1, settings.database_pool_size),
-        max_overflow=max(0, settings.database_max_overflow),
-        pool_timeout=max(1, settings.database_pool_timeout_seconds),
-        pool_recycle=max(1, settings.database_pool_recycle_seconds),
+        pool_size=pool_size,
+        max_overflow=max_overflow,
+        pool_timeout=pool_timeout,
+        pool_recycle=pool_recycle,
     )
 
 

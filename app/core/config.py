@@ -79,8 +79,8 @@ class Settings(BaseSettings):
     tariff_t3_price_rub: int = 5930
 
     database_url: str | None = None
-    database_pool_size: int = 20
-    database_max_overflow: int = 20
+    database_pool_size: int = 8
+    database_max_overflow: int = 2
     database_pool_timeout_seconds: int = 30
     database_pool_recycle_seconds: int = 1800
     admin_analytics_cache_ttl_seconds: int = 5
