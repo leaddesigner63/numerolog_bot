@@ -13,11 +13,11 @@
 ## 2) Включите health-check в post-deploy
 `scripts/check_runtime_services.sh` должен проверять:
 - `systemctl is-active` для всех сервисов;
-- HTTP endpoint API (`/health`) с ретраями.
+- HTTP endpoint API (`/health/ready`) с ретраями.
 
 Рекомендуемые переменные:
 ```bash
-RUNTIME_API_HEALTHCHECK_URL=http://127.0.0.1:8000/health
+RUNTIME_API_HEALTHCHECK_URL=http://127.0.0.1:8000/health/ready
 RUNTIME_API_HEALTHCHECK_ATTEMPTS=20
 RUNTIME_API_HEALTHCHECK_INTERVAL_SECONDS=2
 ```
@@ -40,11 +40,11 @@ RUNTIME_API_HEALTHCHECK_INTERVAL_SECONDS=2
 После деплоя выполните:
 ```bash
 curl -i http://127.0.0.1:8000/admin
-curl -sS http://127.0.0.1:8000/health
+curl -sS http://127.0.0.1:8000/health/ready
 ```
 
 Ожидаемо:
-- `/health` возвращает `200`;
+- `/health/ready` возвращает `200`;
 - `/admin` возвращает `200` (если сессия есть) или `401` (если нет сессии) — это нормально, главное что endpoint отвечает.
 
 ## 6) Что делать, если админка снова не отвечает
@@ -58,6 +58,6 @@ curl -sS http://127.0.0.1:8000/health
    ```
 3. Проверить доступность API локально на сервере:
    ```bash
-   curl -sS http://127.0.0.1:8000/health
+   curl -sS http://127.0.0.1:8000/health/ready
    ```
 4. Если API недоступен — перезапустить API и проверить переменные окружения (`DATABASE_URL`, `ADMIN_LOGIN`, `ADMIN_PASSWORD`).
