@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 import logging
 import os
 import random
@@ -35,6 +36,7 @@ class ReportJobWorker:
         self._service_name = "report_jobs_worker"
         self._host = socket.gethostname()
         self._pid = os.getpid()
+        self._skip_reasons_counter: Counter[str] = Counter()
 
     async def run(self, bot: Bot) -> None:
         poll_interval = max(settings.report_job_poll_interval_seconds, 1)
@@ -83,7 +85,12 @@ class ReportJobWorker:
             state_rows = session.execute(select(ScreenStateRecord)).scalars().all()
             for state_row in state_rows:
                 try:
-                    state_data = dict(state_row.data or {})
+                    state_data = self._get_state_data_or_none(
+                        state_row=state_row,
+                        flow_name="resume_nudge",
+                    )
+                    if state_data is None:
+                        continue
                     critical_at = self._parse_dt(state_data.get("last_critical_step_at"))
                     if not critical_at:
                         continue
@@ -164,7 +171,12 @@ class ReportJobWorker:
             state_rows = session.execute(select(ScreenStateRecord)).scalars().all()
             for state_row in state_rows:
                 try:
-                    state_data = dict(state_row.data or {})
+                    state_data = self._get_state_data_or_none(
+                        state_row=state_row,
+                        flow_name="checkout_value_nudge",
+                    )
+                    if state_data is None:
+                        continue
                     if state_data.get("checkout_value_nudge_sent_at"):
                         continue
 
@@ -262,6 +274,44 @@ class ReportJobWorker:
             )
         ).scalar_one_or_none()
         return paid_order is not None
+
+    def _get_state_data_or_none(
+        self,
+        *,
+        state_row: ScreenStateRecord,
+        flow_name: str,
+    ) -> dict | None:
+        if isinstance(state_row.data, dict):
+            return state_row.data.copy()
+
+        reason = "invalid_state_data_type"
+        self._skip_reasons_counter[reason] += 1
+        state_data_type = type(state_row.data).__name__
+        self._logger.warning(
+            "nudge_state_skipped",
+            extra={
+                "telegram_user_id": state_row.telegram_user_id,
+                "screen_id": state_row.screen_id,
+                "flow": flow_name,
+                "reason": reason,
+                "state_data_type": state_data_type,
+                "skip_reason_count": self._skip_reasons_counter[reason],
+            },
+        )
+        screen_manager.record_transition_event_safe(
+            user_id=state_row.telegram_user_id,
+            from_screen=state_row.screen_id,
+            to_screen=state_row.screen_id or "UNKNOWN",
+            trigger_type="system",
+            trigger_value=f"{flow_name}:skipped",
+            transition_status="skipped",
+            metadata_json={
+                "reason": reason,
+                "state_data_type": state_data_type,
+                "skip_reason_count": self._skip_reasons_counter[reason],
+            },
+        )
+        return None
 
     def _update_heartbeat(self) -> None:
         now = datetime.now(timezone.utc)

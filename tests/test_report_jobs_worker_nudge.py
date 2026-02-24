@@ -335,6 +335,67 @@ class ReportJobsWorkerNudgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("Traceback", output)
         self.assertIn("RuntimeError: checkout boom", output)
 
+    async def test_nudges_skip_invalid_state_data_type_without_failures(self) -> None:
+        with self.SessionLocal() as session:
+            session.add(
+                ScreenStateRecord(
+                    telegram_user_id=19020,
+                    screen_id="S2",
+                    message_ids=[],
+                    user_message_ids=[],
+                    last_question_message_id=None,
+                    data=["broken", "payload"],
+                )
+            )
+            session.add(
+                ScreenStateRecord(
+                    telegram_user_id=19021,
+                    screen_id="S3",
+                    message_ids=[],
+                    user_message_ids=[],
+                    last_question_message_id=None,
+                    data="broken-payload",
+                )
+            )
+            session.commit()
+
+        logger = logging.getLogger(worker_module.__name__)
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(ExtraFieldsFormatter("%(levelname)s|%(name)s|%(message)s%(extra_fields)s"))
+        old_handlers = logger.handlers[:]
+        old_level = logger.level
+        old_propagate = logger.propagate
+        logger.handlers = [handler]
+        logger.setLevel(logging.WARNING)
+        logger.propagate = False
+
+        send_mock = AsyncMock(return_value=type("R", (), {"sent": True, "reason": "sent"})())
+        worker = worker_module.ReportJobWorker()
+        try:
+            with patch.object(worker_module, "send_marketing_message", new=send_mock), patch.object(
+                worker_module.screen_manager,
+                "_record_transition_event",
+                return_value=None,
+            ) as event_mock:
+                await worker._process_stalled_users(bot=AsyncMock())
+                await worker._process_checkout_value_nudges(bot=AsyncMock())
+        finally:
+            logger.handlers = old_handlers
+            logger.level = old_level
+            logger.propagate = old_propagate
+
+        output = stream.getvalue()
+        self.assertIn("nudge_state_skipped", output)
+        self.assertIn("reason=invalid_state_data_type", output)
+        self.assertIn("state_data_type=list", output)
+        self.assertIn("state_data_type=str", output)
+        self.assertNotIn("resume_nudge_process_failed", output)
+        self.assertNotIn("checkout_value_nudge_process_failed", output)
+        self.assertNotIn("Traceback", output)
+        self.assertEqual(send_mock.await_count, 0)
+        self.assertGreaterEqual(event_mock.call_count, 2)
+
 
 if __name__ == "__main__":
     unittest.main()
