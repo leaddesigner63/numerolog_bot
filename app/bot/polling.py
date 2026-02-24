@@ -22,7 +22,13 @@ async def main() -> None:
     dispatcher = Dispatcher(storage=MemoryStorage())
     setup_bot_router(dispatcher)
 
-    await restore_payment_waiters(bot)
+    try:
+        await restore_payment_waiters(bot)
+    except Exception as exc:
+        logger.warning(
+            "payment_waiters_restore_failed",
+            extra={"event_code": "payment_waiters_restore_failed", "error": str(exc)},
+        )
 
     logger.info("Starting bot polling")
     worker_task = asyncio.create_task(report_job_worker.run(bot))

@@ -10,6 +10,7 @@ from aiogram.exceptions import TelegramBadRequest, TelegramNetworkError
 from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery
 from sqlalchemy import select, func
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.bot.questionnaire.config import load_questionnaire_config, resolve_next_question_id
 from app.bot.screens import build_payment_wait_message, build_report_wait_message
@@ -555,37 +556,51 @@ async def ensure_payment_waiter(*, bot: Bot, chat_id: int, user_id: int) -> None
 
 def _iter_payment_waiter_candidates() -> list[tuple[int, int]]:
     candidates: list[tuple[int, int]] = []
-    with get_session() as session:
-        rows = session.execute(
-            select(ScreenStateRecord).where(ScreenStateRecord.screen_id == "S3")
-        ).scalars().all()
-        for row in rows:
-            state_data = row.data or {}
-            order_id = _safe_int(state_data.get("order_id"))
-            if not order_id:
-                continue
-            candidates.append((row.telegram_user_id, order_id))
+    try:
+        with get_session() as session:
+            rows = session.execute(
+                select(ScreenStateRecord).where(ScreenStateRecord.screen_id == "S3")
+            ).scalars().all()
+            for row in rows:
+                state_data = row.data or {}
+                order_id = _safe_int(state_data.get("order_id"))
+                if not order_id:
+                    continue
+                candidates.append((row.telegram_user_id, order_id))
+    except SQLAlchemyError as exc:
+        logger.warning(
+            "payment_waiter_candidates_load_failed",
+            extra={"event_code": "payment_waiter_candidates_load_failed", "error": str(exc)},
+        )
+        return []
     return candidates
 
 
 async def restore_payment_waiters(bot: Bot) -> int:
     restored = 0
-    for user_id, order_id in _iter_payment_waiter_candidates():
-        with get_session() as session:
-            order = session.get(Order, order_id)
-            if not order:
-                continue
-            user = _get_or_create_user(session, user_id)
-            if order.user_id != user.id:
-                continue
-            if order.status == OrderStatus.PAID:
-                continue
-        await ensure_payment_waiter(
-            bot=bot,
-            chat_id=user_id,
-            user_id=user_id,
+    try:
+        for user_id, order_id in _iter_payment_waiter_candidates():
+            with get_session() as session:
+                order = session.get(Order, order_id)
+                if not order:
+                    continue
+                user = _get_or_create_user(session, user_id)
+                if order.user_id != user.id:
+                    continue
+                if order.status == OrderStatus.PAID:
+                    continue
+            await ensure_payment_waiter(
+                bot=bot,
+                chat_id=user_id,
+                user_id=user_id,
+            )
+            restored += 1
+    except SQLAlchemyError as exc:
+        logger.warning(
+            "payment_waiters_restore_query_failed",
+            extra={"event_code": "payment_waiters_restore_query_failed", "error": str(exc)},
         )
-        restored += 1
+        return 0
     if restored:
         logger.info("payment_waiters_restored", extra={"count": restored})
     return restored
