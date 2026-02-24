@@ -99,36 +99,11 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   set +a
 fi
 
-if [ -f alembic.ini ]; then
-  ALEMBIC_CMD="alembic"
-  if [ -x .venv/bin/alembic ]; then
-    ALEMBIC_CMD=".venv/bin/alembic"
-  elif [ -x venv/bin/alembic ]; then
-    ALEMBIC_CMD="venv/bin/alembic"
-  fi
-  if [ -x "$ALEMBIC_CMD" ]; then
-    ALEMBIC_UPGRADE_ATTEMPTS="${ALEMBIC_UPGRADE_ATTEMPTS:-20}"
-    ALEMBIC_UPGRADE_INTERVAL_SECONDS="${ALEMBIC_UPGRADE_INTERVAL_SECONDS:-3}"
-    alembic_upgrade_ok=0
-
-    for ((attempt=1; attempt<=ALEMBIC_UPGRADE_ATTEMPTS; attempt++)); do
-      echo "[WAIT] Alembic upgrade attempt $attempt/$ALEMBIC_UPGRADE_ATTEMPTS"
-      if "$ALEMBIC_CMD" upgrade head; then
-        alembic_upgrade_ok=1
-        break
-      fi
-
-      if [ "$attempt" -lt "$ALEMBIC_UPGRADE_ATTEMPTS" ]; then
-        echo "[WAIT] Alembic upgrade не выполнен, повтор через ${ALEMBIC_UPGRADE_INTERVAL_SECONDS}с"
-        sleep "$ALEMBIC_UPGRADE_INTERVAL_SECONDS"
-      fi
-    done
-
-    if [ "$alembic_upgrade_ok" -ne 1 ]; then
-      echo "[FAIL] Alembic upgrade не выполнен после $ALEMBIC_UPGRADE_ATTEMPTS попыток"
-      exit 1
-    fi
-  fi
+if [ -x scripts/db/alembic_upgrade_with_retry.sh ]; then
+  bash scripts/db/alembic_upgrade_with_retry.sh
+elif [ -f alembic.ini ]; then
+  echo "[FAIL] scripts/db/alembic_upgrade_with_retry.sh не найден или не исполняемый."
+  exit 1
 fi
 
 if [ -f scripts/migrate.php ]; then

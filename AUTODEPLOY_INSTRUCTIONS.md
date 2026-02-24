@@ -199,6 +199,28 @@ pytest -q \
    ```
 3. Полный порядок релиза описан в `docs/release_notes/2026-02-21-report-order-id-unique.md`.
 
+## 4.3. Защита от падений во время recovery PostgreSQL
+Если в журналах есть ошибка `the database system is not yet accepting connections`, подключите единый retry-скрипт миграций в unit-файлы.
+
+1. Проверьте наличие файла на сервере:
+   ```bash
+   ls -l /opt/numerolog_bot/scripts/db/alembic_upgrade_with_retry.sh
+   ```
+2. В `numerolog-api.service` и `numerolog-bot.service` добавьте строку:
+   ```ini
+   ExecStartPre=/opt/numerolog_bot/scripts/db/alembic_upgrade_with_retry.sh
+   ```
+3. Перечитайте конфигурацию и перезапустите сервисы:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart numerolog-api.service numerolog-bot.service
+   ```
+4. При медленном старте БД увеличьте retry-параметры в env:
+   ```bash
+   ALEMBIC_UPGRADE_ATTEMPTS=40
+   ALEMBIC_UPGRADE_INTERVAL_SECONDS=3
+   ```
+
 ## 5. Миграции базы данных
 При каждом деплое workflow автоматически выполняет `alembic upgrade head`, если в проекте есть `alembic.ini` и установлен Alembic.
 Убедитесь, что в `ENV_FILE` задан `DATABASE_URL` (или в проекте есть `.env` с этим значением), иначе миграции не запустятся.
