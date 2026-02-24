@@ -37,6 +37,8 @@ class ReportJobWorker:
         self._host = socket.gethostname()
         self._pid = os.getpid()
         self._skip_reasons_counter: Counter[str] = Counter()
+        self._retry_base_seconds = 60
+        self._retry_max_seconds = 60 * 60
 
     async def run(self, bot: Bot) -> None:
         poll_interval = max(settings.report_job_poll_interval_seconds, 1)
@@ -84,12 +86,19 @@ class ReportJobWorker:
         with get_session() as session:
             state_rows = session.execute(select(ScreenStateRecord)).scalars().all()
             for state_row in state_rows:
+                state_data: dict | None = None
                 try:
                     state_data = self._get_state_data_or_none(
                         state_row=state_row,
                         flow_name="resume_nudge",
                     )
                     if state_data is None:
+                        continue
+                    if self._should_skip_by_retry(
+                        state_data=state_data,
+                        key_prefix="resume_nudge",
+                        now=now,
+                    ):
                         continue
                     critical_at = self._parse_dt(state_data.get("last_critical_step_at"))
                     if not critical_at:
@@ -138,6 +147,10 @@ class ReportJobWorker:
                     state_data["resume_nudge_sent_at"] = sent_at
                     state_data["resume_nudge_campaign"] = resume_campaign
                     state_data["resume_nudge_target_screen_id"] = state_data.get("last_critical_screen_id")
+                    state_data = self._clear_processing_errors(
+                        state_data=state_data,
+                        key_prefix="resume_nudge",
+                    )
                     state_row.data = state_data
                     session.add(state_row)
                     screen_manager.record_transition_event_safe(
@@ -154,6 +167,13 @@ class ReportJobWorker:
                         },
                     )
                 except Exception as exc:
+                    state_data = self._register_processing_error(
+                        state_data=state_data if isinstance(state_data, dict) else {},
+                        key_prefix="resume_nudge",
+                        now=now,
+                    )
+                    state_row.data = state_data
+                    session.add(state_row)
                     self._logger.warning(
                         "resume_nudge_process_failed",
                         extra={"telegram_user_id": state_row.telegram_user_id, "error": str(exc)},
@@ -179,12 +199,19 @@ class ReportJobWorker:
         with get_session() as session:
             state_rows = session.execute(select(ScreenStateRecord)).scalars().all()
             for state_row in state_rows:
+                state_data: dict | None = None
                 try:
                     state_data = self._get_state_data_or_none(
                         state_row=state_row,
                         flow_name="checkout_value_nudge",
                     )
                     if state_data is None:
+                        continue
+                    if self._should_skip_by_retry(
+                        state_data=state_data,
+                        key_prefix="checkout_value_nudge",
+                        now=now,
+                    ):
                         continue
                     if state_data.get("checkout_value_nudge_sent_at"):
                         continue
@@ -238,6 +265,10 @@ class ReportJobWorker:
                     sent_at = now.isoformat()
                     state_data["checkout_value_nudge_sent_at"] = sent_at
                     state_data["checkout_value_nudge_campaign"] = campaign
+                    state_data = self._clear_processing_errors(
+                        state_data=state_data,
+                        key_prefix="checkout_value_nudge",
+                    )
                     state_row.data = state_data
                     session.add(state_row)
                     screen_manager.record_transition_event_safe(
@@ -255,6 +286,13 @@ class ReportJobWorker:
                         },
                     )
                 except Exception as exc:
+                    state_data = self._register_processing_error(
+                        state_data=state_data if isinstance(state_data, dict) else {},
+                        key_prefix="checkout_value_nudge",
+                        now=now,
+                    )
+                    state_row.data = state_data
+                    session.add(state_row)
                     self._logger.warning(
                         "checkout_value_nudge_process_failed",
                         extra={"telegram_user_id": state_row.telegram_user_id, "error": str(exc)},
@@ -270,6 +308,39 @@ class ReportJobWorker:
         if bot_username:
             return f"https://t.me/{bot_username}?start={payload}"
         return f"/start {payload}"
+
+    def _should_skip_by_retry(self, *, state_data: dict, key_prefix: str, now: datetime) -> bool:
+        next_retry_at = self._parse_dt(state_data.get(f"{key_prefix}_next_retry_at"))
+        if not next_retry_at:
+            return False
+        return now < next_retry_at
+
+    def _register_processing_error(
+        self,
+        *,
+        state_data: dict,
+        key_prefix: str,
+        now: datetime,
+    ) -> dict:
+        next_data = dict(state_data)
+        current_count = int(next_data.get(f"{key_prefix}_error_count") or 0)
+        next_count = current_count + 1
+        retry_seconds = min(
+            self._retry_base_seconds * (2 ** (next_count - 1)),
+            self._retry_max_seconds,
+        )
+        next_data[f"{key_prefix}_last_error_at"] = now.isoformat()
+        next_data[f"{key_prefix}_error_count"] = next_count
+        next_data[f"{key_prefix}_next_retry_at"] = (now + timedelta(seconds=retry_seconds)).isoformat()
+        return next_data
+
+    @staticmethod
+    def _clear_processing_errors(*, state_data: dict, key_prefix: str) -> dict:
+        next_data = dict(state_data)
+        next_data.pop(f"{key_prefix}_last_error_at", None)
+        next_data.pop(f"{key_prefix}_error_count", None)
+        next_data.pop(f"{key_prefix}_next_retry_at", None)
+        return next_data
 
     @staticmethod
     def _parse_dt(value: object) -> datetime | None:
