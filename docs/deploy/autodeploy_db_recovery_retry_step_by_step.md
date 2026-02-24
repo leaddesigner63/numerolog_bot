@@ -15,8 +15,8 @@
 
 Скрипт выполняет `alembic upgrade head` с ретраями:
 
-- `ALEMBIC_UPGRADE_ATTEMPTS` — количество попыток (по умолчанию `20`);
-- `ALEMBIC_UPGRADE_INTERVAL_SECONDS` — пауза между попытками (по умолчанию `3`).
+- `ALEMBIC_UPGRADE_ATTEMPTS` — количество попыток (по умолчанию `60`);
+- `ALEMBIC_UPGRADE_INTERVAL_SECONDS` — пауза между попытками (по умолчанию `5`).
 
 Если миграция не прошла, скрипт повторит попытку вместо немедленного падения деплоя.
 
@@ -26,8 +26,9 @@
 2. Добавьте параметры окружения для шага деплоя:
 
 ```bash
-ALEMBIC_UPGRADE_ATTEMPTS=30
-ALEMBIC_UPGRADE_INTERVAL_SECONDS=3
+ALEMBIC_UPGRADE_ATTEMPTS=60
+ALEMBIC_UPGRADE_INTERVAL_SECONDS=5
+ALEMBIC_RETRY_ON_ANY_ERROR=1
 ```
 
 3. Убедитесь, что ваш pipeline вызывает `scripts/deploy.sh`.
@@ -45,8 +46,8 @@ sudo systemctl restart numerolog-api.service numerolog-bot.service
 ```
 5. Запустите деплой вручную (или дождитесь следующего автоматического запуска).
 6. Проверьте логи: должны появляться строки вида
-   - `[WAIT] Alembic upgrade attempt 1/30`
-   - `[WAIT] Alembic upgrade не выполнен, повтор через 3с`
+   - `[WAIT] Alembic upgrade attempt 1/60`
+   - `[WAIT] Alembic upgrade не выполнен, повтор через 5с`
 7. Убедитесь, что после восстановления БД деплой и рестарт сервисов завершаются успешно.
 
 ## Проверка после деплоя

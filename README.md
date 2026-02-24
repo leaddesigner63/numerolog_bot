@@ -283,13 +283,13 @@ WORKER_HEALTHCHECK_URL=http://127.0.0.1:8000/health/report-worker
 WORKER_HEALTHCHECK_ATTEMPTS=20
 WORKER_HEALTHCHECK_INTERVAL_SECONDS=3
 SMOKE_REPORT_JOB_TIMEOUT_SECONDS=420
-ALEMBIC_UPGRADE_ATTEMPTS=20
-ALEMBIC_UPGRADE_INTERVAL_SECONDS=3
+ALEMBIC_UPGRADE_ATTEMPTS=60
+ALEMBIC_UPGRADE_INTERVAL_SECONDS=5
 ```
 
 `deploy.sh` также ждёт `"alive": true` на worker-health endpoint перед запуском smoke-check paid order → ReportJob → COMPLETED. Это снижает ложные падения SSH-деплоя, когда API уже поднялся, а polling/worker ещё не успел обновить heartbeat.
 
-Дополнительно `deploy.sh` выполняет `alembic upgrade head` с ретраями (по умолчанию 20 попыток с интервалом 3 секунды). Это покрывает сценарий, когда PostgreSQL временно находится в состоянии recovery (`the database system is not yet accepting connections`) и начинает принимать подключения через несколько секунд.
+Дополнительно `deploy.sh` выполняет `alembic upgrade head` с ретраями (по умолчанию 60 попыток с интервалом 5 секунд). Это покрывает сценарий, когда PostgreSQL временно находится в состоянии recovery (`the database system is not yet accepting connections`) и начинает принимать подключения через несколько секунд.
 
 ## Яндекс.Метрика: проверка и эксплуатация
 
@@ -670,6 +670,8 @@ ExecStartPre=/opt/numerolog_bot/scripts/db/alembic_upgrade_with_retry.sh
 ExecStart=/opt/numerolog_bot/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=20
 
 [Install]
 WantedBy=multi-user.target
@@ -692,6 +694,8 @@ ExecStartPre=/opt/numerolog_bot/scripts/db/alembic_upgrade_with_retry.sh
 ExecStart=/opt/numerolog_bot/.venv/bin/python -m app.bot.polling
 Restart=always
 RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=20
 
 [Install]
 WantedBy=multi-user.target
