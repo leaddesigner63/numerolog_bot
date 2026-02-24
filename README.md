@@ -55,6 +55,7 @@ scripts/              # вспомогательные скрипты
   smoke_check_landing.sh # smoke-check доступности лендинга/CTA/ассетов после деплоя
   smoke_check_report_job_completion.sh # post-deploy smoke-check paid-заказа: создание ReportJob и ожидание COMPLETED
   smoke_check_report_job_completion.py # сценарий smoke-check paid order -> ReportJob -> COMPLETED с подробным логом; устойчив к запуску из любого рабочего каталога и очищает созданные smoke-данные после проверки
+  db/alembic_upgrade_with_retry.sh # запуск alembic upgrade head с ретраями (в т.ч. для recovery PostgreSQL) для deploy/systemd ExecStartPre
   db/check_smoke_residuals.py # обязательный post-check остатков smoke-данных в ключевых таблицах после cleanup; печатает детализацию и возвращает ошибку при count > 0
   smoke_check_checkout_flow.sh # smoke-check checkout-флоу; при отсутствии pytest пытается установить зависимости автоматически
   db/archive_duplicate_reports_by_order.py # архивирование дублей reports.order_id перед миграцией уникального индекса
@@ -657,13 +658,15 @@ python scripts/check_landing_content.py
 ```ini
 [Unit]
 Description=Numerolog Bot API (FastAPI)
-After=network.target
+After=network.target postgresql.service
+Wants=postgresql.service
 
 [Service]
 Type=simple
 User=deployer
 WorkingDirectory=/opt/numerolog_bot
 EnvironmentFile=/etc/numerolog_bot/.env
+ExecStartPre=/opt/numerolog_bot/scripts/db/alembic_upgrade_with_retry.sh
 ExecStart=/opt/numerolog_bot/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000
 Restart=always
 RestartSec=5
@@ -677,13 +680,15 @@ WantedBy=multi-user.target
 ```ini
 [Unit]
 Description=Numerolog Bot (Telegram, aiogram)
-After=network.target
+After=network.target postgresql.service
+Wants=postgresql.service
 
 [Service]
 Type=simple
 User=deployer
 WorkingDirectory=/opt/numerolog_bot
 EnvironmentFile=/etc/numerolog_bot/.env
+ExecStartPre=/opt/numerolog_bot/scripts/db/alembic_upgrade_with_retry.sh
 ExecStart=/opt/numerolog_bot/.venv/bin/python -m app.bot.polling
 Restart=always
 RestartSec=5
