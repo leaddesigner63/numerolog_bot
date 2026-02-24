@@ -217,8 +217,8 @@ pytest -q \
    ```
 4. При медленном старте БД увеличьте retry-параметры в env:
    ```bash
-   ALEMBIC_UPGRADE_ATTEMPTS=40
-   ALEMBIC_UPGRADE_INTERVAL_SECONDS=3
+   ALEMBIC_UPGRADE_ATTEMPTS=60
+   ALEMBIC_UPGRADE_INTERVAL_SECONDS=5
    ```
 
 ## 5. Миграции базы данных
