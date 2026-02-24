@@ -397,5 +397,68 @@ class ReportJobsWorkerNudgeTests(unittest.IsolatedAsyncioTestCase):
         self.assertGreaterEqual(event_mock.call_count, 2)
 
 
+    async def test_resume_nudge_backoff_prevents_warning_storm(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=6, telegram_user_id=19013, telegram_username="resume_backoff")
+            session.add(user)
+            session.add(
+                UserProfile(
+                    user_id=6,
+                    name="name",
+                    birth_date="01.01.1990",
+                    birth_place_city="Moscow",
+                    birth_place_country="RU",
+                    marketing_consent_document_version="v1",
+                    marketing_consent_accepted_at=datetime.now(timezone.utc),
+                )
+            )
+            session.add(
+                ScreenStateRecord(
+                    telegram_user_id=19013,
+                    screen_id="S3",
+                    message_ids=[],
+                    user_message_ids=[],
+                    last_question_message_id=None,
+                    data={
+                        "last_critical_step_at": (datetime.now(timezone.utc) - timedelta(hours=8)).isoformat(),
+                        "last_critical_screen_id": "S3",
+                    },
+                )
+            )
+            session.commit()
+
+        logger = logging.getLogger(worker_module.__name__)
+        stream = io.StringIO()
+        handler = logging.StreamHandler(stream)
+        handler.setFormatter(ExtraFieldsFormatter("%(levelname)s|%(name)s|%(message)s%(extra_fields)s"))
+        old_handlers = logger.handlers[:]
+        old_level = logger.level
+        old_propagate = logger.propagate
+        logger.handlers = [handler]
+        logger.setLevel(logging.WARNING)
+        logger.propagate = False
+
+        worker = worker_module.ReportJobWorker()
+        try:
+            with patch.object(worker_module, "send_marketing_message", new=AsyncMock(side_effect=RuntimeError("resume backoff boom"))):
+                await worker._process_stalled_users(bot=AsyncMock())
+                await worker._process_stalled_users(bot=AsyncMock())
+        finally:
+            logger.handlers = old_handlers
+            logger.level = old_level
+            logger.propagate = old_propagate
+
+        output = stream.getvalue()
+        self.assertEqual(output.count("resume_nudge_process_failed"), 1)
+
+        with self.SessionLocal() as session:
+            row = session.get(ScreenStateRecord, 19013)
+            data = dict(row.data or {})
+            self.assertEqual(data.get("resume_nudge_error_count"), 1)
+            self.assertIsNotNone(data.get("resume_nudge_last_error_at"))
+            self.assertIsNotNone(data.get("resume_nudge_next_retry_at"))
+
+
+
 if __name__ == "__main__":
     unittest.main()
