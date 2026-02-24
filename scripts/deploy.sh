@@ -144,6 +144,9 @@ $SYSTEMCTL --no-pager --full status -- "${services[@]}" | head -n 80
 if [ -x scripts/check_runtime_services.sh ]; then
   API_SERVICE_NAME="${API_SERVICE_NAME:-numerolog-api.service}" \
   BOT_SERVICE_NAME="${BOT_SERVICE_NAME:-numerolog-bot.service}" \
+  RUNTIME_API_READINESS_URL="${RUNTIME_API_READINESS_URL:-}" \
+  RUNTIME_ADMIN_URL="${RUNTIME_ADMIN_URL:-}" \
+  RUNTIME_ADMIN_DB_READY_URL="${RUNTIME_ADMIN_DB_READY_URL:-}" \
   SERVICE_NAMES_OVERRIDE="$SERVICES" \
   bash scripts/check_runtime_services.sh
 else
