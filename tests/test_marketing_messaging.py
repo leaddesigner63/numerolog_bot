@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramForbiddenError, TelegramNotFound
+from aiogram.methods import SendMessage
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -152,4 +154,133 @@ def test_send_marketing_message_adds_unsubscribe_link() -> None:
 
     settings.newsletter_unsubscribe_base_url = original_base_url
     settings.newsletter_unsubscribe_secret = original_secret
+    Base.metadata.drop_all(engine)
+
+
+def test_send_marketing_message_handles_blocked_user() -> None:
+    SessionLocal, engine = _create_session_factory()
+    with SessionLocal() as session:
+        user = User(telegram_user_id=10003, telegram_username="blocked")
+        session.add(user)
+        session.flush()
+        session.add(
+            UserProfile(
+                user_id=user.id,
+                name="N",
+                gender=None,
+                birth_date="01.01.2000",
+                birth_time=None,
+                birth_place_city="Moscow",
+                birth_place_region=None,
+                birth_place_country="RU",
+                marketing_consent_accepted_at=datetime.now(timezone.utc),
+                marketing_consent_document_version="v1",
+            )
+        )
+        session.commit()
+        user_id = user.id
+
+    bot = AsyncMock(spec=Bot)
+    bot.send_message.side_effect = TelegramForbiddenError(
+        method=SendMessage(chat_id=10003, text="x"),
+        message="Forbidden: bot was blocked by the user",
+    )
+    with SessionLocal() as session:
+        result = asyncio.run(
+            send_marketing_message(
+                bot=bot,
+                session=session,
+                user_id=user_id,
+                campaign="blocked_campaign",
+                message_text="Тест",
+            )
+        )
+
+    assert result.sent is False
+    assert result.reason == "telegram_forbidden"
+    Base.metadata.drop_all(engine)
+
+
+def test_send_marketing_message_handles_chat_not_found() -> None:
+    SessionLocal, engine = _create_session_factory()
+    with SessionLocal() as session:
+        user = User(telegram_user_id=10004, telegram_username="missing")
+        session.add(user)
+        session.flush()
+        session.add(
+            UserProfile(
+                user_id=user.id,
+                name="N",
+                gender=None,
+                birth_date="01.01.2000",
+                birth_time=None,
+                birth_place_city="Moscow",
+                birth_place_region=None,
+                birth_place_country="RU",
+                marketing_consent_accepted_at=datetime.now(timezone.utc),
+                marketing_consent_document_version="v1",
+            )
+        )
+        session.commit()
+        user_id = user.id
+
+    bot = AsyncMock(spec=Bot)
+    bot.send_message.side_effect = TelegramNotFound(
+        method=SendMessage(chat_id=10004, text="x"),
+        message="Not Found: chat not found",
+    )
+    with SessionLocal() as session:
+        result = asyncio.run(
+            send_marketing_message(
+                bot=bot,
+                session=session,
+                user_id=user_id,
+                campaign="missing_campaign",
+                message_text="Тест",
+            )
+        )
+
+    assert result.sent is False
+    assert result.reason == "telegram_chat_not_found"
+    Base.metadata.drop_all(engine)
+
+
+def test_send_marketing_message_handles_timeout() -> None:
+    SessionLocal, engine = _create_session_factory()
+    with SessionLocal() as session:
+        user = User(telegram_user_id=10005, telegram_username="timeout")
+        session.add(user)
+        session.flush()
+        session.add(
+            UserProfile(
+                user_id=user.id,
+                name="N",
+                gender=None,
+                birth_date="01.01.2000",
+                birth_time=None,
+                birth_place_city="Moscow",
+                birth_place_region=None,
+                birth_place_country="RU",
+                marketing_consent_accepted_at=datetime.now(timezone.utc),
+                marketing_consent_document_version="v1",
+            )
+        )
+        session.commit()
+        user_id = user.id
+
+    bot = AsyncMock(spec=Bot)
+    bot.send_message.side_effect = TimeoutError("timeout")
+    with SessionLocal() as session:
+        result = asyncio.run(
+            send_marketing_message(
+                bot=bot,
+                session=session,
+                user_id=user_id,
+                campaign="timeout_campaign",
+                message_text="Тест",
+            )
+        )
+
+    assert result.sent is False
+    assert result.reason == "telegram_timeout"
     Base.metadata.drop_all(engine)

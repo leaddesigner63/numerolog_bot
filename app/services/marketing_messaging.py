@@ -5,6 +5,13 @@ from dataclasses import dataclass
 from time import time
 
 from aiogram import Bot
+from aiogram.exceptions import (
+    TelegramBadRequest,
+    TelegramForbiddenError,
+    TelegramNetworkError,
+    TelegramNotFound,
+    TelegramRetryAfter,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -44,6 +51,22 @@ def append_unsubscribe_block(*, message_text: str, unsubscribe_link: str | None)
     if not unsubscribe_link:
         return message_text
     return f"{message_text}\n\nОтписаться: {unsubscribe_link}"
+
+
+def _classify_telegram_send_error(exc: Exception) -> str:
+    if isinstance(exc, TelegramForbiddenError):
+        return "telegram_forbidden"
+    if isinstance(exc, TelegramNotFound):
+        return "telegram_chat_not_found"
+    if isinstance(exc, TelegramRetryAfter):
+        return "telegram_rate_limited"
+    if isinstance(exc, TelegramNetworkError):
+        return "telegram_network_error"
+    if isinstance(exc, TimeoutError):
+        return "telegram_timeout"
+    if isinstance(exc, TelegramBadRequest):
+        return "telegram_bad_request"
+    return "telegram_send_failed"
 
 
 async def send_marketing_message(
@@ -90,12 +113,40 @@ async def send_marketing_message(
         unsubscribe_link=unsubscribe_link,
     )
 
-    await bot.send_message(chat_id=user.telegram_user_id, text=prepared_text)
+    try:
+        await bot.send_message(chat_id=user.telegram_user_id, text=prepared_text)
+    except Exception as exc:  # noqa: BLE001
+        reason = _classify_telegram_send_error(exc)
+        retry_after = getattr(exc, "retry_after", None)
+        logger.warning(
+            "marketing_message_send_failed",
+            extra={
+                "campaign": campaign,
+                "user_id": user_id,
+                "telegram_user_id": user.telegram_user_id,
+                "reason": reason,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+                "retry_after": retry_after,
+                "is_timeout": isinstance(exc, TimeoutError),
+                "consent_version": consent_version,
+                "has_unsubscribe_link": has_unsubscribe_link,
+            },
+            exc_info=not isinstance(exc, (TelegramForbiddenError, TelegramNotFound, TelegramRetryAfter, TelegramNetworkError, TelegramBadRequest, TimeoutError)),
+        )
+        return MarketingSendResult(
+            sent=False,
+            reason=reason,
+            consent_version=consent_version,
+            has_unsubscribe_link=has_unsubscribe_link,
+        )
+
     logger.info(
         "marketing_message_sent",
         extra={
             "campaign": campaign,
             "user_id": user_id,
+            "telegram_user_id": user.telegram_user_id,
             "consent_version": consent_version,
             "has_unsubscribe_link": has_unsubscribe_link,
         },

@@ -123,6 +123,15 @@ class ReportJobWorker:
                         message_text=message_text,
                     )
                     if not send_result.sent:
+                        self._logger.info(
+                            "resume_nudge_send_skipped",
+                            extra={
+                                "campaign": resume_campaign,
+                                "user_id": user.id,
+                                "telegram_user_id": state_row.telegram_user_id,
+                                "reason": send_result.reason,
+                            },
+                        )
                         continue
 
                     sent_at = now.isoformat()
@@ -215,6 +224,15 @@ class ReportJobWorker:
                         message_text=message_text,
                     )
                     if not send_result.sent:
+                        self._logger.info(
+                            "checkout_value_nudge_send_skipped",
+                            extra={
+                                "campaign": campaign,
+                                "user_id": user.id,
+                                "telegram_user_id": state_row.telegram_user_id,
+                                "reason": send_result.reason,
+                            },
+                        )
                         continue
 
                     sent_at = now.isoformat()
