@@ -237,15 +237,30 @@ Workflow вызывает `scripts/deploy.sh` на сервере. Скрипт 
 Если вы видите ошибку вида `...service: command not found`, проверьте, что unit-файлы созданы и имена сервисов совпадают с тем, что указано в секретах `SERVICE_NAME` или `SERVICE_NAMES`.
 
 ## 7.1. Обязательная post-deploy проверка пула БД для админ-аналитики
-1. Проверьте, что в `ENV_FILE`/`.env` заданы:
-   - `DATABASE_POOL_SIZE=20`
-   - `DATABASE_MAX_OVERFLOW=20`
+1. Проверьте, что в `ENV_FILE`/`.env` заданы безопасные лимиты пула:
+   - `DATABASE_POOL_SIZE=8`
+   - `DATABASE_MAX_OVERFLOW=2`
    - `DATABASE_POOL_TIMEOUT_SECONDS=30`
    - `ADMIN_ANALYTICS_CACHE_TTL_SECONDS=5`
-2. После рестарта API откройте админку и убедитесь, что в логах отсутствует ошибка
-   `sqlalchemy.exc.TimeoutError: QueuePool limit ... reached`.
-3. Если ошибка повторяется, увеличьте `DATABASE_POOL_SIZE` и `DATABASE_MAX_OVERFLOW` синхронно
-   с лимитами PostgreSQL (`max_connections`) и перезапустите сервис.
+   - для локальной разработки: `DATABASE_POOL_SIZE=5`, `DATABASE_MAX_OVERFLOW=0`
+2. Проверьте лимит PostgreSQL на сервере:
+   ```bash
+   psql "$DATABASE_URL" -c "SHOW max_connections;"
+   ```
+3. Посчитайте суммарный connection budget по всем процессам (`api`, `bot`, workers):
+   ```text
+   total_budget =
+     api_instances * (DATABASE_POOL_SIZE + DATABASE_MAX_OVERFLOW)
+     + bot_instances * (DATABASE_POOL_SIZE + DATABASE_MAX_OVERFLOW)
+     + worker_instances * (DATABASE_POOL_SIZE + DATABASE_MAX_OVERFLOW)
+   ```
+   Рекомендуем держать `total_budget <= 0.8 * max_connections`, оставляя запас для миграций,
+   psql-сессий, мониторинга и фоновых задач PostgreSQL.
+4. После рестарта API откройте админку и убедитесь, что в логах отсутствует ошибка
+   `sqlalchemy.exc.TimeoutError: QueuePool limit ... reached`, а на старте сервиса есть строка
+   `database_pool_config pool_size=... max_overflow=...`.
+5. Если ошибка повторяется, корректируйте `DATABASE_POOL_SIZE`/`DATABASE_MAX_OVERFLOW`
+   и пересчитывайте `total_budget` относительно `max_connections`, затем перезапускайте сервисы.
 
 ## 8. Troubleshooting: сайт не обновился после деплоя
 Выполните на сервере проверки ниже.

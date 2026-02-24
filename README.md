@@ -158,8 +158,8 @@ cp .env.prompts.example .env.prompts
 BOT_TOKEN=...
 DATABASE_URL=postgresql://user:password@localhost:5432/numerolog_bot
 # Ограничение пула подключений SQLAlchemy (защита от исчерпания слотов Postgres):
-DATABASE_POOL_SIZE=20
-DATABASE_MAX_OVERFLOW=20
+DATABASE_POOL_SIZE=8
+DATABASE_MAX_OVERFLOW=2
 DATABASE_POOL_TIMEOUT_SECONDS=30
 DATABASE_POOL_RECYCLE_SECONDS=1800
 # Короткий кэш heavy-эндпоинтов аналитики админки (сек):
@@ -212,6 +212,12 @@ GEMINI_IMAGE_MODEL=gemini-2.0-flash-exp-image-generation
 
 > Примечание: лишние переменные в `.env` безопасно игнорируются и не ломают запуск.
 
+> Рекомендуемые профили пула соединений PostgreSQL:
+> - `dev`: `DATABASE_POOL_SIZE=5`, `DATABASE_MAX_OVERFLOW=0`.
+> - `prod` (небольшой VPS): `DATABASE_POOL_SIZE=8`, `DATABASE_MAX_OVERFLOW=2`.
+> - Если на одном сервере работают `api`, `bot` и workers, считайте общий бюджет соединений по runbook: `AUTODEPLOY_INSTRUCTIONS.md` → раздел 7.1.
+
+
 ### Локальный просмотр лендинга
 
 ```bash
@@ -229,7 +235,7 @@ python -m http.server 8080 --directory web
   3. Запустить автодеплой и выполнить пост-проверки из `AUTODEPLOY_INSTRUCTIONS.md` (включая smoke-check лендинга и ручной обход страниц).
   4. Перед публикацией новых статей обновить `docs/landing/seo-keyword-map.md` и подтвердить чек «новый URL не дублирует существующий кластер».
 
-
+- Для контроля connection budget PostgreSQL после автодеплоя используйте runbook: [`docs/deploy/autodeploy_connection_budget_step_by_step.md`](docs/deploy/autodeploy_connection_budget_step_by_step.md).
 - Для изменения логики раскладки кнопок используйте отдельный runbook: [`docs/deploy/autodeploy_keyboard_layout_step_by_step.md`](docs/deploy/autodeploy_keyboard_layout_step_by_step.md).
 
 5. Для релиза уникальности `reports.order_id` сначала выполните предмиграционную очистку дублей:
