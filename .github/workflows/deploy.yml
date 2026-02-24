@@ -84,6 +84,9 @@ jobs:
           LANDING_ASSET_URLS: ${{ secrets.LANDING_ASSET_URLS }}
           WEBMASTER_PING_SCRIPT: ${{ secrets.WEBMASTER_PING_SCRIPT }}
           WEBMASTER_PING_URLS: ${{ secrets.WEBMASTER_PING_URLS }}
+          RUNTIME_API_READINESS_URL: ${{ secrets.RUNTIME_API_READINESS_URL }}
+          RUNTIME_ADMIN_URL: ${{ secrets.RUNTIME_ADMIN_URL }}
+          RUNTIME_ADMIN_DB_READY_URL: ${{ secrets.RUNTIME_ADMIN_DB_READY_URL }}
         run: |
           SSH_OPTS=(
             -p "$PORT"
@@ -106,6 +109,9 @@ jobs:
               LANDING_ASSET_URLS='$LANDING_ASSET_URLS' \
               WEBMASTER_PING_SCRIPT='$WEBMASTER_PING_SCRIPT' \
               WEBMASTER_PING_URLS='$WEBMASTER_PING_URLS' \
+              RUNTIME_API_READINESS_URL='$RUNTIME_API_READINESS_URL' \
+              RUNTIME_ADMIN_URL='$RUNTIME_ADMIN_URL' \
+              RUNTIME_ADMIN_DB_READY_URL='$RUNTIME_ADMIN_DB_READY_URL' \
               DEPLOY_SUCCESS_MARKER='$DEPLOY_PATH/.last_deploy_success' \
               bash -se" <<'EOF'
           set -euo pipefail

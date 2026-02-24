@@ -1,7 +1,7 @@
 # Автодеплой (GitHub Actions + SSH)
 
 ## Короткий чеклист автодеплоя для текущего релиза (этап 1 флоу оплаты)
-1. В GitHub Secrets проверьте: `DEPLOY_HOST`, `DEPLOY_USER`, `DEPLOY_PATH`, `DEPLOY_SSH_KEY`, `SERVICE_NAMES`.
+1. В GitHub Secrets проверьте: `SSH_HOST`, `SSH_USER`, `DEPLOY_PATH`, `SSH_PRIVATE_KEY`, `SERVICE_NAMES`, `RUNTIME_API_READINESS_URL`, `RUNTIME_ADMIN_URL`, `RUNTIME_ADMIN_DB_READY_URL`.
 2. Убедитесь, что `.github/workflows/deploy.yml` запускается на push в рабочую ветку и вызывает `scripts/deploy.sh`.
    Внутри `scripts/deploy.sh` после деплоя обязателен smoke-check `bash scripts/smoke_check_report_job_completion.sh` (paid-заказ -> ReportJob -> COMPLETED).
    Перед этим скрипт ожидает worker-health (`/health/report-worker`, поле `"alive": true`) и только потом запускает smoke-check генерации отчёта.
@@ -165,6 +165,9 @@ pytest -q \
 - `SERVICE_NAMES` — опционально: список сервисов/target’ов через пробел (например, `numerolog-api.service numerolog-bot.service`). Если задан, он имеет приоритет над `SERVICE_NAME`.
 - `ENV_FILE` — полный путь к вашему файлу окружения на сервере (например, `/etc/numerolog_bot/.env`), нужен для запуска миграций Alembic с `DATABASE_URL`.
 - `PRESERVE_PATHS` — опционально: каталоги, которые нужно полностью сохранить при деплое (через пробел). По умолчанию: `app/assets/screen_images app/assets/pdf` (без `web`, чтобы лендинг обновлялся после каждого деплоя).
+- `RUNTIME_API_READINESS_URL` — URL readiness API (рекомендуется `http://127.0.0.1:8000/health/ready`).
+- `RUNTIME_ADMIN_URL` — URL smoke-проверки роута админки (рекомендуется `http://127.0.0.1:8000/admin`, код `401` допустим).
+- `RUNTIME_ADMIN_DB_READY_URL` — URL отдельной проверки DB-ready для админских данных (рекомендуется `http://127.0.0.1:8000/admin/ready`).
 
 ## 4. Проверьте workflow
 1. Убедитесь, что **секреты с точными именами** из шага 3 добавлены в репозиторий.
@@ -469,14 +472,16 @@ cat <DEPLOY_PATH>/.last_deploy_success
 
 ## Стабильность админки после деплоя (обязательно)
 
-Чтобы исключить ситуацию «workflow зелёный, а `/admin` не отвечает», post-deploy проверка должна включать HTTP health-check API.
+Чтобы исключить ситуацию «workflow зелёный, а `/admin` не отвечает», post-deploy проверка должна включать readiness API, smoke по `/admin` и admin DB-ready endpoint.
 
 Используйте переменные:
 
 ```bash
-RUNTIME_API_HEALTHCHECK_URL=http://127.0.0.1:8000/health
-RUNTIME_API_HEALTHCHECK_ATTEMPTS=20
-RUNTIME_API_HEALTHCHECK_INTERVAL_SECONDS=2
+RUNTIME_API_READINESS_URL=http://127.0.0.1:8000/health/ready
+RUNTIME_API_READINESS_ATTEMPTS=20
+RUNTIME_API_READINESS_INTERVAL_SECONDS=2
+RUNTIME_ADMIN_URL=http://127.0.0.1:8000/admin
+RUNTIME_ADMIN_DB_READY_URL=http://127.0.0.1:8000/admin/ready
 ```
 
 И подробный runbook: `docs/deploy/autodeploy_admin_reliability_step_by_step.md`.

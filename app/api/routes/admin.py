@@ -8,7 +8,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from aiogram import Bot
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from sqlalchemy import and_, case, func, or_, select, true
@@ -3715,6 +3715,42 @@ def admin_health(request: Request) -> dict:
         "admin_auth_enabled": _admin_credentials_ready(),
         "checked_at": datetime.now(timezone.utc).isoformat(),
     }
+
+
+@router.get("/ready")
+def admin_ready() -> JSONResponse:
+    database_ok = False
+    error_detail = None
+    try:
+        session_factory = get_session_factory()
+        session = session_factory()
+        session.execute(select(1))
+        session.close()
+        database_ok = True
+    except Exception as exc:
+        error_detail = str(exc)
+
+    if database_ok:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "ready",
+                "database_ok": True,
+                "admin_auth_enabled": _admin_credentials_ready(),
+                "checked_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+
+    return JSONResponse(
+        status_code=503,
+        content={
+            "status": "not_ready",
+            "database_ok": False,
+            "reason": f"admin_database_unavailable: {error_detail}",
+            "admin_auth_enabled": _admin_credentials_ready(),
+            "checked_at": datetime.now(timezone.utc).isoformat(),
+        },
+    )
 
 
 class TransitionSummaryItem(BaseModel):

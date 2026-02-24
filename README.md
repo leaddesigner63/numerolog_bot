@@ -277,14 +277,16 @@ python -m app.bot.polling
 
 ### Анти-флап для админки после деплоя
 
-`deploy.sh` всегда запускает `scripts/check_runtime_services.sh`, который теперь проверяет не только `systemctl is-active`, но и HTTP-доступность API через `RUNTIME_API_HEALTHCHECK_URL` (по умолчанию `http://127.0.0.1:8000/health/ready`) с ретраями. Это предотвращает сценарий, когда systemd уже считает сервис активным, но Uvicorn ещё не поднял роуты и `/admin` временно недоступен.
+`deploy.sh` всегда запускает `scripts/check_runtime_services.sh`, который теперь проверяет не только `systemctl is-active`, но и API readiness (`/health/ready` с DB ping), smoke-доступность `/admin` (допускается `401`) и отдельный admin DB-ready endpoint `/admin/ready`. Это предотвращает сценарий, когда systemd уже считает сервис активным, но HTTP-роутинг/доступ к БД ещё не готов.
 
 При необходимости задайте в окружении деплоя:
 
 ```bash
-RUNTIME_API_HEALTHCHECK_URL=http://127.0.0.1:8000/health/ready
-RUNTIME_API_HEALTHCHECK_ATTEMPTS=20
-RUNTIME_API_HEALTHCHECK_INTERVAL_SECONDS=2
+RUNTIME_API_READINESS_URL=http://127.0.0.1:8000/health/ready
+RUNTIME_API_READINESS_ATTEMPTS=20
+RUNTIME_API_READINESS_INTERVAL_SECONDS=2
+RUNTIME_ADMIN_URL=http://127.0.0.1:8000/admin
+RUNTIME_ADMIN_DB_READY_URL=http://127.0.0.1:8000/admin/ready
 WORKER_HEALTHCHECK_URL=http://127.0.0.1:8000/health/report-worker
 WORKER_HEALTHCHECK_ATTEMPTS=20
 WORKER_HEALTHCHECK_INTERVAL_SECONDS=3
@@ -631,7 +633,7 @@ python scripts/check_landing_content.py
 ### Что теперь делает деплой автоматически
 
 - `scripts/deploy.sh` перед перезапуском сервисов запускает `scripts/generate_sitemap.py`, поэтому `web/sitemap.xml` всегда публикуется с актуальными `lastmod`, `changefreq` и `priority`.
-- После перезапуска `systemd`-юнитов деплой запускает `scripts/check_runtime_services.sh` и проверяет, что `numerolog-api.service` и `numerolog-bot.service` активны (если задан `SERVICE_NAMES`, проверяются именно эти юниты).
+- После перезапуска `systemd`-юнитов деплой запускает `scripts/check_runtime_services.sh` и проверяет: активность `numerolog-api.service`/`numerolog-bot.service` (или `SERVICE_NAMES`), API readiness (`/health/ready`), smoke `GET /admin` (200/401) и admin DB-ready (`/admin/ready`).
 - Если хотя бы один runtime-сервис неактивен, деплой завершается с ненулевым кодом и помечается как failed.
 - После релиза скрипт пытается пинговать панели вебмастеров в fail-safe режиме: 
   - сначала через `WEBMASTER_PING_SCRIPT` (если указан и исполняемый),
