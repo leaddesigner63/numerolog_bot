@@ -141,6 +141,7 @@ class ReportJobWorker:
                     self._logger.warning(
                         "resume_nudge_process_failed",
                         extra={"telegram_user_id": state_row.telegram_user_id, "error": str(exc)},
+                        exc_info=True,
                     )
 
     async def _process_checkout_value_nudges(self, bot: Bot) -> None:
@@ -227,6 +228,7 @@ class ReportJobWorker:
                     self._logger.warning(
                         "checkout_value_nudge_process_failed",
                         extra={"telegram_user_id": state_row.telegram_user_id, "error": str(exc)},
+                        exc_info=True,
                     )
 
     def _build_resume_deeplink(self, *, state_data: dict) -> str:
