@@ -107,7 +107,27 @@ if [ -f alembic.ini ]; then
     ALEMBIC_CMD="venv/bin/alembic"
   fi
   if [ -x "$ALEMBIC_CMD" ]; then
-    "$ALEMBIC_CMD" upgrade head
+    ALEMBIC_UPGRADE_ATTEMPTS="${ALEMBIC_UPGRADE_ATTEMPTS:-20}"
+    ALEMBIC_UPGRADE_INTERVAL_SECONDS="${ALEMBIC_UPGRADE_INTERVAL_SECONDS:-3}"
+    alembic_upgrade_ok=0
+
+    for ((attempt=1; attempt<=ALEMBIC_UPGRADE_ATTEMPTS; attempt++)); do
+      echo "[WAIT] Alembic upgrade attempt $attempt/$ALEMBIC_UPGRADE_ATTEMPTS"
+      if "$ALEMBIC_CMD" upgrade head; then
+        alembic_upgrade_ok=1
+        break
+      fi
+
+      if [ "$attempt" -lt "$ALEMBIC_UPGRADE_ATTEMPTS" ]; then
+        echo "[WAIT] Alembic upgrade не выполнен, повтор через ${ALEMBIC_UPGRADE_INTERVAL_SECONDS}с"
+        sleep "$ALEMBIC_UPGRADE_INTERVAL_SECONDS"
+      fi
+    done
+
+    if [ "$alembic_upgrade_ok" -ne 1 ]; then
+      echo "[FAIL] Alembic upgrade не выполнен после $ALEMBIC_UPGRADE_ATTEMPTS попыток"
+      exit 1
+    fi
   fi
 fi
 

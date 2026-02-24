@@ -70,6 +70,7 @@ docs/
     autodeploy_payment_confirmation_step_by_step.md # автодеплой с безопасным подтверждением оплаты (только webhook/polling в production)
     autodeploy_admin_username_step_by_step.md # автодеплой изменений админки с отображением пользователей по username
     autodeploy_admin_reliability_step_by_step.md # защита от недоступности админки после деплоя (systemd + API healthcheck)
+    autodeploy_db_recovery_retry_step_by_step.md # защита автодеплоя при recovery PostgreSQL (ретраи Alembic до готовности БД)
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   landing/
     release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)
@@ -281,9 +282,13 @@ WORKER_HEALTHCHECK_URL=http://127.0.0.1:8000/health/report-worker
 WORKER_HEALTHCHECK_ATTEMPTS=20
 WORKER_HEALTHCHECK_INTERVAL_SECONDS=3
 SMOKE_REPORT_JOB_TIMEOUT_SECONDS=420
+ALEMBIC_UPGRADE_ATTEMPTS=20
+ALEMBIC_UPGRADE_INTERVAL_SECONDS=3
 ```
 
 `deploy.sh` также ждёт `"alive": true` на worker-health endpoint перед запуском smoke-check paid order → ReportJob → COMPLETED. Это снижает ложные падения SSH-деплоя, когда API уже поднялся, а polling/worker ещё не успел обновить heartbeat.
+
+Дополнительно `deploy.sh` выполняет `alembic upgrade head` с ретраями (по умолчанию 20 попыток с интервалом 3 секунды). Это покрывает сценарий, когда PostgreSQL временно находится в состоянии recovery (`the database system is not yet accepting connections`) и начинает принимать подключения через несколько секунд.
 
 ## Яндекс.Метрика: проверка и эксплуатация
 

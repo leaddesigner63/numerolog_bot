@@ -21,3 +21,12 @@ def test_deploy_script_extends_report_job_smoke_timeout_by_default() -> None:
 
     assert "SMOKE_REPORT_JOB_TIMEOUT_SECONDS" in script
     assert "420" in script
+
+
+def test_deploy_script_retries_alembic_upgrade_until_database_is_ready() -> None:
+    script = Path("scripts/deploy.sh").read_text(encoding="utf-8")
+
+    assert "ALEMBIC_UPGRADE_ATTEMPTS" in script
+    assert "ALEMBIC_UPGRADE_INTERVAL_SECONDS" in script
+    assert "Alembic upgrade attempt" in script
+    assert "Alembic upgrade не выполнен после" in script
