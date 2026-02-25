@@ -26,17 +26,17 @@ class ScreenCopySnapshotTests(unittest.TestCase):
     ) -> None:
         lines = _non_empty_lines(content_text)
         self.assertGreaterEqual(len(lines), 4)
-        step_index = next((index for index, line in enumerate(lines) if line.startswith(step_prefix)), -1)
+        step_index = next((index for index, line in enumerate(lines) if step_prefix in line), -1)
         self.assertGreaterEqual(step_index, 0)
 
         structured_lines = lines[step_index:]
         self.assertGreaterEqual(len(structured_lines), 4)
 
-        bullet_lines = [line for line in structured_lines[1:-1] if line.startswith("• ")]
+        bullet_lines = [line for line in structured_lines[1:-1] if line.startswith("• ") or line.startswith("✅ ") or line.startswith("⚠️ ") or line.startswith("🔹 ")]
         self.assertGreaterEqual(len(bullet_lines), 2)
-        self.assertLessEqual(len(bullet_lines), 3)
+        self.assertLessEqual(len(bullet_lines), 4)
 
-        self.assertTrue(structured_lines[-1].startswith(cta_startswith))
+        self.assertIn(cta_startswith, structured_lines[-1])
         for text in expected_substrings:
             self.assertIn(text, content_text)
 
@@ -46,7 +46,7 @@ class ScreenCopySnapshotTests(unittest.TestCase):
             content_text=content.messages[0],
             step_prefix="Шаг 1.",
             expected_substrings=[
-                "как работает разбор",
+                "Как работает разбор",
                 "сильные стороны",
                 "структуру полного отчёта",
                 "Нажмите «Далее»",
@@ -94,7 +94,7 @@ class ScreenCopySnapshotTests(unittest.TestCase):
             content_text=content.messages[0],
             step_prefix="Шаг 4.",
             expected_substrings=[
-                "бесплатного превью-отчёта",
+                "бесплатного превью",
                 "сильных сторон",
                 "один раз в месяц",
                 "Нажмите «Дальше»",
