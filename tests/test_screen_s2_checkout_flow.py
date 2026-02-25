@@ -32,7 +32,7 @@ class ScreenS2CheckoutFlowTests(unittest.TestCase):
         message = content.messages[0]
         self.assertIn("Сразу после оплаты вы получите доступ к персональному отчёту", message)
         self.assertIn("Формат результата: PDF", message)
-        self.assertIn("Без гарантий результата", message)
+        self.assertNotIn("Без гарантий результата", message)
         self.assertIn("Без подписки и автосписаний", message)
 
         buttons = content.keyboard.inline_keyboard if content.keyboard else []

@@ -21,7 +21,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertIn("Стоимость: 560 RUB", message)
         self.assertIn("Сразу после оплаты вы получите доступ к персональному отчёту", message)
         self.assertIn("Формат результата: PDF", message)
-        self.assertIn("Без гарантий результата", message)
+        self.assertNotIn("Без гарантий результата", message)
         self.assertIn("Нажмите «Оплатить», чтобы перейти к оплате", message)
         self.assertIn("Без подписки и автосписаний", message)
         self.assertNotIn("Что входит в отчёт", message)
