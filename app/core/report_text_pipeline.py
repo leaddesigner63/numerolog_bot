@@ -8,6 +8,13 @@ logger = logging.getLogger(__name__)
 
 _REPORT_BR_TAG_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
 _REPORT_ANY_TAG_RE = re.compile(r"</?[A-Za-z][A-Za-z0-9:_-]*(?:\s[^<>]*)?>")
+_REPORT_GENDER_TECH_NOTE_RE = re.compile(
+    r"(?:^|\n)\s*(?:\*+\s*)?примечание(?:\*+)?\s*:\s*(?:\*+\s*)?"
+    r"(?:если\s+бы\s+у\s+меня\s+был\s+доступ\s+к\s+полю\s*[\"«]пол[\"»]"
+    r"|в\s+данном\s+случае[^\n]*пол[\"»]?\s*:\s*\.\.\.)"
+    r"[\s\S]*?(?=\n\s*\n|$)",
+    re.IGNORECASE,
+)
 
 
 def build_canonical_report_text(raw_text: str, tariff: str) -> str:
@@ -30,7 +37,9 @@ def build_canonical_report_text(raw_text: str, tariff: str) -> str:
         "",
         without_known_tags,
     )
-    cleaned = without_dangling_tags.replace("<", "").replace(">", "")
+    without_gender_tech_note = _REPORT_GENDER_TECH_NOTE_RE.sub("", without_dangling_tags)
+    cleaned = without_gender_tech_note.replace("<", "").replace(">", "")
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
 
     if cleaned != raw_text:
         logger.warning(
