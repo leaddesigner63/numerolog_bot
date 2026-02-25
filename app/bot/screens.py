@@ -690,7 +690,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 "Шаг 4. Проверьте данные профиля перед продолжением.\n"
                 "• Данные используются для персонального расчёта отчёта.\n"
                 "• При необходимости их можно быстро обновить.\n"
-                f"• Имя: {profile_data.get('name')}; пол: {profile_data.get('gender') or 'не указано'}; "
+                f"• Имя: {profile_data.get('name')}; Пол: {profile_data.get('gender') or 'не указано'}; "
                 f"дата рождения: {profile_data.get('birth_date')}; время: {birth_time}; место: {birth_place}.\n"
                 "Нажмите «Редактировать» или «Продолжить» для следующего шага."
             ),
