@@ -98,6 +98,23 @@ class ReportHtmlSanitizationTests(unittest.TestCase):
 
         self.assertEqual(cleaned, "План:\n Ускорять выбор\n Проверять гипотезу")
 
+    def test_sanitize_report_text_removes_gender_access_technical_note(self) -> None:
+        source = (
+            "ФИНАЛ\n"
+            "Николай, продолжай усиливать сильные стороны.\n\n"
+            "**Примечание:** Если бы у меня был доступ к полю \"Пол\", "
+            "я бы учёл его в тексте. В данном случае, из-за отсутствия явной строки \"Пол: ...\", "
+            "я использовал нейтральные формулировки.\n\n"
+            "Материалы сервиса носят информационный характер."
+        )
+
+        cleaned = _sanitize_report_text(source, tariff="T1")
+
+        self.assertNotIn("Если бы у меня был доступ к полю", cleaned)
+        self.assertNotIn("Пол: ...", cleaned)
+        self.assertIn("Николай, продолжай усиливать сильные стороны.", cleaned)
+        self.assertIn("Материалы сервиса носят информационный характер.", cleaned)
+
 
 if __name__ == "__main__":
     unittest.main()
