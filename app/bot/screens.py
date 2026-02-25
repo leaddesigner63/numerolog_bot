@@ -477,7 +477,6 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
                     "",
                     _build_bullets(quick_value_block),
                     "",
-                    "Без гарантий результата: отчёт даёт конкретные ориентиры для решений и действий.",
                     "Без подписки и автосписаний.",
                     _build_cta_line(f"Нажмите «{payment_cta}», чтобы перейти к оплате."),
                 ]
