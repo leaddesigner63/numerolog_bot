@@ -20,6 +20,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertIn("Тариф:", message)
         self.assertIn("Стоимость: 560 RUB", message)
         self.assertIn("Отчёт станет доступен сразу после подтверждения оплаты", message)
+        self.assertIn("Материалы сервиса носят информационно-аналитический характер", message)
         self.assertIn("Нажмите «Оплатить», чтобы перейти к оплате", message)
         self.assertNotIn("Что входит в отчёт", message)
         self.assertNotIn("Юридическая информация", message)
@@ -29,6 +30,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertEqual(keyboard_rows[0][0].url, "https://example.com/pay")
         self.assertIn("Оплатить", keyboard_rows[0][0].text)
         self.assertEqual(keyboard_rows[1][0].callback_data, "s3:report_details")
+        self.assertEqual(keyboard_rows[2][0].callback_data, "legal:offer")
 
     def test_s3_falls_back_to_settings_price_when_order_amount_missing(self) -> None:
         content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
@@ -149,7 +151,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
 
         keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
-        back_button = keyboard_rows[2][0]
+        back_button = keyboard_rows[3][0]
         self.assertEqual(back_button.callback_data, "screen:S4")
 
     def test_s3_back_button_uses_explicit_back_target(self) -> None:
@@ -162,7 +164,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         )
 
         keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
-        back_button = keyboard_rows[2][0]
+        back_button = keyboard_rows[3][0]
         self.assertEqual(back_button.callback_data, "screen:S5")
 
 

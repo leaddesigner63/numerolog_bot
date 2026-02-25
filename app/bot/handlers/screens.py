@@ -1794,6 +1794,11 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         await _safe_callback_answer(callback)
         return
 
+    if callback.data == "legal:offer":
+        await _show_screen_for_callback(callback, screen_id="S2_LEGAL")
+        await _safe_callback_answer(callback)
+        return
+
     if callback.data.startswith("screen:"):
         screen_id = callback.data.split("screen:")[-1]
         if screen_id == "S3":
