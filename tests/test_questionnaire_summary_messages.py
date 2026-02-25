@@ -8,9 +8,9 @@ class QuestionnaireSummaryMessagesTests(unittest.TestCase):
     def test_build_summary_keeps_config_order_and_empty_answers(self) -> None:
         config = SimpleNamespace(
             questions={
-                "q1": SimpleNamespace(question_id="q1", text="Первый вопрос?"),
-                "q2": SimpleNamespace(question_id="q2", text="Второй вопрос?"),
-                "q3": SimpleNamespace(question_id="q3", text="Третий вопрос?"),
+                "q1": SimpleNamespace(question_id="q1", text="Какие задачи у вас получаются лучше всего?"),
+                "q2": SimpleNamespace(question_id="q2", text="В каких навыках вы уверены сейчас?"),
+                "q3": SimpleNamespace(question_id="q3", text="Что вас сейчас сильнее всего мотивирует?"),
             }
         )
 
@@ -23,11 +23,11 @@ class QuestionnaireSummaryMessagesTests(unittest.TestCase):
         self.assertEqual(len(messages), 1)
         self.assertEqual(
             messages[0],
-            "1. Первый вопрос?\n"
+            "1. Какие задачи у вас получаются лучше всего?\n"
             "Текущий ответ: (пусто)\n\n"
-            "2. Второй вопрос?\n"
+            "2. В каких навыках вы уверены сейчас?\n"
             "Текущий ответ: Ответ 2\n\n"
-            "3. Третий вопрос?\n"
+            "3. Что вас сейчас сильнее всего мотивирует?\n"
             "Текущий ответ: (пусто)",
         )
 
