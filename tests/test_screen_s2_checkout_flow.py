@@ -1,6 +1,6 @@
 import unittest
 
-from app.bot.screens import screen_s2, screen_s2_details
+from app.bot.screens import screen_s2, screen_s2_details, screen_s3
 
 
 class ScreenS2CheckoutFlowTests(unittest.TestCase):
@@ -23,6 +23,22 @@ class ScreenS2CheckoutFlowTests(unittest.TestCase):
         self.assertIn("screen:S4", callbacks)
         self.assertIn("s2:details", callbacks)
         self.assertNotIn("screen:S3", callbacks)
+
+
+
+    def test_checkout_screen_contains_compact_value_block_and_safe_cta_copy(self) -> None:
+        content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
+
+        message = content.messages[0]
+        self.assertIn("Сразу после оплаты вы получите доступ к персональному отчёту", message)
+        self.assertIn("Формат результата: PDF", message)
+        self.assertIn("Без гарантий результата", message)
+        self.assertIn("Без подписки и автосписаний", message)
+
+        buttons = content.keyboard.inline_keyboard if content.keyboard else []
+        callbacks = [button.callback_data for row in buttons for button in row if button.callback_data]
+        self.assertNotIn("s3:report_details", callbacks)
+        self.assertNotIn("legal:offer", callbacks)
 
     def test_details_screen_contains_long_description(self) -> None:
         content = screen_s2_details({"selected_tariff": "T2"})
