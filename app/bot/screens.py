@@ -100,6 +100,17 @@ _BOT_MENTION_PREFIX_RE = re.compile(r"^\s*@\w+\s+")
 _QUESTIONNAIRE_PREVIEW_LIMIT = 180
 
 
+CTA_LABELS: dict[str, Any] = {
+    "tariff_selection": "Выбрать тариф",
+    "profile_input": "Заполнить данные",
+    "questionnaire": "Заполнить анкету",
+    "payment": {
+        "before_payment_url": "Перейти к оплате",
+        "with_payment_url": "Оплатить",
+    },
+}
+
+
 def _sanitize_report_text(report_text: str, *, tariff: str = "unknown") -> str:
     return build_canonical_report_text(report_text, tariff)
 
@@ -334,23 +345,26 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
             f"{note_text}"
         ),
     )
-    rows: list[list[InlineKeyboardButton]] = []
-    rows.append(
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons(CTA_LABELS["profile_input"], "➡️"),
+                callback_data="screen:S4",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Подробнее", "ℹ️"),
+                callback_data="s2:details",
+            ),
+        ],
         [
             InlineKeyboardButton(
                 text=_with_button_icons("Назад", "↩️"),
                 callback_data="screen:S1",
             ),
-            InlineKeyboardButton(
-                text=_with_button_icons("Подробнее", "ℹ️"),
-                callback_data="s2:details",
-            ),
-            InlineKeyboardButton(
-                text=_with_button_icons("Продолжить", "➡️"),
-                callback_data="screen:S4",
-            ),
-        ]
-    )
+        ],
+    ]
     rows.extend(_global_menu())
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
@@ -370,12 +384,14 @@ def screen_s2_details(state: dict[str, Any]) -> ScreenContent:
     rows: list[list[InlineKeyboardButton]] = [
         [
             InlineKeyboardButton(
+                text=_with_button_icons(CTA_LABELS["profile_input"], "➡️"),
+                callback_data="s2:details:continue",
+            ),
+        ],
+        [
+            InlineKeyboardButton(
                 text=_with_button_icons("Назад", "↩️"),
                 callback_data="s2:details:back",
-            ),
-            InlineKeyboardButton(
-                text=_with_button_icons("Продолжить", "➡️"),
-                callback_data="s2:details:continue",
             ),
         ]
     ]
@@ -393,6 +409,9 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
 
     payment_processing_notice = bool(state.get("payment_processing_notice"))
     order_is_paid = str(order_status or "").lower() == "paid"
+    payment_cta = CTA_LABELS["payment"][
+        "with_payment_url" if payment_url else "before_payment_url"
+    ]
 
     text_parts = []
     if payment_processing_notice:
@@ -404,7 +423,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             f"• Тариф: {selected_tariff}.\n"
             f"• Стоимость: {price_label}.\n"
             "• Отчёт станет доступен сразу после подтверждения оплаты.\n"
-            "Нажмите «Оплатить», чтобы перейти к оплате."
+            f"Нажмите «{payment_cta}», чтобы перейти к оплате."
         )
         if not payment_url:
             text_parts.append("\n\nПлатёжная ссылка пока недоступна. Проверьте настройки провайдера.")
@@ -428,9 +447,13 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             rows.append(
                 [
                     InlineKeyboardButton(
-                        text=_with_button_icons("Оплатить", "💳"),
+                        text=_with_button_icons(payment_cta, "💳"),
                         url=payment_url,
                     ),
+                ]
+            )
+            rows.append(
+                [
                     InlineKeyboardButton(
                         text=_with_button_icons("Что входит в отчёт", "ℹ️"),
                         callback_data="s3:report_details",
@@ -441,9 +464,13 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             rows.append(
                 [
                     InlineKeyboardButton(
-                        text=_with_button_icons("Оплатить", "💳"),
+                        text=_with_button_icons(payment_cta, "💳"),
                         callback_data="payment:start",
                     ),
+                ]
+            )
+            rows.append(
+                [
                     InlineKeyboardButton(
                         text=_with_button_icons("Что входит в отчёт", "ℹ️"),
                         callback_data="s3:report_details",
@@ -696,9 +723,11 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         return ScreenContent(messages=[text], keyboard=None)
 
     rows: list[list[InlineKeyboardButton]] = []
+    primary_row: list[InlineKeyboardButton] | None = None
+    secondary_rows: list[list[InlineKeyboardButton]] = []
     has_tariffs_button = False
     if has_profile:
-        rows.append(
+        secondary_rows.append(
             [
                 InlineKeyboardButton(
                     text=_with_button_icons("Редактировать", "📝"),
@@ -707,7 +736,7 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             ]
         )
         if not is_order_creation_mode or opened_from_lk:
-            rows.append(
+            secondary_rows.append(
                 [
                     InlineKeyboardButton(
                         text=_with_button_icons("Удалить мои данные", "🗑️"),
@@ -716,15 +745,13 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 ]
             )
     elif is_t0:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=_with_button_icons("Дальше", "➡️"),
-                    callback_data="profile:start",
-                )
-            ]
-        )
-        rows.append(
+        primary_row = [
+            InlineKeyboardButton(
+                text=_with_button_icons("Дальше", "➡️"),
+                callback_data="profile:start",
+            )
+        ]
+        secondary_rows.append(
             [
                 InlineKeyboardButton(
                     text=_with_button_icons("Обратная связь", "💬"),
@@ -733,15 +760,13 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             ]
         )
     elif requires_payment:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=_with_button_icons("К оплате", "💳"),
-                    callback_data="screen:S3",
-                )
-            ]
-        )
-        rows.append(
+        primary_row = [
+            InlineKeyboardButton(
+                text=_with_button_icons(CTA_LABELS["payment"]["before_payment_url"], "💳"),
+                callback_data="screen:S3",
+            )
+        ]
+        secondary_rows.append(
             [
                 InlineKeyboardButton(
                     text=_with_button_icons("Тарифы", "🧾"),
@@ -751,14 +776,12 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         )
         has_tariffs_button = True
     else:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=_with_button_icons("Заполнить данные", "📝"),
-                    callback_data="profile:start",
-                )
-            ]
-        )
+        primary_row = [
+            InlineKeyboardButton(
+                text=_with_button_icons(CTA_LABELS["profile_input"], "📝"),
+                callback_data="profile:start",
+            )
+        ]
     show_paid_tariff_continue = has_profile and selected_tariff_raw in {"T1", "T2", "T3"} and (
         order_status == "paid" or not order_status
     )
@@ -775,17 +798,15 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     )
 
     if show_continue_button:
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=_with_button_icons("Продолжить", "✅"),
-                    callback_data="profile:save",
-                )
-            ]
-        )
+        primary_row = [
+            InlineKeyboardButton(
+                text=_with_button_icons("Продолжить", "✅"),
+                callback_data="profile:save",
+            )
+        ]
 
     if not show_profile_flow_compact_keyboard and not is_order_creation_mode:
-        rows.append(
+        secondary_rows.append(
             [
                 InlineKeyboardButton(
                     text=_with_button_icons("Кабинет", "👤"),
@@ -795,10 +816,10 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
         )
 
     if (not is_t0 or has_profile) and not show_profile_flow_compact_keyboard:
-        rows.extend(_global_menu())
+        secondary_rows.extend(_global_menu())
 
     if not show_profile_flow_compact_keyboard and not has_tariffs_button:
-        rows.append(
+        secondary_rows.append(
             [
                 InlineKeyboardButton(
                     text=_with_button_icons("Тарифы", "➡️"),
@@ -806,6 +827,9 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
                 )
             ]
         )
+    if primary_row is not None:
+        rows.append(primary_row)
+    rows.extend(secondary_rows)
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 
@@ -965,20 +989,20 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
     ).strip()
 
     rows: list[list[InlineKeyboardButton]] = []
+    primary_row: list[InlineKeyboardButton] | None = None
+    secondary_rows: list[list[InlineKeyboardButton]] = []
     if status == "completed":
-        rows.append(
+        primary_row = [
+            InlineKeyboardButton(
+                text=_with_button_icons("Готово", "✅"),
+                callback_data="questionnaire:done",
+            )
+        ]
+        secondary_rows.append(
             [
                 InlineKeyboardButton(
                     text=_with_button_icons("Редактировать анкету", "📝"),
                     callback_data="questionnaire:edit",
-                )
-            ]
-        )
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=_with_button_icons("Готово", "✅"),
-                    callback_data="questionnaire:done",
                 )
             ]
         )
@@ -987,18 +1011,16 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
             button_text = "Продолжить"
             button_icon = "✅"
         else:
-            button_text = "Продолжить анкету" if answered_count else "Заполнить анкету"
+            button_text = "Продолжить анкету" if answered_count else CTA_LABELS["questionnaire"]
             button_icon = "▶️" if answered_count else "📝"
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=_with_button_icons(button_text, button_icon),
-                    callback_data="questionnaire:start",
-                )
-            ]
-        )
+        primary_row = [
+            InlineKeyboardButton(
+                text=_with_button_icons(button_text, button_icon),
+                callback_data="questionnaire:start",
+            )
+        ]
         if has_paid_order:
-            rows.append(
+            secondary_rows.append(
                 [
                     InlineKeyboardButton(
                         text=_with_button_icons("Редактировать анкету", "📝"),
@@ -1006,7 +1028,7 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
                     )
                 ]
             )
-    rows.append(
+    secondary_rows.append(
         [
             InlineKeyboardButton(
                 text=_with_button_icons("Назад", "↩️"),
@@ -1014,7 +1036,10 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
             )
         ]
     )
-    rows.extend(_global_menu())
+    secondary_rows.extend(_global_menu())
+    if primary_row is not None:
+        rows.append(primary_row)
+    rows.extend(secondary_rows)
     keyboard = _build_keyboard(rows)
     return ScreenContent(messages=[text], keyboard=keyboard)
 

@@ -28,7 +28,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertGreaterEqual(len(keyboard_rows), 1)
         self.assertEqual(keyboard_rows[0][0].url, "https://example.com/pay")
         self.assertIn("Оплатить", keyboard_rows[0][0].text)
-        self.assertEqual(keyboard_rows[0][1].callback_data, "s3:report_details")
+        self.assertEqual(keyboard_rows[1][0].callback_data, "s3:report_details")
 
     def test_s3_falls_back_to_settings_price_when_order_amount_missing(self) -> None:
         content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
@@ -58,7 +58,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         ]
         url_values = {url for _, _, url in buttons if url}
         self.assertIn("payment:start", callback_values)
-        self.assertTrue(any("Оплатить" in text for text in fallback_payment_buttons))
+        self.assertTrue(any("Перейти к оплате" in text for text in fallback_payment_buttons))
         self.assertNotIn("https://example.com/pay", url_values)
 
     def test_s3_has_no_manual_payment_confirmation_button(self) -> None:
@@ -149,7 +149,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
 
         keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
-        back_button = keyboard_rows[1][0]
+        back_button = keyboard_rows[2][0]
         self.assertEqual(back_button.callback_data, "screen:S4")
 
     def test_s3_back_button_uses_explicit_back_target(self) -> None:
@@ -162,7 +162,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         )
 
         keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
-        back_button = keyboard_rows[1][0]
+        back_button = keyboard_rows[2][0]
         self.assertEqual(back_button.callback_data, "screen:S5")
 
 

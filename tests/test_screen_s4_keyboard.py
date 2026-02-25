@@ -46,13 +46,8 @@ class ScreenS4KeyboardTests(unittest.TestCase):
         rows = content.keyboard.inline_keyboard
         labels = [button.text for row in rows for button in row]
 
-        self.assertEqual(
-            labels,
-            [
-                "📝 Редактировать",
-                "✅ Продолжить",
-            ],
-        )
+        self.assertEqual(labels[0], "✅ Продолжить")
+        self.assertEqual(labels[1], "📝 Редактировать")
         self.assertNotIn("🗑️ Удалить мои данные", labels)
         self.assertNotIn("👤 Кабинет", labels)
         self.assertNotIn("➡️ Тарифы", labels)
@@ -198,6 +193,7 @@ class ScreenS4KeyboardTests(unittest.TestCase):
 
         self.assertEqual(labels.count("🧾 Тарифы"), 1)
         self.assertEqual(labels.count("➡️ Тарифы"), 0)
+        self.assertEqual(labels[0], "💳 Перейти к оплате")
 
 
 if __name__ == "__main__":

@@ -15,6 +15,10 @@ class ScreenS2CheckoutFlowTests(unittest.TestCase):
             content.messages[0],
         )
         buttons = content.keyboard.inline_keyboard if content.keyboard else []
+        self.assertEqual(buttons[0][0].text, "➡️ Заполнить данные")
+        self.assertEqual(buttons[1][0].callback_data, "s2:details")
+        self.assertEqual(buttons[2][0].callback_data, "screen:S1")
+
         callbacks = [button.callback_data for row in buttons for button in row if button.callback_data]
         self.assertIn("screen:S4", callbacks)
         self.assertIn("s2:details", callbacks)
@@ -25,6 +29,9 @@ class ScreenS2CheckoutFlowTests(unittest.TestCase):
 
         self.assertIn("анализирует тебя с упором на доход", content.messages[0])
         buttons = content.keyboard.inline_keyboard if content.keyboard else []
+        self.assertEqual(buttons[0][0].callback_data, "s2:details:continue")
+        self.assertEqual(buttons[1][0].callback_data, "s2:details:back")
+
         callbacks = [button.callback_data for row in buttons for button in row if button.callback_data]
         self.assertIn("s2:details:back", callbacks)
         self.assertIn("s2:details:continue", callbacks)
