@@ -144,6 +144,26 @@ class PaymentScreenS3Tests(unittest.TestCase):
         keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
         self.assertEqual(keyboard_rows[0][0].callback_data, "s3:report_details:back")
 
+    def test_s3_back_button_targets_s4_by_default(self) -> None:
+        content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
+
+        keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
+        back_button = keyboard_rows[1][0]
+        self.assertEqual(back_button.callback_data, "screen:S4")
+
+    def test_s3_back_button_uses_explicit_back_target(self) -> None:
+        content = screen_s3(
+            {
+                "selected_tariff": "T2",
+                "payment_url": "https://example.com/pay",
+                "s3_back_target": "S5",
+            }
+        )
+
+        keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
+        back_button = keyboard_rows[1][0]
+        self.assertEqual(back_button.callback_data, "screen:S5")
+
 
 class PaymentScreenS15Tests(unittest.TestCase):
     def test_s15_shows_only_reports_for_current_tariff(self) -> None:

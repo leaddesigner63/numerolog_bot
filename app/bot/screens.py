@@ -420,6 +420,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
     text = "".join(text_parts)
     if not payment_processing_notice:
         text = _with_screen_prefix("S3", text)
+    back_target = state.get("s3_back_target") or "S4"
     rows: list[list[InlineKeyboardButton]] = []
     if not payment_processing_notice:
         if order_is_paid:
@@ -461,7 +462,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             [
                 InlineKeyboardButton(
                     text=_with_button_icons("Назад", "⬅️"),
-                    callback_data="screen:S1",
+                    callback_data=f"screen:{back_target}",
                 ),
             ]
         )
