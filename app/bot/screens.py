@@ -225,12 +225,6 @@ def _format_price(state: dict[str, Any], tariff: str) -> str:
     return f"{price} RUB"
 
 
-def _apply_spoiler_markdown(text: str, spoiler_text: str) -> str:
-    if not spoiler_text:
-        return text
-    return text.replace(spoiler_text, f"||{spoiler_text}||")
-
-
 def screen_s0(_: dict[str, Any]) -> ScreenContent:
     text = _with_screen_prefix(
         "S0",
@@ -424,8 +418,6 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
     text = "".join(text_parts)
     if not payment_processing_notice:
         text = _with_screen_prefix("S3", text)
-    text = _apply_spoiler_markdown(text, price_label)
-
     rows: list[list[InlineKeyboardButton]] = []
     if not payment_processing_notice:
         if order_is_paid:
