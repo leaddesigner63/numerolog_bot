@@ -23,7 +23,7 @@ class ScreenS5KeyboardTests(unittest.TestCase):
             }
         )
 
-        self.assertTrue(any("Продолжить" in text for text in texts))
+        self.assertEqual(texts[0], "✅ Продолжить")
         self.assertFalse(any("Заполнить анкету" in text for text in texts))
         self.assertTrue(any("Редактировать анкету" in text for text in texts))
         self.assertFalse(any("Редактировать данные" in text for text in texts))
@@ -41,7 +41,7 @@ class ScreenS5KeyboardTests(unittest.TestCase):
             }
         )
 
-        self.assertTrue(any("Продолжить" in text for text in texts))
+        self.assertEqual(texts[0], "✅ Продолжить")
         self.assertTrue(any("Редактировать анкету" in text for text in texts))
         self.assertFalse(any("Редактировать данные" in text for text in texts))
 
@@ -58,7 +58,7 @@ class ScreenS5KeyboardTests(unittest.TestCase):
             }
         )
 
-        self.assertTrue(any("Заполнить анкету" in text for text in texts))
+        self.assertEqual(texts[0], "📝 Заполнить анкету")
 
 
 if __name__ == "__main__":
