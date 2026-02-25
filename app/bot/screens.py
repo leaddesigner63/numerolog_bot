@@ -1034,9 +1034,9 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
     has_paid_order = bool(state.get("order_id")) and str(
         state.get("order_status") or ""
     ).lower() == "paid"
-    progress_line = ""
-    if total_questions:
-        progress_line = f"Прогресс: {answered_count}/{total_questions}."
+    effective_total_questions = total_questions if total_questions > 0 else 5
+    progress_line = f"Прогресс: {answered_count}/{effective_total_questions}."
+    eta_line = f"Обычно это {effective_total_questions} вопросов, ~3–5 минут."
 
     text = _with_screen_prefix(
         "S5",
@@ -1045,9 +1045,10 @@ def screen_s5(state: dict[str, Any]) -> ScreenContent:
                 _build_screen_header("Шаг 5. Дополнительная анкета"),
                 _build_bullets(
                     [
-                        "Ответы уточняют контекст и усиливают персональные выводы.",
-                        "Подробные формулировки улучшают качество рекомендаций.",
-                        progress_line or "Прогресс: 0/0.",
+                        "Можно начать с коротких ответов.",
+                        "Вернуться и дополнить позже.",
+                        progress_line,
+                        eta_line,
                     ]
                 ),
                 _build_cta_line("Нажмите кнопку ниже, чтобы заполнить или продолжить анкету."),

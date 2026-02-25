@@ -10,7 +10,7 @@ from app.bot.handlers.questionnaire import (
 class QuestionnaireEditPromptTests(unittest.TestCase):
     def test_decision_message_has_required_order(self) -> None:
         text = _build_edit_decision_message(
-            "Опишите ваш опыт",
+            "Какие задачи у вас получаются лучше всего?",
             "Длинный текст",
         )
 
@@ -21,12 +21,12 @@ class QuestionnaireEditPromptTests(unittest.TestCase):
         self.assertTrue(text.index("Текущий ответ") < text.index("Действие:"))
 
     def test_decision_message_empty_answer(self) -> None:
-        text = _build_edit_decision_message("Ваша цель", "")
+        text = _build_edit_decision_message("Какая ваша главная цель на 6–12 месяцев?", "")
         self.assertIn("Текущий ответ:\n(пусто)", text)
 
     def test_change_message_has_required_order(self) -> None:
         text = _build_edit_change_message(
-            "Ваша цель", "Текущая цель", show_copy_hint=True
+            "Какая ваша главная цель на 6–12 месяцев?", "Текущая цель", show_copy_hint=True
         )
         self.assertIn("Текущий ответ:\nТекущая цель", text)
         self.assertIn("Подсказка: нажмите кнопку «📋 Редактировать текущий ответ»", text)
@@ -36,7 +36,7 @@ class QuestionnaireEditPromptTests(unittest.TestCase):
 
     def test_change_message_without_copy_hint(self) -> None:
         text = _build_edit_change_message(
-            "Ваша цель", "Текущая цель", show_copy_hint=False
+            "Какая ваша главная цель на 6–12 месяцев?", "Текущая цель", show_copy_hint=False
         )
 
         self.assertIn("Текущий ответ:\nТекущая цель", text)
