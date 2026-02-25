@@ -382,17 +382,10 @@ def screen_s2_details(state: dict[str, Any]) -> ScreenContent:
 def screen_s3(state: dict[str, Any]) -> ScreenContent:
     selected_tariff_raw = state.get("selected_tariff", "T1")
     selected_tariff = _format_tariff_label(selected_tariff_raw)
-    order_id = state.get("order_id")
     order_status = state.get("order_status")
     price_label = _format_price(state, str(selected_tariff_raw)) or "не указана"
     payment_url = state.get("payment_url") or settings.prodamus_form_url
 
-    order_block = ""
-    if order_id and order_status:
-        order_block = f"\n\nЗаказ №{order_id}. Статус: {order_status}."
-
-    offer_url = settings.offer_url
-    offer_link = f"[офертой]({offer_url})" if offer_url else "офертой"
     payment_processing_notice = bool(state.get("payment_processing_notice"))
     order_is_paid = str(order_status or "").lower() == "paid"
 
@@ -402,18 +395,12 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
         text_parts.append(build_payment_wait_message(frame=payment_wait_frame))
     else:
         text_parts.append(
-            "Финальный шаг перед генерацией отчёта.\n\n"
+            "Финальный шаг перед оплатой.\n\n"
             f"Тариф: {selected_tariff}.\n"
             f"Стоимость: {price_label}.\n\n"
-            "Что получите: PDF + ключевые выводы + рекомендации по шагам.\n"
-            "Когда получите: Сразу после подтверждения оплаты\n\n"
-            "Короткий дисклеймер: сервис носит информационно-аналитический характер и не является персональной рекомендацией к действию.\n"
-            f"Оплачивая, вы подтверждаете согласие с {offer_link}.\n"
-            "После оплаты бот автоматически проверит статус и переведёт вас к следующему шагу."
-            f"{order_block}"
+            "Срок получения: сразу после подтверждения оплаты.\n"
+            "Нажмите «Оплатить» ниже, чтобы продолжить."
         )
-        if not order_is_paid:
-            text_parts.append("\n\nКнопка ниже откроет защищённую платёжную форму.")
         if not payment_url:
             text_parts.append("\n\nПлатёжная ссылка пока недоступна. Проверьте настройки провайдера.")
 
@@ -436,7 +423,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             rows.append(
                 [
                     InlineKeyboardButton(
-                        text=_with_button_icons("Перейти к оплате", "💳"),
+                        text=_with_button_icons("Оплатить", "💳"),
                         url=payment_url,
                     ),
                     InlineKeyboardButton(
@@ -449,7 +436,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             rows.append(
                 [
                     InlineKeyboardButton(
-                        text=_with_button_icons("Перейти к оплате", "💳"),
+                        text=_with_button_icons("Оплатить", "💳"),
                         callback_data="payment:start",
                     ),
                     InlineKeyboardButton(
@@ -481,6 +468,9 @@ def screen_s3_report_details(state: dict[str, Any]) -> ScreenContent:
         if order_status:
             order_line += f" • статус: {order_status}"
 
+    offer_url = settings.offer_url
+    offer_line = f"Оплата подтверждает согласие с офертой: {offer_url}." if offer_url else "Оплата подтверждает согласие с офертой."
+
     text = _with_screen_prefix(
         "S3_INFO",
         (
@@ -488,7 +478,10 @@ def screen_s3_report_details(state: dict[str, Any]) -> ScreenContent:
             "• Персональный PDF-отчёт.\n"
             "• Ключевые выводы по вашим данным.\n"
             "• Пошаговые рекомендации для ближайшего периода.\n"
-            "• Сжатый action-план, чтобы быстрее перейти к действиям."
+            "• Сжатый action-план, чтобы быстрее перейти к действиям.\n\n"
+            "Юридическая информация:\n"
+            f"• {offer_line}\n"
+            "• Сервис носит информационно-аналитический характер."
             f"{order_line}"
         ),
     )

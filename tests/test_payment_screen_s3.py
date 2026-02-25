@@ -16,19 +16,18 @@ class PaymentScreenS3Tests(unittest.TestCase):
         )
 
         message = content.messages[0]
-        self.assertIn("Финальный шаг перед генерацией отчёта", message)
+        self.assertIn("Финальный шаг перед оплатой", message)
         self.assertIn("Тариф:", message)
         self.assertIn("Стоимость: 560 RUB", message)
-        self.assertIn("Что получите: PDF + ключевые выводы + рекомендации по шагам", message)
-        self.assertIn("Когда получите: Сразу после подтверждения оплаты", message)
-        self.assertIn("Короткий дисклеймер", message)
-        self.assertIn("Оплачивая, вы подтверждаете согласие", message)
-        self.assertIn("Кнопка ниже откроет защищённую платёжную форму.", message)
+        self.assertIn("Срок получения: сразу после подтверждения оплаты", message)
+        self.assertIn("Нажмите «Оплатить» ниже", message)
+        self.assertNotIn("Что входит в отчёт", message)
+        self.assertNotIn("Юридическая информация", message)
 
         keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
         self.assertGreaterEqual(len(keyboard_rows), 1)
         self.assertEqual(keyboard_rows[0][0].url, "https://example.com/pay")
-        self.assertIn("Перейти к оплате", keyboard_rows[0][0].text)
+        self.assertIn("Оплатить", keyboard_rows[0][0].text)
         self.assertEqual(keyboard_rows[0][1].callback_data, "s3:report_details")
 
     def test_s3_falls_back_to_settings_price_when_order_amount_missing(self) -> None:
@@ -59,7 +58,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         ]
         url_values = {url for _, _, url in buttons if url}
         self.assertIn("payment:start", callback_values)
-        self.assertTrue(any("Перейти к оплате" in text for text in fallback_payment_buttons))
+        self.assertTrue(any("Оплатить" in text for text in fallback_payment_buttons))
         self.assertNotIn("https://example.com/pay", url_values)
 
     def test_s3_has_no_manual_payment_confirmation_button(self) -> None:
@@ -123,7 +122,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
 
         self.assertIn("Платеж обрабатывается, пожалуйста подождите.", content.messages[0])
         self.assertNotIn("Стоимость:", content.messages[0])
-        self.assertNotIn("Короткий дисклеймер", content.messages[0])
+        self.assertNotIn("Дисклеймер:", content.messages[0])
         self.assertIsNone(content.keyboard)
 
 
@@ -138,6 +137,8 @@ class PaymentScreenS3Tests(unittest.TestCase):
 
         message = content.messages[0]
         self.assertIn("Что входит в отчёт", message)
+        self.assertIn("Юридическая информация", message)
+        self.assertIn("Оплата подтверждает согласие с офертой", message)
         self.assertIn("Заказ №77", message)
         self.assertIn("Где твои деньги?", message)
 
