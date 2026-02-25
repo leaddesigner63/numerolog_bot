@@ -136,6 +136,48 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         show_screen.assert_awaited_with(callback, screen_id="S3")
         state_snapshot = screens.screen_manager.update_state(1001)
         self.assertIsNotNone(state_snapshot.data.get("order_id"))
+        self.assertEqual(state_snapshot.data.get("s3_back_target"), "S4")
+
+    async def test_open_checkout_s3_sets_default_back_target_for_t1(self) -> None:
+        callback = _DummyCallback("screen:S3")
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T1.value,
+            order_id="777",
+        )
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_maybe_run_payment_waiter", new=AsyncMock()),
+        ):
+            opened = await screens.open_checkout_s3_with_order(callback)
+
+        self.assertTrue(opened)
+        show_screen.assert_awaited_once_with(callback, screen_id="S3")
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertEqual(state_snapshot.data.get("s3_back_target"), "S4")
+
+    async def test_open_checkout_s3_honors_explicit_back_target(self) -> None:
+        callback = _DummyCallback("screen:S3")
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=Tariff.T2.value,
+            order_id="778",
+        )
+
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_maybe_run_payment_waiter", new=AsyncMock()),
+        ):
+            opened = await screens.open_checkout_s3_with_order(
+                callback,
+                fallback_screen_id="S5",
+            )
+
+        self.assertTrue(opened)
+        show_screen.assert_awaited_once_with(callback, screen_id="S3")
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertEqual(state_snapshot.data.get("s3_back_target"), "S5")
 
     async def test_profile_save_requires_personal_data_consent(self) -> None:
         order_id = self._create_order(OrderStatus.PAID, tariff=Tariff.T2)

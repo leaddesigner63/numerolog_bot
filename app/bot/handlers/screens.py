@@ -1704,6 +1704,10 @@ async def open_checkout_s3_with_order(
     run_payment_waiter: bool = False,
 ) -> bool:
     state_snapshot = screen_manager.update_state(callback.from_user.id)
+    selected_tariff = state_snapshot.data.get("selected_tariff")
+    s3_back_target = fallback_screen_id or (
+        "S5" if selected_tariff in {Tariff.T2.value, Tariff.T3.value} else "S4"
+    )
     if state_snapshot.data.get("existing_tariff_report_found") and not state_snapshot.data.get(
         "existing_report_warning_seen"
     ):
@@ -1719,8 +1723,10 @@ async def open_checkout_s3_with_order(
         return False
 
     if use_marketing_consent:
+        screen_manager.update_state(callback.from_user.id, s3_back_target=s3_back_target)
         await _show_marketing_consent_or_target_screen(callback, screen_id="S3")
     else:
+        screen_manager.update_state(callback.from_user.id, s3_back_target=s3_back_target)
         await _show_screen_for_callback(callback, screen_id="S3")
 
     if run_payment_waiter:
@@ -2173,7 +2179,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
 
             if order.status != OrderStatus.PAID:
                 screen_manager.update_state(
-                    callback.from_user.id, **_refresh_order_state(order)
+                    callback.from_user.id,
+                    s3_back_target="S4",
+                    **_refresh_order_state(order),
                 )
                 await _send_notice(
                     callback,
@@ -2499,7 +2507,13 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 if not order or order.status != OrderStatus.PAID:
                     if order:
                         screen_manager.update_state(
-                            callback.from_user.id, **_refresh_order_state(order)
+                            callback.from_user.id,
+                            s3_back_target=(
+                                "S5"
+                                if tariff in {Tariff.T2.value, Tariff.T3.value}
+                                else "S4"
+                            ),
+                            **_refresh_order_state(order),
                         )
                     await _send_notice(callback, "Оплата ещё не подтверждена.")
                     await _show_screen_for_callback(
