@@ -412,6 +412,8 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             "После оплаты бот автоматически проверит статус и переведёт вас к следующему шагу."
             f"{order_block}"
         )
+        if not order_is_paid:
+            text_parts.append("\n\nКнопка ниже откроет защищённую платёжную форму.")
         if not payment_url:
             text_parts.append("\n\nПлатёжная ссылка пока недоступна. Проверьте настройки провайдера.")
 
@@ -433,7 +435,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             rows.append(
                 [
                     InlineKeyboardButton(
-                        text=_with_button_icons("Далее", "💳"),
+                        text=_with_button_icons("Перейти к оплате", "💳"),
                         url=payment_url,
                     ),
                     InlineKeyboardButton(
@@ -446,7 +448,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             rows.append(
                 [
                     InlineKeyboardButton(
-                        text=_with_button_icons("Начать оплату", "💳"),
+                        text=_with_button_icons("Перейти к оплате", "💳"),
                         callback_data="payment:start",
                     ),
                     InlineKeyboardButton(

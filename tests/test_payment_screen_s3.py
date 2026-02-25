@@ -23,10 +23,12 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertIn("Когда получите: Сразу после подтверждения оплаты", message)
         self.assertIn("Короткий дисклеймер", message)
         self.assertIn("Оплачивая, вы подтверждаете согласие", message)
+        self.assertIn("Кнопка ниже откроет защищённую платёжную форму.", message)
 
         keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
         self.assertGreaterEqual(len(keyboard_rows), 1)
         self.assertEqual(keyboard_rows[0][0].url, "https://example.com/pay")
+        self.assertIn("Перейти к оплате", keyboard_rows[0][0].text)
         self.assertEqual(keyboard_rows[0][1].callback_data, "s3:report_details")
 
     def test_s3_falls_back_to_settings_price_when_order_amount_missing(self) -> None:
@@ -52,8 +54,12 @@ class PaymentScreenS3Tests(unittest.TestCase):
                     buttons.append((button.text, button.callback_data, button.url))
 
         callback_values = {callback for _, callback, _ in buttons if callback}
+        fallback_payment_buttons = [
+            text for text, callback, _ in buttons if callback == "payment:start"
+        ]
         url_values = {url for _, _, url in buttons if url}
         self.assertIn("payment:start", callback_values)
+        self.assertTrue(any("Перейти к оплате" in text for text in fallback_payment_buttons))
         self.assertNotIn("https://example.com/pay", url_values)
 
     def test_s3_has_no_manual_payment_confirmation_button(self) -> None:
