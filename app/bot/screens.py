@@ -131,8 +131,8 @@ def _global_menu() -> list[list[InlineKeyboardButton]]:
         ],
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Оферта", "📄"),
-                callback_data="screen:S2",
+                text=_with_button_icons("Оферта/Условия", "📄"),
+                callback_data="legal:offer",
             ),
             InlineKeyboardButton(
                 text=_with_button_icons("Обратная связь", "💬"),
@@ -208,6 +208,13 @@ def build_payment_wait_message(frame: str = "⏳") -> str:
 
 
 def _common_disclaimer_short() -> str:
+    return (
+        "Материалы сервиса носят информационно-аналитический характер, не являются индивидуальной "
+        "консультацией и не гарантируют конкретный результат."
+    )
+
+
+def _common_disclaimer_full() -> str:
     return (
         "Важно:\n"
         "• Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
@@ -308,27 +315,7 @@ def screen_s2(state: dict[str, Any]) -> ScreenContent:
 
     # 1) Если нет тарифа — показываем оферту/правила
     if not meta or selected_tariff_raw not in {"T1", "T2", "T3"}:
-        offer_text = (
-            "Оферта и правила:\n\n"
-            "• Бот формирует аналитический отчёт в нейтральной лексике.\n"
-            "• Бот не даёт медицинских/финансовых/правовых рекомендаций.\n"
-            "• Запрещены обещания результата и гарантии.\n\n"
-            f"{_common_disclaimer_short()}"
-        )
-        text = _with_screen_prefix("S2", offer_text)
-
-        rows: list[list[InlineKeyboardButton]] = []
-        rows.append(
-            [
-                InlineKeyboardButton(
-                    text=_with_button_icons("Назад", "↩️"),
-                    callback_data="screen:S1",
-                )
-            ]
-        )
-        rows.extend(_global_menu())
-        keyboard = _build_keyboard(rows)
-        return ScreenContent(messages=[text], keyboard=keyboard)
+        return screen_s2_legal(state)
 
     # 2) Тариф выбран (T1/T2/T3) — показываем описание тарифа
     bullets = meta.get("bullets") or []
@@ -400,6 +387,30 @@ def screen_s2_details(state: dict[str, Any]) -> ScreenContent:
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
+def screen_s2_legal(_: dict[str, Any]) -> ScreenContent:
+    offer_text = (
+        "Оферта и условия использования:\n\n"
+        "• Бот формирует аналитический отчёт в нейтральной лексике.\n"
+        "• Бот не даёт медицинских, финансовых или правовых рекомендаций.\n"
+        "• Запрещены обещания результата и гарантии.\n"
+        "• Оплата подтверждает согласие с офертой и условиями сервиса.\n"
+        "• Ответственность за решения остаётся за пользователем.\n\n"
+        f"{_common_disclaimer_full()}"
+    )
+    text = _with_screen_prefix("S2", offer_text)
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Назад", "↩️"),
+                callback_data="screen:S1",
+            )
+        ]
+    ]
+    rows.extend(_global_menu())
+    keyboard = _build_keyboard(rows)
+    return ScreenContent(messages=[text], keyboard=keyboard)
+
+
 def screen_s3(state: dict[str, Any]) -> ScreenContent:
     selected_tariff_raw = state.get("selected_tariff", "T1")
     selected_tariff = _format_tariff_label(selected_tariff_raw)
@@ -423,6 +434,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
             f"• Тариф: {selected_tariff}.\n"
             f"• Стоимость: {price_label}.\n"
             "• Отчёт станет доступен сразу после подтверждения оплаты.\n"
+            f"\n{_common_disclaimer_short()}\n"
             f"Нажмите «{payment_cta}», чтобы перейти к оплате."
         )
         if not payment_url:
@@ -477,6 +489,14 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
                     ),
                 ]
             )
+        rows.append(
+            [
+                InlineKeyboardButton(
+                    text=_with_button_icons("Подробнее об условиях", "📄"),
+                    callback_data="legal:offer",
+                ),
+            ]
+        )
         rows.append(
             [
                 InlineKeyboardButton(
@@ -1074,13 +1094,7 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
         tariff=str(state.get("selected_tariff") or "unknown"),
     )
     job_status = state.get("report_job_status")
-    disclaimer = (
-        "Сервис не является консультацией, прогнозом или рекомендацией к действию.\n"
-        "Все выводы носят аналитический и описательный характер.\n"
-        "Ответственность за решения остаётся за пользователем.\n"
-        "Сервис не гарантирует финансовых или иных результатов.\n"
-       
-    )
+    disclaimer = _common_disclaimer_short()
     if report_text:
         text = _with_screen_prefix("S7", f"{report_text}\n\n{disclaimer}")
     elif job_status == "failed":
@@ -1110,6 +1124,12 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
             InlineKeyboardButton(
                 text=_with_button_icons("Продолжить", "✅"),
                 callback_data="screen:S1",
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text=_with_button_icons("Подробнее об условиях", "📄"),
+                callback_data="legal:offer",
             )
         ],
     ]
@@ -1506,6 +1526,7 @@ SCREEN_REGISTRY = {
     "S0": screen_s0,
     "S1": screen_s1,
     "S2": screen_s2,
+    "S2_LEGAL": screen_s2_legal,
     "S2_MORE": screen_s2_details,
     "S3": screen_s3,
     "S3_INFO": screen_s3_report_details,

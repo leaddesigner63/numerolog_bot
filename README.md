@@ -25,7 +25,7 @@ app/
     report_jobs_worker.py # фоновые задания генерации отчётов (pending/in_progress), heartbeat и авто-нуджи (resume + checkout-value)
     markdown.py       # рендеринг Markdown-разметки в Telegram-HTML
     keyboards.py      # общее правило раскладки inline-кнопок (длинные кнопки: максимум 2 в строке)
-    screens.py        # сценарные экраны S0-S15 + S_MARKETING_CONSENT (согласие на рассылку)
+    screens.py        # сценарные экраны S0-S15 + S2_LEGAL + S_MARKETING_CONSENT (офферта/условия и согласие на рассылку)
     questionnaire/    # конфиг и вспомогательные модули анкеты
   assets/
     pdf/              # PDF-ассеты (backgrounds/overlays/icons + требования)

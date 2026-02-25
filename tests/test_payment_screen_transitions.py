@@ -840,6 +840,18 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state_snapshot.data.get("selected_tariff"), Tariff.T3.value)
         self.assertEqual(state_snapshot.data.get("order_id"), str(order_id))
 
+
+    async def test_legal_offer_route_opens_legal_screen(self) -> None:
+        callback = _DummyCallback("legal:offer")
+        with (
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        show_screen.assert_awaited_with(callback, screen_id="S2_LEGAL")
+
     async def test_tariff_switch_resets_stale_paid_order_state(self) -> None:
         stale_order_id = self._create_order(OrderStatus.PAID)
         screens.screen_manager.update_state(

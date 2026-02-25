@@ -71,7 +71,7 @@ class ScreenCopySnapshotTests(unittest.TestCase):
     def test_screen_s2_offer_copy_snapshot(self) -> None:
         content = screen_s2({})
         text = content.messages[0]
-        self.assertIn("Оферта и правила", text)
+        self.assertIn("Оферта и условия использования", text)
         self.assertIn("не является консультацией", text)
 
     def test_screen_s3_copy_snapshot(self) -> None:
