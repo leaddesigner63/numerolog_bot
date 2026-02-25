@@ -24,7 +24,7 @@ class ScreenS4KeyboardTests(unittest.TestCase):
     def test_t1_uses_custom_tariff_title_in_intro(self) -> None:
         content = screen_s4({"selected_tariff": "T1"})
 
-        self.assertIn("Мои данные.", content.messages[0])
+        self.assertIn("Шаг 4. Заполните профиль для генерации отчёта.", content.messages[0])
 
     def test_profile_flow_with_profile_hides_delete_and_cabinet_buttons(self) -> None:
         content = screen_s4(
@@ -68,7 +68,7 @@ class ScreenS4KeyboardTests(unittest.TestCase):
         )
 
         self.assertIn("🟧 ОПЛАТА ПРОШЛА УСПЕШНО. 🟧", content.messages[0])
-        self.assertIn("\n\nМои данные.", content.messages[0])
+        self.assertIn("\n\nШаг 4. Заполните профиль для генерации отчёта.", content.messages[0])
         self.assertIn("Данные ещё не заполнены.", content.messages[0])
 
     def test_profile_text_starts_with_payment_success_banner(self) -> None:
@@ -92,7 +92,7 @@ class ScreenS4KeyboardTests(unittest.TestCase):
         )
 
         self.assertIn("🟧 ОПЛАТА ПРОШЛА УСПЕШНО. 🟧", content.messages[0])
-        self.assertIn("\n\nМои данные:", content.messages[0])
+        self.assertIn("\n\nШаг 4. Проверьте данные профиля перед продолжением.", content.messages[0])
 
     def test_profile_text_from_cabinet_hides_payment_success_banner(self) -> None:
         content = screen_s4(

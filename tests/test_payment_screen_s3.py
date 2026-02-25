@@ -16,11 +16,11 @@ class PaymentScreenS3Tests(unittest.TestCase):
         )
 
         message = content.messages[0]
-        self.assertIn("Финальный шаг перед оплатой", message)
+        self.assertIn("Шаг 3. Подтверждение оплаты выбранного тарифа", message)
         self.assertIn("Тариф:", message)
         self.assertIn("Стоимость: 560 RUB", message)
-        self.assertIn("Срок получения: сразу после подтверждения оплаты", message)
-        self.assertIn("Нажмите «Оплатить» ниже", message)
+        self.assertIn("Отчёт станет доступен сразу после подтверждения оплаты", message)
+        self.assertIn("Нажмите «Оплатить», чтобы перейти к оплате", message)
         self.assertNotIn("Что входит в отчёт", message)
         self.assertNotIn("Юридическая информация", message)
 
