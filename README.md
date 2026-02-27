@@ -102,6 +102,7 @@ web/                  # многостраничный статический с
   sitemap.xml         # карта сайта только для индексируемых публичных страниц (без /legal/*)
   assets/css/styles.css # единый CSS для всех страниц (в т.ч. компонент final-cta)
   assets/js/script.js   # клиентские интеракции сайта
+  ig/index.html       # быстрый редирект в Telegram-бота с start-параметром ig_reels_1
   assets/svg/sprite.svg # SVG-спрайт иконок
 AUTODEPLOY_INSTRUCTIONS.md # пошаговая инструкция по автодеплою
 CONTRIBUTING.md      # правила разработки и обязательный паттерн enter_text_input_mode для текстового ввода
