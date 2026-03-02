@@ -62,6 +62,12 @@ def save_user_first_touch_attribution(
     telegram_username: str | None = None,
 ) -> bool:
     parsed_payload = parse_first_touch_payload(payload)
+    has_attribution_data = bool(
+        parsed_payload.get("start_payload")
+        or parsed_payload.get("source")
+        or parsed_payload.get("campaign")
+        or parsed_payload.get("placement")
+    )
 
     with get_session() as session:
         user = session.execute(
@@ -85,23 +91,39 @@ def save_user_first_touch_attribution(
             )
 
         existing = session.execute(
-            select(UserFirstTouchAttribution.id).where(
+            select(UserFirstTouchAttribution).where(
                 UserFirstTouchAttribution.telegram_user_id == telegram_user_id
             )
         ).scalar_one_or_none()
 
-        if existing is not None:
+        if existing is None:
+            if not has_attribution_data:
+                return False
+            session.add(
+                UserFirstTouchAttribution(
+                    telegram_user_id=telegram_user_id,
+                    start_payload=str(parsed_payload.get("start_payload") or ""),
+                    source=parsed_payload.get("source"),
+                    campaign=parsed_payload.get("campaign"),
+                    placement=parsed_payload.get("placement"),
+                    raw_parts=parsed_payload.get("raw_parts"),
+                )
+            )
+            return True
+
+        existing_is_empty = not (
+            existing.start_payload
+            or existing.source
+            or existing.campaign
+            or existing.placement
+        )
+        if not (existing_is_empty and has_attribution_data):
             return False
 
-        session.add(
-            UserFirstTouchAttribution(
-                telegram_user_id=telegram_user_id,
-                start_payload=str(parsed_payload.get("start_payload") or ""),
-                source=parsed_payload.get("source"),
-                campaign=parsed_payload.get("campaign"),
-                placement=parsed_payload.get("placement"),
-                raw_parts=parsed_payload.get("raw_parts"),
-            )
-        )
+        existing.start_payload = str(parsed_payload.get("start_payload") or "")
+        existing.source = parsed_payload.get("source")
+        existing.campaign = parsed_payload.get("campaign")
+        existing.placement = parsed_payload.get("placement")
+        existing.raw_parts = parsed_payload.get("raw_parts")
 
     return True
