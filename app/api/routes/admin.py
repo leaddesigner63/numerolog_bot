@@ -1164,7 +1164,7 @@ def admin_ui(request: Request) -> HTMLResponse:
             <label for="analyticsAttributionMode">Режим атрибуции</label>
             <select id="analyticsAttributionMode">
               <option value="first_touch">First-touch</option>
-              <option value="all_touch">All-touch</option>
+              <option value="all_touch" selected>All-touch</option>
             </select>
           </div>
           <div class="field">
@@ -1185,7 +1185,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         <div class="analytics-block">
           <div class="analytics-title">Каналы трафика</div>
           <div id="analyticsTrafficKpi" class="kpi-grid"></div>
-          <div id="analyticsTrafficSourceMode" class="muted">Режим атрибуции: first_touch</div>
+          <div id="analyticsTrafficSourceMode" class="muted">Режим атрибуции: all_touch</div>
           <div id="analyticsTrafficSource" class="muted">Нет данных</div>
           <div style="height: 12px;"></div>
           <div id="analyticsTrafficCampaign" class="muted">Нет данных</div>
@@ -3231,7 +3231,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       const fromIso = toIsoFromLocal(document.getElementById("analyticsFrom")?.value || "");
       const toIso = toIsoFromLocal(document.getElementById("analyticsTo")?.value || "");
       const tariff = document.getElementById("analyticsTariff")?.value || "";
-      const attributionMode = document.getElementById("analyticsAttributionMode")?.value || "first_touch";
+      const attributionMode = document.getElementById("analyticsAttributionMode")?.value || "all_touch";
       const dropoffWindow = Number(document.getElementById("analyticsDropoffWindow")?.value || "60");
       const topN = Number(document.getElementById("analyticsTopN")?.value || "50");
       if (period) {
@@ -3310,7 +3310,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         const financeNudgeByTariff = financeNudgeByTariffRes?.data?.resume_after_nudge_by_tariff || [];
         const financeTimeseries = financeTimeseriesRes?.data?.timeseries || [];
         const trafficSummary = trafficSummaryRes?.data?.summary || {};
-        const attributionMode = trafficSummary?.attribution_mode || "first_touch";
+        const attributionMode = trafficSummary?.attribution_mode || "all_touch";
         const trafficBySource = trafficSourceRes?.data?.by_source || [];
         const trafficByCampaign = trafficCampaignRes?.data?.by_campaign || [];
         const trafficByTariffClick = trafficSummary?.paid_per_tariff_click || [];
@@ -4386,9 +4386,9 @@ def _build_traffic_filters(
     from_dt, to_dt, normalized_period = _resolve_period_bounds(period, from_dt, to_dt)
     if from_dt and to_dt and from_dt > to_dt:
         raise HTTPException(status_code=422, detail="Parameter 'from' must be less than or equal to 'to'")
-    attribution_mode_value = str(attribution_mode or "first_touch")
+    attribution_mode_value = str(attribution_mode or "all_touch")
     if attribution_mode_value not in {"first_touch", "all_touch"}:
-        attribution_mode_value = "first_touch"
+        attribution_mode_value = "all_touch"
     filters = TrafficAnalyticsFilters(from_dt=from_dt, to_dt=to_dt, tariff=tariff, attribution_mode=attribution_mode_value)
     return filters, {
         "from_dt": from_dt.isoformat() if from_dt else None,
@@ -4503,7 +4503,7 @@ def admin_traffic_summary(
     to_dt: datetime | None = Query(default=None, alias="to"),
     period: str | None = Query(default=None),
     tariff: str | None = Query(default=None),
-    attribution_mode: str | None = Query(default="first_touch"),
+    attribution_mode: str | None = Query(default="all_touch"),
     session: Session = Depends(_get_db_session),
 ) -> dict:
     filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff, attribution_mode=attribution_mode)
@@ -4514,7 +4514,7 @@ def admin_traffic_summary(
             "conversions": result.get("conversions", []),
             "paid_per_tariff_click": result.get("paid_per_tariff_click", []),
             "paid_per_tariff_click_first_touch": result.get("paid_per_tariff_click_first_touch", []),
-            "attribution_mode": result.get("attribution_mode", "first_touch"),
+            "attribution_mode": result.get("attribution_mode", "all_touch"),
         }
     ).model_dump(mode="json")
     return {
@@ -4531,7 +4531,7 @@ def admin_traffic_by_source(
     to_dt: datetime | None = Query(default=None, alias="to"),
     period: str | None = Query(default=None),
     tariff: str | None = Query(default=None),
-    attribution_mode: str | None = Query(default="first_touch"),
+    attribution_mode: str | None = Query(default="all_touch"),
     top_n: int = Query(default=20, ge=1, le=500),
     session: Session = Depends(_get_db_session),
 ) -> dict:
@@ -4555,7 +4555,7 @@ def admin_traffic_by_campaign(
     to_dt: datetime | None = Query(default=None, alias="to"),
     period: str | None = Query(default=None),
     tariff: str | None = Query(default=None),
-    attribution_mode: str | None = Query(default="first_touch"),
+    attribution_mode: str | None = Query(default="all_touch"),
     top_n: int = Query(default=200, ge=1, le=5000),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=500),

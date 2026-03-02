@@ -124,7 +124,7 @@ class TrafficAnalyticsFilters:
     from_dt: datetime | None = None
     to_dt: datetime | None = None
     tariff: str | None = None
-    attribution_mode: str = "first_touch"
+    attribution_mode: str = "all_touch"
 
 
 def build_screen_transition_analytics(session: Session, filters: AnalyticsFilters) -> dict:
@@ -204,7 +204,7 @@ def build_marketing_subscription_analytics(session: Session, filters: MarketingA
 
 
 def build_traffic_analytics(session: Session, filters: TrafficAnalyticsFilters) -> dict:
-    attribution_mode = str(filters.attribution_mode or "first_touch")
+    attribution_mode = str(filters.attribution_mode or "all_touch")
     if attribution_mode == "all_touch":
         attribution_entries = _load_touch_event_entries(session, filters)
     else:

@@ -570,6 +570,7 @@ class AdminAnalyticsTests(unittest.TestCase):
                     from_dt=base_time - timedelta(days=1),
                     to_dt=base_time + timedelta(days=1),
                     tariff="T1",
+                    attribution_mode="first_touch",
                 ),
             )
 
@@ -697,6 +698,7 @@ class AdminAnalyticsTests(unittest.TestCase):
                     from_dt=base_time - timedelta(days=1),
                     to_dt=base_time + timedelta(days=1),
                     tariff="T2",
+                    attribution_mode="first_touch",
                 ),
             )
 
@@ -793,6 +795,45 @@ class AdminAnalyticsTests(unittest.TestCase):
         self.assertEqual(result["users_by_source"][0]["users"], 1)
 
 
+    def test_traffic_analytics_uses_all_touch_by_default(self) -> None:
+        base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        from app.db.models import User, UserFirstTouchAttribution, UserTouchEvent
+
+        with self.Session() as session:
+            session.add(User(id=611, telegram_user_id=6611))
+            session.add(
+                UserFirstTouchAttribution(
+                    telegram_user_id=6611,
+                    source="legacy_source",
+                    campaign="legacy_campaign",
+                    start_payload="legacy",
+                    captured_at=base_time,
+                )
+            )
+            session.add(
+                UserTouchEvent(
+                    telegram_user_id=6611,
+                    source="fresh_source",
+                    campaign="fresh_campaign",
+                    start_payload="fresh",
+                    captured_at=base_time + timedelta(minutes=1),
+                )
+            )
+            session.commit()
+
+            result = build_traffic_analytics(
+                session,
+                TrafficAnalyticsFilters(
+                    from_dt=base_time - timedelta(days=1),
+                    to_dt=base_time + timedelta(days=1),
+                ),
+            )
+
+        self.assertEqual(result["attribution_mode"], "all_touch")
+        self.assertEqual(result["users_by_source"][0]["source"], "fresh_source")
+
+
+
     def test_traffic_analytics_builds_paid_per_tariff_click_slice(self) -> None:
         base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
         from app.db.models import PaymentConfirmationSource, PaymentProvider, Tariff, User, UserFirstTouchAttribution, Order, OrderStatus
@@ -844,7 +885,7 @@ class AdminAnalyticsTests(unittest.TestCase):
             )
             session.commit()
 
-            result = build_traffic_analytics(session, TrafficAnalyticsFilters(from_dt=base_time - timedelta(days=1), to_dt=base_time + timedelta(days=1)))
+            result = build_traffic_analytics(session, TrafficAnalyticsFilters(from_dt=base_time - timedelta(days=1), to_dt=base_time + timedelta(days=1), attribution_mode="first_touch"))
 
         by_tariff = {item["tariff"]: item for item in result["paid_per_tariff_click"]}
         self.assertEqual(by_tariff["T1"]["tariff_click_users"], 0)
@@ -905,7 +946,7 @@ class AdminAnalyticsTests(unittest.TestCase):
             event.created_at = base_time
             session.commit()
 
-            result = build_traffic_analytics(session, TrafficAnalyticsFilters(from_dt=base_time - timedelta(days=1), to_dt=base_time + timedelta(days=1)))
+            result = build_traffic_analytics(session, TrafficAnalyticsFilters(from_dt=base_time - timedelta(days=1), to_dt=base_time + timedelta(days=1), attribution_mode="first_touch"))
 
         by_tariff = {item["tariff"]: item for item in result["paid_per_tariff_click"]}
         self.assertEqual(by_tariff["T2"]["tariff_click_users"], 1)
