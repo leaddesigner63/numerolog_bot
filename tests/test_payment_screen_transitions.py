@@ -138,6 +138,36 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(state_snapshot.data.get("order_id"))
         self.assertEqual(state_snapshot.data.get("s3_back_target"), "S4")
 
+    async def test_profile_save_routes_to_s3_with_s5_back_target_for_t2_t3(self) -> None:
+        self._create_profile(consent_accepted=True)
+
+        for tariff in (Tariff.T2, Tariff.T3):
+            with self.subTest(tariff=tariff.value):
+                screens.screen_manager._store._states.clear()
+                screens.screen_manager.update_state(
+                    1001,
+                    selected_tariff=tariff.value,
+                    questionnaire={"status": "completed"},
+                    personal_data_consent_accepted=True,
+                    order_id=None,
+                )
+                callback = _DummyCallback("profile:save")
+
+                with (
+                    patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+                    patch.object(screens, "_send_notice", new=AsyncMock()) as send_notice,
+                    patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+                    patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+                    patch.object(screens, "_refresh_questionnaire_state") as refresh_questionnaire,
+                    patch.object(screens, "_maybe_run_payment_waiter", new=AsyncMock()),
+                ):
+                    refresh_questionnaire.return_value = None
+                    await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+                show_screen.assert_awaited_with(callback, screen_id="S3")
+                state_snapshot = screens.screen_manager.update_state(1001)
+                self.assertEqual(state_snapshot.data.get("s3_back_target"), "S5")
+
     async def test_open_checkout_s3_sets_default_back_target_for_t1(self) -> None:
         callback = _DummyCallback("screen:S3")
         screens.screen_manager.update_state(
