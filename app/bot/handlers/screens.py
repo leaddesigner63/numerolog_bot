@@ -266,7 +266,7 @@ async def _send_feedback_to_admins(
             "Скриншот оплаты (manual mode)"
         )
     message = (
-        "Новая обратная связь\n"
+        "!!! НОВАЯ ОПЛАТА !!!\n"
         f"Пользователь: {user_id} ({username_label})\n"
         f"{feedback_text}"
         f"{attachment_notice}"
