@@ -83,10 +83,11 @@ sudo systemctl reload nginx
 2. Сделать commit и merge в `main`.
 3. Дождаться выполнения GitHub Actions workflow `.github/workflows/deploy.yml`.
 
-В pipeline после выката в production должен выполняться шаг:
+В pipeline после выката в production должны выполняться шаги:
 
 ```bash
 bash scripts/smoke_check_social_subdomains.sh
+bash scripts/smoke_check_social_subdomains_runtime.sh
 ```
 
 ## 4) Обязательные post-deploy smoke-проверки
@@ -133,7 +134,31 @@ bash scripts/smoke_check_social_subdomains.sh
 
 При любой ошибке скрипт завершится с ненулевым кодом и остановит pipeline.
 
-## 6) Быстрый rollback
+## 6) Как интерпретировать runtime-smoke при падении
+
+Runtime-smoke (`scripts/smoke_check_social_subdomains_runtime.sh`) проверяет уже не только HTML, но и фактический runtime страницы в headless-браузере:
+
+- подменяет `window.ym` spy-функцией до выполнения inline-скриптов;
+- проверяет вызовы `ym(..., "init", ...)`, `ym(..., "hit", ...)`, `ym(..., "reachGoal", "bridge_redirect", ...)`;
+- проверяет, что `reachGoal` вызван с ожидаемыми `source` и `start_payload`;
+- перехватывает `window.location.replace` и подтверждает редирект в Telegram с `rr=reachGoal_callback`.
+
+Типовые причины падения и действия:
+
+1. **`не найден вызов ym(..., "init"...)` / `hit` / `reachGoal`**  
+   Проверьте, что inline-скрипт bridge не удалён, не обёрнут в условие и не сломан синтаксически в `web/<source>/index.html`.
+2. **`reachGoal event ... != bridge_redirect`**  
+   В коде страницы изменено имя цели Метрики. Верните `bridge_redirect` или синхронно обновите `SOCIAL_SUBDOMAIN_TARGET_EVENT` в workflow.
+3. **`reachGoal.source/start_payload ... != ...`**  
+   Нарушены source-specific payload-значения (`ig/reels`, `vk/clips`, `yt/shorts`). Сверьте `source` и `startPayload` в соответствующем `web/<source>/index.html`.
+4. **`не зафиксирован вызов window.location.replace`**  
+   Редирект не выполняется: проверьте `redirectToBot`, тайминги fallback и отсутствие ранних runtime-ошибок в JS.
+5. **Ошибка запуска playwright/браузера**  
+   Проверьте шаг установки browser-зависимостей в workflow: `pip install playwright` и `python -m playwright install --with-deps chromium`.
+
+После исправлений повторите pipeline и убедитесь, что проходят оба smoke-шага (статический и runtime).
+
+## 7) Быстрый rollback
 
 Если проверка не проходит:
 
@@ -143,4 +168,6 @@ bash scripts/smoke_check_social_subdomains.sh
    git push origin main
    ```
 2. Дождаться повторного автодеплоя.
-3. Повторно выполнить `bash scripts/smoke_check_social_subdomains.sh`.
+3. Повторно выполнить:
+   - `bash scripts/smoke_check_social_subdomains.sh`;
+   - `bash scripts/smoke_check_social_subdomains_runtime.sh`.

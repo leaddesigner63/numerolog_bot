@@ -141,3 +141,21 @@ jobs:
           SOCIAL_SUBDOMAIN_METRIKA_COUNTER_ID: "106884182"
           SOCIAL_SUBDOMAIN_TARGET_EVENT: bridge_redirect
         run: bash scripts/smoke_check_social_subdomains.sh
+
+      - name: Setup Python for runtime smoke
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install runtime smoke browser dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Post-deploy runtime smoke check social subdomains
+        env:
+          SOCIAL_SUBDOMAIN_BASE_DOMAIN: aireadu.ru
+          SOCIAL_SUBDOMAIN_METRIKA_COUNTER_ID: "106884182"
+          SOCIAL_SUBDOMAIN_TARGET_EVENT: bridge_redirect
+        run: bash scripts/smoke_check_social_subdomains_runtime.sh

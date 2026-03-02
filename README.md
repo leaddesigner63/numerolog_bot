@@ -55,6 +55,7 @@ scripts/              # вспомогательные скрипты
   check_landing_content.py # статическая проверка словаря/дисклеймеров лендинга
   smoke_check_landing.sh # smoke-check доступности лендинга/CTA/ассетов после деплоя
   smoke_check_social_subdomains.sh # post-deploy smoke-check поддоменов ig/vk/yt: HTTP 200 + наличие bridge-метрик в HTML
+  smoke_check_social_subdomains_runtime.sh # post-deploy runtime-smoke поддоменов ig/vk/yt: headless browser, spy window.ym и проверка редиректа
   smoke_check_report_job_completion.sh # post-deploy smoke-check paid-заказа: создание ReportJob и ожидание COMPLETED
   smoke_check_report_job_completion.py # сценарий smoke-check paid order -> ReportJob -> COMPLETED; переиспользует техпользователя (SMOKE_TELEGRAM_USER_ID), идемпотентно обновляет профиль/состояние и очищает только временные сущности
   db/alembic_upgrade_with_retry.sh # запуск alembic upgrade head с ретраями (в т.ч. для recovery PostgreSQL) для deploy/systemd ExecStartPre
@@ -247,6 +248,7 @@ python -m http.server 8080 --directory web
 - Для изменения логики раскладки кнопок используйте отдельный runbook: [`docs/deploy/autodeploy_keyboard_layout_step_by_step.md`](docs/deploy/autodeploy_keyboard_layout_step_by_step.md).
 - Для релиза и проверки целей bridge-редиректов (`ig`/`vk`/`yt`) используйте runbook: [`docs/deploy/autodeploy_bridge_redirect_goal_step_by_step.md`](docs/deploy/autodeploy_bridge_redirect_goal_step_by_step.md).
 - Для полного пошагового автодеплоя социальных поддоменов (`ig.aireadu.ru`, `vk.aireadu.ru`, `yt.aireadu.ru`) используйте runbook: [`docs/deploy/autodeploy_social_subdomains_step_by_step.md`](docs/deploy/autodeploy_social_subdomains_step_by_step.md).
+- После автодеплоя социальных поддоменов обязательны **оба** smoke-шага: статический `scripts/smoke_check_social_subdomains.sh` и runtime `scripts/smoke_check_social_subdomains_runtime.sh` (headless browser).
 - Для смены username Telegram-бота на всех CTA лендинга используйте runbook: [`docs/deploy/autodeploy_landing_bot_username_step_by_step.md`](docs/deploy/autodeploy_landing_bot_username_step_by_step.md).
 - Для временного hot-switch оплаты (`provider -> manual -> provider`) используйте runbook: [`docs/deploy/autodeploy_manual_payment_mode_step_by_step.md`](docs/deploy/autodeploy_manual_payment_mode_step_by_step.md). После любого изменения `PAYMENT_MODE` обязателен рестарт `numerolog-bot.service` и `numerolog-api.service`.
 - Для релиза логики first-touch attribution (сценарий `/start` без payload -> `/start <payload>`) используйте runbook: [`docs/deploy/autodeploy_first_touch_attribution_step_by_step.md`](docs/deploy/autodeploy_first_touch_attribution_step_by_step.md).
