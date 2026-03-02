@@ -842,6 +842,10 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
     opened_from_lk = bool(state.get("s4_opened_from_lk"))
     order_status = (state.get("order_status") or "").lower()
     requires_payment = selected_tariff_raw in {"T1", "T2", "T3"} and order_status != "paid"
+    questionnaire = state.get("questionnaire") or {}
+    questionnaire_status = str(questionnaire.get("status") or "empty").strip().lower()
+    questionnaire_answers = questionnaire.get("answers")
+    questionnaire_has_answers = bool(questionnaire_answers) if questionnaire_answers is not None else False
     is_t0 = selected_tariff_raw == "T0"
 
     is_order_creation_mode = selected_tariff_raw in {"T1", "T2", "T3"}
@@ -939,10 +943,22 @@ def screen_s4(state: dict[str, Any]) -> ScreenContent:
             ]
         )
     elif requires_payment:
+        requires_completed_questionnaire = selected_tariff_raw in {"T2", "T3"}
+        should_redirect_to_questionnaire = (
+            requires_completed_questionnaire and questionnaire_status != "completed"
+        )
+        primary_button_text = CTA_LABELS["payment"]["before_payment_url"]
+        primary_button_icon = "💳"
+        primary_button_callback = "screen:S3"
+        if should_redirect_to_questionnaire:
+            primary_button_text = "Продолжить анкету" if questionnaire_has_answers else CTA_LABELS["questionnaire"]
+            primary_button_icon = "📝" if not questionnaire_has_answers else "▶️"
+            primary_button_callback = "screen:S5"
+
         primary_row = [
             InlineKeyboardButton(
-                text=_with_button_icons(CTA_LABELS["payment"]["before_payment_url"], "💳"),
-                callback_data="screen:S3",
+                text=_with_button_icons(primary_button_text, primary_button_icon),
+                callback_data=primary_button_callback,
             )
         ]
         secondary_rows.append(
