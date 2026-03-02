@@ -84,6 +84,17 @@ class StartPayloadFirstTouchTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(records[0].source, "source")
         self.assertEqual(records[0].campaign, "a")
 
+    async def test_start_without_payload_then_with_payload_updates_first_touch(self) -> None:
+        with patch.object(screen_manager, "show_screen", new=AsyncMock()):
+            await start_module.handle_start(self._message("/start"))
+            await start_module.handle_start(self._message("/start source_a_campaign_a"))
+
+        records = self._first_touch_records()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].start_payload, "source_a_campaign_a")
+        self.assertEqual(records[0].source, "source")
+        self.assertEqual(records[0].campaign, "a")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -249,6 +249,7 @@ python -m http.server 8080 --directory web
 - Для полного пошагового автодеплоя социальных поддоменов (`ig.aireadu.ru`, `vk.aireadu.ru`, `yt.aireadu.ru`) используйте runbook: [`docs/deploy/autodeploy_social_subdomains_step_by_step.md`](docs/deploy/autodeploy_social_subdomains_step_by_step.md).
 - Для смены username Telegram-бота на всех CTA лендинга используйте runbook: [`docs/deploy/autodeploy_landing_bot_username_step_by_step.md`](docs/deploy/autodeploy_landing_bot_username_step_by_step.md).
 - Для временного hot-switch оплаты (`provider -> manual -> provider`) используйте runbook: [`docs/deploy/autodeploy_manual_payment_mode_step_by_step.md`](docs/deploy/autodeploy_manual_payment_mode_step_by_step.md). После любого изменения `PAYMENT_MODE` обязателен рестарт `numerolog-bot.service` и `numerolog-api.service`.
+- Для релиза логики first-touch attribution (сценарий `/start` без payload -> `/start <payload>`) используйте runbook: [`docs/deploy/autodeploy_first_touch_attribution_step_by_step.md`](docs/deploy/autodeploy_first_touch_attribution_step_by_step.md).
 
 ### Checklist наблюдаемости (manual-оплаты)
 

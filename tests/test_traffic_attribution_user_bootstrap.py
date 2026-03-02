@@ -90,6 +90,70 @@ class TrafficAttributionUserBootstrapTests(unittest.TestCase):
         self.assertEqual(len(first_touch_records), 1)
         self.assertEqual(len(touch_events), 2)
 
+    def test_empty_start_then_payload_creates_first_touch_only_on_second_call(self) -> None:
+        first_saved = traffic_attribution_module.save_user_first_touch_attribution(
+            telegram_user_id=777003,
+            payload=None,
+        )
+        second_saved = traffic_attribution_module.save_user_first_touch_attribution(
+            telegram_user_id=777003,
+            payload="site_seo_cta",
+        )
+
+        self.assertFalse(first_saved)
+        self.assertTrue(second_saved)
+
+        with self.SessionLocal() as session:
+            first_touch_records = session.execute(
+                select(UserFirstTouchAttribution).where(UserFirstTouchAttribution.telegram_user_id == 777003)
+            ).scalars().all()
+            touch_events = session.execute(
+                select(UserTouchEvent).where(UserTouchEvent.telegram_user_id == 777003)
+            ).scalars().all()
+
+        self.assertEqual(len(first_touch_records), 1)
+        self.assertEqual(first_touch_records[0].start_payload, "site_seo_cta")
+        self.assertEqual(first_touch_records[0].source, "site")
+        self.assertEqual(first_touch_records[0].campaign, "seo")
+        self.assertEqual(first_touch_records[0].placement, "cta")
+        self.assertEqual(len(touch_events), 1)
+
+    def test_existing_empty_first_touch_can_be_updated_once(self) -> None:
+        with self.SessionLocal() as session:
+            session.add(
+                UserFirstTouchAttribution(
+                    telegram_user_id=777004,
+                    start_payload="",
+                    source=None,
+                    campaign=None,
+                    placement=None,
+                    raw_parts=None,
+                )
+            )
+            session.commit()
+
+        first_saved = traffic_attribution_module.save_user_first_touch_attribution(
+            telegram_user_id=777004,
+            payload="site_seo_cta",
+        )
+        second_saved = traffic_attribution_module.save_user_first_touch_attribution(
+            telegram_user_id=777004,
+            payload="site_other_cta2",
+        )
+
+        self.assertTrue(first_saved)
+        self.assertFalse(second_saved)
+
+        with self.SessionLocal() as session:
+            first_touch_record = session.execute(
+                select(UserFirstTouchAttribution).where(UserFirstTouchAttribution.telegram_user_id == 777004)
+            ).scalar_one()
+
+        self.assertEqual(first_touch_record.start_payload, "site_seo_cta")
+        self.assertEqual(first_touch_record.source, "site")
+        self.assertEqual(first_touch_record.campaign, "seo")
+        self.assertEqual(first_touch_record.placement, "cta")
+
     def test_parse_first_touch_payload_supports_marker_format_and_preserves_placement(self) -> None:
         parsed = traffic_attribution_module.parse_first_touch_payload("src_sitecmp_launchpl_tariff_t2")
         self.assertEqual(parsed["start_payload"], "src_sitecmp_launchpl_tariff_t2")
