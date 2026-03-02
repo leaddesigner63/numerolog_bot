@@ -11,16 +11,27 @@
         k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
     })(window, document,'script',"https://mc.yandex.ru/metrika/tag.js", 'ym');
 
-    ym(106884182, "init", {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+    var redirected = false;
+
+    function redirectToBot() {
+      if (redirected) {
+        return;
+      }
+      redirected = true;
+      window.location.replace('https://t.me/AIreadUbot?start=ig_reels_1');
+    }
+
+    if (typeof ym === 'function') {
+      ym(106884182, "init", {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+      ym(106884182, "hit", location.href, {params:{source:"ig"}}, redirectToBot);
+    }
+
+    setTimeout(redirectToBot, 1500);
   </script>
   <noscript><div><img src="https://mc.yandex.ru/watch/106884182" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
   <!-- /Yandex.Metrika counter -->
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Переадресация в Telegram-бот</title>
-  <meta http-equiv="refresh" content="0; url=https://t.me/AIreadUbot?start=ig_reels_1">
-  <script>
-    window.location.replace('https://t.me/AIreadUbot?start=ig_reels_1');
-  </script>
 </head>
 <body>
   <p>Если редирект не сработал автоматически, откройте бота по ссылке:
