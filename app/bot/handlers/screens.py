@@ -590,6 +590,9 @@ async def _run_payment_waiter(bot: Bot, chat_id: int, user_id: int) -> None:
 async def _maybe_run_payment_waiter(callback: CallbackQuery) -> None:
     if not callback.message:
         return
+    payment_context = get_payment_flow_context()
+    if payment_context["mode"] != "provider":
+        return
     await ensure_payment_waiter(
         bot=callback.bot,
         chat_id=callback.message.chat.id,
@@ -598,6 +601,9 @@ async def _maybe_run_payment_waiter(callback: CallbackQuery) -> None:
 
 
 async def ensure_payment_waiter(*, bot: Bot, chat_id: int, user_id: int) -> None:
+    payment_context = get_payment_flow_context()
+    if payment_context["mode"] != "provider":
+        return
     running_task = _payment_wait_tasks.get(user_id)
     if running_task and not running_task.done():
         return
@@ -2226,6 +2232,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     if callback.data == "payment:paid":
+        payment_context = get_payment_flow_context()
+        manual_mode = payment_context["mode"] == "manual"
         state_snapshot = screen_manager.update_state(callback.from_user.id)
         order_id = _safe_int(state_snapshot.data.get("order_id"))
         if not order_id:
@@ -2249,13 +2257,20 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                 screen_manager.update_state(
                     callback.from_user.id,
                     s3_back_target="S4",
+                    payment_processing_notice=manual_mode,
                     **_refresh_order_state(order),
                 )
-                await _send_notice(
-                    callback,
-                    "Оплата ещё не подтверждена провайдером. Без подтверждения провайдера переход к следующему экрану невозможен. Как только подтверждение поступит через webhook/проверку статуса, бот автоматически переведёт вас к следующему шагу.",
-                )
-                await _maybe_run_payment_waiter(callback)
+                if manual_mode:
+                    await _send_notice(
+                        callback,
+                        "Ожидаем ручную проверку платежа, отчёт стартует автоматически после подтверждения.",
+                    )
+                else:
+                    await _send_notice(
+                        callback,
+                        "Оплата ещё не подтверждена провайдером. Без подтверждения провайдера переход к следующему экрану невозможен. Как только подтверждение поступит через webhook/проверку статуса, бот автоматически переведёт вас к следующему шагу.",
+                    )
+                    await _maybe_run_payment_waiter(callback)
                 await _show_screen_for_callback(
                     callback,
                     screen_id="S3",
@@ -2278,6 +2293,8 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         return
 
     if callback.data == "payment:start":
+        payment_context = get_payment_flow_context()
+        manual_mode = payment_context["mode"] == "manual"
         with get_session() as session:
             _refresh_profile_state(session, callback.from_user.id)
             _refresh_questionnaire_state(session, callback.from_user.id)
@@ -2321,6 +2338,15 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
             await _send_notice(callback, "Не удалось подготовить заказ для оплаты.")
             await _safe_callback_answer(callback)
             return
+        if manual_mode and order.status != OrderStatus.PAID:
+            screen_manager.update_state(
+                callback.from_user.id,
+                payment_processing_notice=True,
+            )
+            await _send_notice(
+                callback,
+                "Ожидаем ручную проверку платежа, отчёт стартует автоматически после подтверждения.",
+            )
         await _show_screen_for_callback(callback, screen_id=decision.next_screen)
         await _safe_callback_answer(callback)
         return

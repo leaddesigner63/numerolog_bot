@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 
 from app.bot.handlers.screen_manager import screen_manager
 from app.bot.handlers.screens import ensure_payment_waiter
+from app.bot.screens import get_payment_flow_context
 from app.db.models import (
     Order,
     OrderStatus,
@@ -112,6 +113,8 @@ async def handle_start(message: Message) -> None:
                     ).scalar_one_or_none()
                     if order:
                         state_snapshot = screen_manager.update_state(message.from_user.id)
+                        payment_context = get_payment_flow_context()
+                        manual_mode = payment_context["mode"] == "manual"
                         should_resume_report_flow = order.status == OrderStatus.PAID
                         target_screen = "S3"
                         latest_job = None
@@ -192,11 +195,16 @@ async def handle_start(message: Message) -> None:
                             trigger_value=f"command:/start payload:{payload}",
                         )
                         if target_screen == "S3":
-                            await ensure_payment_waiter(
-                                bot=message.bot,
-                                chat_id=message.chat.id,
-                                user_id=message.from_user.id,
-                            )
+                            if manual_mode:
+                                await message.answer(
+                                    "Ожидаем ручную проверку платежа, отчёт стартует автоматически после подтверждения.",
+                                )
+                            else:
+                                await ensure_payment_waiter(
+                                    bot=message.bot,
+                                    chat_id=message.chat.id,
+                                    user_id=message.from_user.id,
+                                )
                         return
             except Exception:
                 # Мягкий fallback в S0 для любых сбоев чтения payload/БД.
