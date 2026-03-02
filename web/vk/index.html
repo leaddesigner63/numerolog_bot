@@ -14,18 +14,42 @@
     })(window, document,'script',"https://mc.yandex.ru/metrika/tag.js", 'ym');
 
     var redirected = false;
+    var source = 'vk';
+    var startPayload = 'vk_clips_1';
 
     function redirectToBot() {
       if (redirected) {
         return;
       }
       redirected = true;
-      window.location.replace('https://t.me/AIreadUbot?start=vk_clips_1');
+      window.location.replace('https://t.me/AIreadUbot?start=' + startPayload);
+    }
+
+    function sendBridgeGoalAndRedirect() {
+      if (typeof ym !== 'function') {
+        setTimeout(redirectToBot, 250);
+        return;
+      }
+
+      var goalProcessed = false;
+      ym(106884182, "reachGoal", "bridge_redirect", {source: source, payload: startPayload}, function() {
+        goalProcessed = true;
+        redirectToBot();
+      });
+
+      setTimeout(function() {
+        if (!goalProcessed) {
+          redirectToBot();
+        }
+      }, 800);
     }
 
     if (typeof ym === 'function') {
       ym(106884182, "init", {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
-      ym(106884182, "hit", location.href, {params:{source:"vk"}}, redirectToBot);
+      ym(106884182, "hit", location.href, {params:{source:source, start_payload:startPayload}});
+      sendBridgeGoalAndRedirect();
+    } else {
+      setTimeout(redirectToBot, 250);
     }
 
     setTimeout(redirectToBot, 1500);

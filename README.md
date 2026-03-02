@@ -241,6 +241,7 @@ python -m http.server 8080 --directory web
 
 - Для контроля connection budget PostgreSQL после автодеплоя используйте runbook: [`docs/deploy/autodeploy_connection_budget_step_by_step.md`](docs/deploy/autodeploy_connection_budget_step_by_step.md).
 - Для изменения логики раскладки кнопок используйте отдельный runbook: [`docs/deploy/autodeploy_keyboard_layout_step_by_step.md`](docs/deploy/autodeploy_keyboard_layout_step_by_step.md).
+- Для релиза и проверки целей bridge-редиректов (`ig`/`vk`/`yt`) используйте runbook: [`docs/deploy/autodeploy_bridge_redirect_goal_step_by_step.md`](docs/deploy/autodeploy_bridge_redirect_goal_step_by_step.md).
 
 5. Для релиза уникальности `reports.order_id` сначала выполните предмиграционную очистку дублей:
 
