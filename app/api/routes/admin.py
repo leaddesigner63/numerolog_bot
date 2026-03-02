@@ -28,6 +28,7 @@ from app.services.admin_analytics import (
     parse_trigger_type,
 )
 from app.services.order_fulfillment import ensure_report_job_for_paid_order
+from app.services.smoke_detection import collect_smoke_order_ids, collect_smoke_user_ids
 from pydantic import BaseModel, Field
 from app.db.models import (
     AdminFinanceEvent,
@@ -66,44 +67,24 @@ _traffic_analytics_cache: dict[tuple[TrafficAnalyticsFilters, str], tuple[float,
 _marketing_analytics_cache_lock = threading.Lock()
 _marketing_analytics_cache: dict[MarketingAnalyticsFilters, tuple[float, dict]] = {}
 _WORKER_SERVICE_NAME = "report_jobs_worker"
-_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX = "smoke-"
-_DEPLOY_SMOKE_PROFILE_NAME = "Smoke Check"
-
-
-def _deploy_smoke_users_subquery():
-    smoke_order_filter = or_(
-        Order.is_smoke_check.is_(True),
-        and_(
-            Order.provider_payment_id.is_not(None),
-            Order.provider_payment_id.startswith(_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX),
-        ),
-    )
-    smoke_users_by_order = select(Order.user_id).where(smoke_order_filter)
-    smoke_users_by_profile = select(UserProfile.user_id).where(
-        func.coalesce(UserProfile.name, "") == _DEPLOY_SMOKE_PROFILE_NAME
-    )
-    return smoke_users_by_order.union(smoke_users_by_profile)
-
-
-def _deploy_smoke_excluded_orders_filter():
-    return and_(
-        or_(Order.is_smoke_check.is_(False), Order.is_smoke_check.is_(None)),
-        or_(
-            Order.provider_payment_id.is_(None),
-            ~Order.provider_payment_id.startswith(_DEPLOY_SMOKE_ORDER_PROVIDER_PREFIX),
-        ),
-    )
-
-
 def _load_deploy_smoke_user_ids(session: Session) -> set[int]:
-    rows = session.scalars(_deploy_smoke_users_subquery())
-    return {int(user_id) for user_id in rows if user_id is not None}
+    return collect_smoke_user_ids(session)
+
+
+def _load_deploy_smoke_order_ids(session: Session) -> set[int]:
+    return collect_smoke_order_ids(session)
 
 
 def _exclude_deploy_smoke_users(column, smoke_user_ids: set[int]):
     if not smoke_user_ids:
         return true()
     return ~column.in_(smoke_user_ids)
+
+
+def _exclude_deploy_smoke_orders(column, smoke_order_ids: set[int]):
+    if not smoke_order_ids:
+        return true()
+    return ~column.in_(smoke_order_ids)
 
 
 def _collect_worker_metrics(session: Session) -> dict[str, object]:
@@ -3629,8 +3610,9 @@ def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
     users_count = session.scalar(
         select(func.count()).select_from(User).where(_exclude_deploy_smoke_users(User.id, deploy_smoke_user_ids))
     ) or 0
+    deploy_smoke_order_ids = _load_deploy_smoke_order_ids(session)
     orders_count = session.scalar(
-        select(func.count()).select_from(Order).where(_deploy_smoke_excluded_orders_filter())
+        select(func.count()).select_from(Order).where(_exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids))
     ) or 0
     reports_count = session.scalar(
         select(func.count()).select_from(Report).where(_exclude_deploy_smoke_users(Report.user_id, deploy_smoke_user_ids))
@@ -3657,19 +3639,19 @@ def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
     confirmed_paid_orders = session.scalar(
         select(func.count())
         .select_from(Order)
-        .where(provider_confirmed_filter, _deploy_smoke_excluded_orders_filter())
+        .where(provider_confirmed_filter, _exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids))
     ) or 0
     confirmed_revenue_total = session.scalar(
         select(func.coalesce(func.sum(Order.amount), 0))
         .select_from(Order)
-        .where(provider_confirmed_filter, _deploy_smoke_excluded_orders_filter())
+        .where(provider_confirmed_filter, _exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids))
     ) or 0
     manual_paid_orders = session.scalar(
         select(func.count())
         .select_from(Order)
         .where(
             Order.payment_confirmation_source == PaymentConfirmationSource.ADMIN_MANUAL,
-            _deploy_smoke_excluded_orders_filter(),
+            _exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids),
         )
     ) or 0
     manual_paid_amount_total = session.scalar(
@@ -3677,7 +3659,7 @@ def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
         .select_from(Order)
         .where(
             Order.payment_confirmation_source == PaymentConfirmationSource.ADMIN_MANUAL,
-            _deploy_smoke_excluded_orders_filter(),
+            _exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids),
         )
     ) or 0
     arpu_confirmed = 0
@@ -4785,6 +4767,7 @@ def admin_orders(
     payment_confirmed: bool | None = Query(default=None),
     session: Session = Depends(_get_db_session),
 ) -> dict:
+    deploy_smoke_order_ids = _load_deploy_smoke_order_ids(session)
     latest_manual_paid_event = (
         select(
             AdminFinanceEvent.order_id.label("event_order_id"),
@@ -4808,7 +4791,7 @@ def admin_orders(
                 latest_manual_paid_event.c.rn == 1,
             ),
         )
-        .where(_deploy_smoke_excluded_orders_filter())
+        .where(_exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids))
     )
     if user_id is not None:
         query = query.where(Order.user_id == user_id)
@@ -5155,12 +5138,6 @@ def admin_users(
         .outerjoin(UserProfile, UserProfile.user_id == User.id)
         .outerjoin(order_agg, order_agg.c.user_id == User.id)
         .where(_exclude_deploy_smoke_users(User.id, deploy_smoke_user_ids))
-        .where(
-            or_(
-                UserProfile.user_id.is_(None),
-                func.coalesce(UserProfile.name, "") != _DEPLOY_SMOKE_PROFILE_NAME,
-            )
-        )
     )
 
     status_filter = (marketing_consent_status or "").strip().lower()
