@@ -27,6 +27,8 @@ from app.services.admin_analytics import (
     build_screen_transition_analytics,
     parse_trigger_type,
 )
+from app.services.admin_ids import exclude_admin_telegram_user_ids
+from app.services.admin_ids import parse_admin_ids
 from app.services.order_fulfillment import ensure_report_job_for_paid_order
 from app.services.smoke_detection import collect_smoke_order_ids, collect_smoke_user_ids
 from pydantic import BaseModel, Field
@@ -85,6 +87,19 @@ def _exclude_deploy_smoke_orders(column, smoke_order_ids: set[int]):
     if not smoke_order_ids:
         return true()
     return ~column.in_(smoke_order_ids)
+
+
+def _load_admin_user_ids(session: Session) -> set[int]:
+    admin_telegram_ids = parse_admin_ids(settings.admin_ids)
+    if not admin_telegram_ids:
+        return set()
+    return set(session.scalars(select(User.id).where(User.telegram_user_id.in_(admin_telegram_ids))).all())
+
+
+def _exclude_admin_user_ids(column, admin_user_ids: set[int]):
+    if not admin_user_ids:
+        return true()
+    return ~column.in_(admin_user_ids)
 
 
 def _collect_worker_metrics(session: Session) -> dict[str, object]:
@@ -3607,20 +3622,37 @@ async def admin_logout() -> RedirectResponse:
 @router.get("/api/overview")
 def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
     deploy_smoke_user_ids = _load_deploy_smoke_user_ids(session)
+    admin_user_ids = _load_admin_user_ids(session)
     users_count = session.scalar(
-        select(func.count()).select_from(User).where(_exclude_deploy_smoke_users(User.id, deploy_smoke_user_ids))
+        select(func.count()).select_from(User).where(
+            _exclude_deploy_smoke_users(User.id, deploy_smoke_user_ids),
+            exclude_admin_telegram_user_ids(User.telegram_user_id),
+        )
     ) or 0
     deploy_smoke_order_ids = _load_deploy_smoke_order_ids(session)
     orders_count = session.scalar(
-        select(func.count()).select_from(Order).where(_exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids))
+        select(func.count())
+        .select_from(Order)
+        .where(
+            _exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids),
+            _exclude_admin_user_ids(Order.user_id, admin_user_ids),
+        )
     ) or 0
     reports_count = session.scalar(
-        select(func.count()).select_from(Report).where(_exclude_deploy_smoke_users(Report.user_id, deploy_smoke_user_ids))
+        select(func.count())
+        .select_from(Report)
+        .where(
+            _exclude_deploy_smoke_users(Report.user_id, deploy_smoke_user_ids),
+            _exclude_admin_user_ids(Report.user_id, admin_user_ids),
+        )
     ) or 0
     feedback_count = session.scalar(
         select(func.count())
         .select_from(FeedbackMessage)
-        .where(_exclude_deploy_smoke_users(FeedbackMessage.user_id, deploy_smoke_user_ids))
+        .where(
+            _exclude_deploy_smoke_users(FeedbackMessage.user_id, deploy_smoke_user_ids),
+            _exclude_admin_user_ids(FeedbackMessage.user_id, admin_user_ids),
+        )
     ) or 0
     provider_sources = [
         PaymentConfirmationSource.PROVIDER_WEBHOOK,
@@ -3639,12 +3671,20 @@ def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
     confirmed_paid_orders = session.scalar(
         select(func.count())
         .select_from(Order)
-        .where(provider_confirmed_filter, _exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids))
+        .where(
+            provider_confirmed_filter,
+            _exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids),
+            _exclude_admin_user_ids(Order.user_id, admin_user_ids),
+        )
     ) or 0
     confirmed_revenue_total = session.scalar(
         select(func.coalesce(func.sum(Order.amount), 0))
         .select_from(Order)
-        .where(provider_confirmed_filter, _exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids))
+        .where(
+            provider_confirmed_filter,
+            _exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids),
+            _exclude_admin_user_ids(Order.user_id, admin_user_ids),
+        )
     ) or 0
     manual_paid_orders = session.scalar(
         select(func.count())
@@ -3652,6 +3692,7 @@ def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
         .where(
             Order.payment_confirmation_source == PaymentConfirmationSource.ADMIN_MANUAL,
             _exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids),
+            _exclude_admin_user_ids(Order.user_id, admin_user_ids),
         )
     ) or 0
     manual_paid_amount_total = session.scalar(
@@ -3660,6 +3701,7 @@ def admin_overview(session: Session = Depends(_get_db_session)) -> dict:
         .where(
             Order.payment_confirmation_source == PaymentConfirmationSource.ADMIN_MANUAL,
             _exclude_deploy_smoke_orders(Order.id, deploy_smoke_order_ids),
+            _exclude_admin_user_ids(Order.user_id, admin_user_ids),
         )
     ) or 0
     arpu_confirmed = 0
@@ -5137,7 +5179,10 @@ def admin_users(
         )
         .outerjoin(UserProfile, UserProfile.user_id == User.id)
         .outerjoin(order_agg, order_agg.c.user_id == User.id)
-        .where(_exclude_deploy_smoke_users(User.id, deploy_smoke_user_ids))
+        .where(
+            _exclude_deploy_smoke_users(User.id, deploy_smoke_user_ids),
+            exclude_admin_telegram_user_ids(User.telegram_user_id),
+        )
     )
 
     status_filter = (marketing_consent_status or "").strip().lower()
