@@ -2504,7 +2504,9 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
                     return
                 await open_checkout_s3_with_order(
                     callback,
-                    fallback_screen_id="S4",
+                    fallback_screen_id=(
+                        "S5" if tariff in {Tariff.T2.value, Tariff.T3.value} else "S4"
+                    ),
                     missing_order_notice="Не удалось подготовить заказ для оплаты.",
                 )
                 await _safe_callback_answer(callback)
