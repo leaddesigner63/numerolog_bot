@@ -38,8 +38,7 @@ def main() -> int:
     init_script = """
 (() => {
   window.__bridgeSmoke = {
-    ymCalls: [],
-    redirects: []
+    ymCalls: []
   };
 
   window.ym = function(...args) {
@@ -52,13 +51,6 @@ def main() -> int:
     }
   };
 
-  const originalReplace = window.location.replace.bind(window.location);
-  window.location.replace = function(url) {
-    window.__bridgeSmoke.redirects.push(url);
-    return undefined;
-  };
-
-  window.__bridgeSmoke.originalReplaceType = typeof originalReplace;
 })();
 """
 
@@ -67,17 +59,31 @@ def main() -> int:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context()
             context.add_init_script(init_script)
+            redirect_attempts: list[str] = []
+
+            def _capture_telegram_redirect(route: Any) -> None:
+                redirect_attempts.append(route.request.url)
+                route.abort()
+
+            context.route("https://t.me/**", _capture_telegram_redirect)
 
             for source, start_payload in expected_sources.items():
                 url = f"https://{source}.{base_domain}/"
                 page = context.new_page()
+                redirect_attempts.clear()
                 print(f"[INFO] Runtime-smoke: {url}")
                 page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+                page.wait_for_function(
+                    """() => {
+                        const state = window.__bridgeSmoke;
+                        return Boolean(state && Array.isArray(state.ymCalls) && state.ymCalls.length >= 3);
+                    }""",
+                    timeout=timeout_ms,
+                )
                 page.wait_for_timeout(300)
 
                 state = page.evaluate("() => window.__bridgeSmoke")
                 ym_calls = state.get("ymCalls", [])
-                redirects = state.get("redirects", [])
 
                 _assert(len(ym_calls) >= 3, f"{url}: ожидалось минимум 3 вызова ym, получено {len(ym_calls)}")
 
@@ -101,8 +107,8 @@ def main() -> int:
                     f"{url}: reachGoal.start_payload {params.get('start_payload')} != {start_payload}",
                 )
 
-                _assert(redirects, f"{url}: не зафиксирован вызов window.location.replace")
-                redirect_url = redirects[0]
+                _assert(redirect_attempts, f"{url}: не зафиксирован запрос редиректа в Telegram")
+                redirect_url = redirect_attempts[0]
                 _assert("https://t.me/" in redirect_url, f"{url}: ожидается редирект в Telegram, получено {redirect_url}")
                 _assert("rr=reachGoal_callback" in redirect_url, f"{url}: редирект должен содержать rr=reachGoal_callback")
 
