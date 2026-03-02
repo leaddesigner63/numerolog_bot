@@ -238,20 +238,56 @@ async def _send_feedback_to_admins(
     feedback_text: str,
     user_id: int,
     username: str | None,
+    attachment_type: str | None = None,
+    attachment_file_id: str | None = None,
+    attachment_caption: str | None = None,
+    order_id: str | int | None = None,
+    tariff: str | None = None,
+    amount: str | int | None = None,
 ) -> bool:
-    admin_ids = _parse_admin_ids(settings.admin_ids)
-    if not admin_ids:
+    recipient_ids = _parse_admin_ids(settings.admin_ids)
+    if settings.feedback_group_chat_id is not None:
+        recipient_ids.append(settings.feedback_group_chat_id)
+    recipient_ids = list(dict.fromkeys(recipient_ids))
+    if not recipient_ids:
         return False
     username_label = f"@{username}" if username else "без username"
+    order_label = str(order_id) if order_id is not None else "-"
+    tariff_label = tariff if tariff else "-"
+    amount_label = str(amount) if amount is not None else "-"
+    attachment_notice = ""
+    if attachment_type and attachment_file_id:
+        attachment_notice = (
+            "\n"
+            f"order_id: {order_label}\n"
+            f"tariff: {tariff_label}\n"
+            f"сумма: {amount_label}\n"
+            f"caption: {attachment_caption or '-'}\n"
+            "Скриншот оплаты (manual mode)"
+        )
     message = (
         "Новая обратная связь\n"
         f"Пользователь: {user_id} ({username_label})\n"
         f"{feedback_text}"
+        f"{attachment_notice}"
     )
     delivered = False
-    for admin_id in admin_ids:
+    for admin_id in recipient_ids:
         try:
-            await bot.send_message(chat_id=admin_id, text=message)
+            if attachment_type == "photo" and attachment_file_id:
+                await bot.send_photo(
+                    chat_id=admin_id,
+                    photo=attachment_file_id,
+                    caption=message,
+                )
+            elif attachment_type == "document" and attachment_file_id:
+                await bot.send_document(
+                    chat_id=admin_id,
+                    document=attachment_file_id,
+                    caption=message,
+                )
+            else:
+                await bot.send_message(chat_id=admin_id, text=message)
             delivered = True
         except Exception as exc:
             logger.warning(
@@ -267,26 +303,47 @@ async def _submit_feedback(
     user_id: int,
     username: str | None,
     feedback_text: str,
+    attachment_type: str | None = None,
+    attachment_file_id: str | None = None,
+    attachment_caption: str | None = None,
 ) -> FeedbackStatus:
+    state = screen_manager.update_state(user_id)
+    order_id = state.data.get("order_id")
+    tariff = state.data.get("selected_tariff")
+    amount = state.data.get("order_amount")
     delivered = await _send_feedback_to_admins(
         bot,
         feedback_text=feedback_text,
         user_id=user_id,
         username=username,
+        attachment_type=attachment_type,
+        attachment_file_id=attachment_file_id,
+        attachment_caption=attachment_caption,
+        order_id=order_id,
+        tariff=tariff,
+        amount=amount,
     )
     status = FeedbackStatus.SENT if delivered else FeedbackStatus.FAILED
     sent_at = now_app_timezone()
 
+    storage_text = feedback_text
+    if attachment_type and attachment_file_id:
+        storage_text = (
+            f"{feedback_text}\n"
+            f"attachment_type={attachment_type}\n"
+            f"attachment_file_id={attachment_file_id}\n"
+            f"attachment_caption={attachment_caption or ''}"
+        )
+
     try:
         with get_session() as session:
             user = _get_or_create_user(session, user_id)
-            state = screen_manager.update_state(user_id)
             thread_feedback_id = _safe_int(state.data.get("support_thread_feedback_id"))
             if not thread_feedback_id:
                 thread_feedback_id = None
             feedback, support_message, _ = _build_feedback_records(
                 user_id=user.id,
-                feedback_text=feedback_text,
+                feedback_text=storage_text,
                 status=status,
                 sent_at=sent_at,
                 thread_feedback_id=thread_feedback_id,
