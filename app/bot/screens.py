@@ -281,6 +281,16 @@ def _format_price(state: dict[str, Any], tariff: str) -> str:
     return f"{price} RUB"
 
 
+def _tariff_button_with_price(tariff: str) -> str:
+    base_title = tariff_button_title(tariff, fallback=tariff)
+    price = settings.tariff_prices_rub.get(tariff)
+    try:
+        price_value = int(price)
+    except (TypeError, ValueError):
+        return base_title
+    return f"{base_title} — {price_value} ₽"
+
+
 def screen_s0(_: dict[str, Any]) -> ScreenContent:
     bullets = [
         "Вы увидите сильные стороны и зоны роста по вашим данным.",
@@ -329,25 +339,25 @@ def screen_s1(_: dict[str, Any]) -> ScreenContent:
     rows = [
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Твоё новое начало (бесплатно)", "🌱"),
+                text=_with_button_icons(_tariff_button_with_price("T0"), "🌱"),
                 callback_data="tariff:T0",
             ),
         ],
         [
             InlineKeyboardButton(
-                text=_with_button_icons("В чём твоя сила?", "💪"),
+                text=_with_button_icons(_tariff_button_with_price("T1"), "💪"),
                 callback_data="tariff:T1",
             ),
         ],
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Где твои деньги?", "💰"),
+                text=_with_button_icons(_tariff_button_with_price("T2"), "💰"),
                 callback_data="tariff:T2",
             ),
         ],
         [
             InlineKeyboardButton(
-                text=_with_button_icons("Твой путь к себе!", "🧭"),
+                text=_with_button_icons(_tariff_button_with_price("T3"), "🧭"),
                 callback_data="tariff:T3",
             ),
         ],
