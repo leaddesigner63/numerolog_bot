@@ -298,9 +298,9 @@ def _load_user_ids_by_tariff(session: Session, filters: TrafficAnalyticsFilters)
     return traffic_user_ids
 
 
-def _normalize_traffic_value(value: str | None) -> str:
+def _normalize_traffic_value(value: str | None, *, fallback: str = "UNKNOWN") -> str:
     candidate = str(value or "").strip()
-    return candidate if candidate else "UNKNOWN"
+    return candidate if candidate else fallback
 
 
 def _load_paid_telegram_user_ids(
@@ -321,7 +321,7 @@ def _load_paid_telegram_user_ids(
 def _build_users_by_source(items: list[UserFirstTouchAttribution] | list[UserTouchEvent], paid_telegram_user_ids: set[int]) -> list[dict]:
     grouped: dict[str, set[int]] = {}
     for item in items:
-        source = _normalize_traffic_value(item.source)
+        source = _normalize_traffic_value(item.source, fallback="DIRECT")
         grouped.setdefault(source, set()).add(item.telegram_user_id)
     return [
         {
@@ -336,7 +336,7 @@ def _build_users_by_source(items: list[UserFirstTouchAttribution] | list[UserTou
 def _build_users_by_source_campaign(items: list[UserFirstTouchAttribution] | list[UserTouchEvent], paid_telegram_user_ids: set[int]) -> list[dict]:
     grouped: dict[tuple[str, str], set[int]] = {}
     for item in items:
-        source = _normalize_traffic_value(item.source)
+        source = _normalize_traffic_value(item.source, fallback="DIRECT")
         campaign = _normalize_traffic_value(item.campaign)
         grouped.setdefault((source, campaign), set()).add(item.telegram_user_id)
     return [

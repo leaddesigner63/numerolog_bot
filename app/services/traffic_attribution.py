@@ -79,16 +79,15 @@ def save_user_first_touch_attribution(
         elif telegram_username is not None:
             user.telegram_username = telegram_username
 
-        if payload:
-            session.add(
-                UserTouchEvent(
-                    telegram_user_id=telegram_user_id,
-                    start_payload=str(parsed_payload.get("start_payload") or ""),
-                    source=parsed_payload.get("source"),
-                    campaign=parsed_payload.get("campaign"),
-                    placement=parsed_payload.get("placement"),
-                )
+        session.add(
+            UserTouchEvent(
+                telegram_user_id=telegram_user_id,
+                start_payload=str(parsed_payload.get("start_payload") or ""),
+                source=parsed_payload.get("source"),
+                campaign=parsed_payload.get("campaign"),
+                placement=parsed_payload.get("placement"),
             )
+        )
 
         existing = session.execute(
             select(UserFirstTouchAttribution).where(

@@ -795,6 +795,42 @@ class AdminAnalyticsTests(unittest.TestCase):
         self.assertEqual(result["users_by_source"][0]["users"], 1)
 
 
+    def test_traffic_analytics_all_touch_includes_empty_payload_as_direct_unknown(self) -> None:
+        base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        from app.db.models import User, UserTouchEvent
+
+        with self.Session() as session:
+            session.add(User(id=612, telegram_user_id=6612))
+            session.add(
+                UserTouchEvent(
+                    telegram_user_id=6612,
+                    source=None,
+                    campaign=None,
+                    placement=None,
+                    start_payload="",
+                    captured_at=base_time,
+                )
+            )
+            session.commit()
+
+            result = build_traffic_analytics(
+                session,
+                TrafficAnalyticsFilters(
+                    from_dt=base_time - timedelta(days=1),
+                    to_dt=base_time + timedelta(days=1),
+                    attribution_mode="all_touch",
+                ),
+            )
+
+        self.assertEqual(result["attribution_mode"], "all_touch")
+        self.assertEqual(result["users_started_total"], 1)
+        self.assertEqual(result["users_by_source"], [{"source": "DIRECT", "users": 1, "conversion_to_paid": 0.0}])
+        self.assertEqual(
+            result["users_by_source_campaign"],
+            [{"source": "DIRECT", "campaign": "UNKNOWN", "users": 1, "conversion": 0.0}],
+        )
+
+
     def test_traffic_analytics_uses_all_touch_by_default(self) -> None:
         base_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
         from app.db.models import User, UserFirstTouchAttribution, UserTouchEvent
