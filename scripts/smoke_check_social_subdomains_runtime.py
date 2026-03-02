@@ -27,6 +27,7 @@ def _collect_runtime_state(page: Any, timeout_ms: int) -> dict[str, Any]:
     step_ms = 200
     last_error = ""
     last_ym_calls: list[Any] = []
+    last_redirect_attempts: list[str] = []
 
     while elapsed_ms <= timeout_ms:
         try:
@@ -36,11 +37,15 @@ def _collect_runtime_state(page: Any, timeout_ms: int) -> dict[str, Any]:
             state = {}
 
         ym_calls = state.get("ymCalls", []) if isinstance(state, dict) else []
+        redirect_attempts = state.get("redirectAttempts", []) if isinstance(state, dict) else []
         if isinstance(ym_calls, list):
             last_ym_calls = ym_calls
+        if isinstance(redirect_attempts, list):
+            last_redirect_attempts = redirect_attempts
         if isinstance(ym_calls, list) and len(ym_calls) >= 3:
             return {
                 "ymCalls": ym_calls,
+                "redirectAttempts": redirect_attempts,
                 "elapsedMs": elapsed_ms,
                 "lastError": last_error,
             }
@@ -50,6 +55,7 @@ def _collect_runtime_state(page: Any, timeout_ms: int) -> dict[str, Any]:
 
     return {
         "ymCalls": last_ym_calls,
+        "redirectAttempts": last_redirect_attempts,
         "elapsedMs": elapsed_ms,
         "lastError": last_error,
     }
@@ -71,8 +77,17 @@ def main() -> int:
     init_script = """
 (() => {
   window.__bridgeSmoke = {
-    ymCalls: []
+    ymCalls: [],
+    redirectAttempts: []
   };
+
+  const locationProto = Object.getPrototypeOf(window.location);
+  const originalReplace = locationProto && locationProto.replace;
+  if (typeof originalReplace === 'function') {
+    locationProto.replace = function(url) {
+      window.__bridgeSmoke.redirectAttempts.push(String(url));
+    };
+  }
 
   window.ym = function(...args) {
     window.__bridgeSmoke.ymCalls.push(args);
@@ -92,22 +107,15 @@ def main() -> int:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context()
             context.add_init_script(init_script)
-            redirect_attempts: list[str] = []
-
-            def _capture_telegram_redirect(route: Any) -> None:
-                redirect_attempts.append(route.request.url)
-                route.abort()
-
-            context.route("https://t.me/**", _capture_telegram_redirect)
 
             for source, start_payload in expected_sources.items():
                 url = f"https://{source}.{base_domain}/"
                 page = context.new_page()
-                redirect_attempts.clear()
                 print(f"[INFO] Runtime-smoke: {url}")
                 page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
                 runtime_state = _collect_runtime_state(page, timeout_ms)
                 ym_calls = runtime_state.get("ymCalls", [])
+                redirect_attempts = runtime_state.get("redirectAttempts", [])
 
                 _assert(
                     len(ym_calls) >= 3,
