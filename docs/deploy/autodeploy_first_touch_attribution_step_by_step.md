@@ -20,8 +20,9 @@
    - `/start` без payload.
    - `/start <payload>` с валидным payload.
 2. Убедитесь в БД:
-   - в `user_first_touch_attribution` появилась одна непустая запись;
-   - в `user_touch_events` появилась запись только для `/start <payload>`.
+   - после `/start` без payload в `user_touch_events` появилась запись с `start_payload = ""`, `source/campaign/placement = NULL`;
+   - после `/start <payload>` появилась следующая запись в `user_touch_events` с заполненными полями;
+   - в `user_first_touch_attribution` хранится одна запись first-touch и при втором шаге она обновляется непустым payload.
 
 ## 5) Откат (если нужно)
 1. Верните предыдущий commit: `git revert <bad_commit_sha>`.

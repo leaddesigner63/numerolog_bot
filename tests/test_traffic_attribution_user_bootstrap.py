@@ -90,7 +90,7 @@ class TrafficAttributionUserBootstrapTests(unittest.TestCase):
         self.assertEqual(len(first_touch_records), 1)
         self.assertEqual(len(touch_events), 2)
 
-    def test_empty_start_then_payload_creates_first_touch_only_on_second_call(self) -> None:
+    def test_empty_start_then_payload_creates_touch_event_on_first_call(self) -> None:
         first_saved = traffic_attribution_module.save_user_first_touch_attribution(
             telegram_user_id=777003,
             payload=None,
@@ -116,7 +116,12 @@ class TrafficAttributionUserBootstrapTests(unittest.TestCase):
         self.assertEqual(first_touch_records[0].source, "site")
         self.assertEqual(first_touch_records[0].campaign, "seo")
         self.assertEqual(first_touch_records[0].placement, "cta")
-        self.assertEqual(len(touch_events), 1)
+        self.assertEqual(len(touch_events), 2)
+        self.assertEqual(touch_events[0].start_payload, "")
+        self.assertIsNone(touch_events[0].source)
+        self.assertIsNone(touch_events[0].campaign)
+        self.assertIsNone(touch_events[0].placement)
+        self.assertEqual(touch_events[1].start_payload, "site_seo_cta")
 
     def test_existing_empty_first_touch_can_be_updated_once(self) -> None:
         with self.SessionLocal() as session:
