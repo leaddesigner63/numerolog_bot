@@ -109,3 +109,16 @@ def test_s4_after_payment_detected_by_state_signals(tmp_path, monkeypatch) -> No
     )
 
     assert image_path == expected_image
+
+
+def test_s8_manual_payment_receipt_context_disables_image(tmp_path, monkeypatch) -> None:
+    screen_root = tmp_path / "screen_images"
+    target_dir = screen_root / "S8"
+    target_dir.mkdir(parents=True)
+    (target_dir / "default.webp").write_bytes(b"test")
+
+    monkeypatch.setattr(settings, "screen_images_dir", str(screen_root))
+
+    image_path = resolve_screen_image_path("S8", {"s8_context": "manual_payment_receipt"})
+
+    assert image_path is None

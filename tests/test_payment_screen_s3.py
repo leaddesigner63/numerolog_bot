@@ -124,7 +124,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertIn("Отчёт будет готов в течение 15 минут", content.messages[0])
 
         keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
-        self.assertEqual(keyboard_rows[0][0].callback_data, "screen:S8")
+        self.assertEqual(keyboard_rows[0][0].callback_data, "screen:S8:manual_payment_receipt")
         self.assertIn("Я оплатил(а), отправить скрин", keyboard_rows[0][0].text)
 
     def test_s3_has_no_manual_payment_confirmation_button(self) -> None:

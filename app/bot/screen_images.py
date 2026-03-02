@@ -64,6 +64,11 @@ def _resolve_tariff(screen_id: str, state: dict[str, Any]) -> str | None:
 
 
 def resolve_screen_image_path(screen_id: str, state: dict[str, Any]) -> Path | None:
+    if screen_id == "S8":
+        feedback_context = str(state.get("s8_context") or "").strip().lower()
+        if feedback_context == "manual_payment_receipt":
+            return None
+
     base_dir_value = settings.screen_images_dir
     if not base_dir_value:
         return None

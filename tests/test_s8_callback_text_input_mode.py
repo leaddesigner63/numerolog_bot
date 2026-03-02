@@ -25,6 +25,37 @@ class S8CallbackTextInputModeTests(unittest.IsolatedAsyncioTestCase):
         enter_mode.assert_awaited_once_with(bot=callback.bot, chat_id=123, user_id=77)
         show_screen.assert_awaited_once()
 
+
+    async def test_screen_callback_manual_payment_receipt_sets_context(self) -> None:
+        callback = SimpleNamespace(
+            bot=AsyncMock(),
+            message=SimpleNamespace(chat=SimpleNamespace(id=123)),
+            from_user=SimpleNamespace(id=77),
+            data="screen:S8:manual_payment_receipt",
+            answer=AsyncMock(),
+        )
+
+        with patch.object(
+            screens.screen_manager,
+            "update_state",
+        ) as update_state, patch.object(
+            screens,
+            "_show_screen_for_callback",
+            new=AsyncMock(return_value=True),
+        ) as show_screen, patch.object(
+            screens,
+            "_safe_callback_processing",
+            new=AsyncMock(),
+        ), patch.object(
+            screens,
+            "_safe_callback_answer",
+            new=AsyncMock(),
+        ):
+            await screens.handle_callbacks(callback, None)
+
+        update_state.assert_any_call(77, s8_context="manual_payment_receipt")
+        show_screen.assert_awaited_once_with(callback, screen_id="S8")
+
     async def test_show_screen_for_callback_non_s8_skips_enter_text_input_mode(self) -> None:
         callback = SimpleNamespace(
             bot=AsyncMock(),

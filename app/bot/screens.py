@@ -592,7 +592,7 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
                 [
                     InlineKeyboardButton(
                         text=_with_button_icons("Я оплатил(а), отправить скрин", "📎"),
-                        callback_data="screen:S8",
+                        callback_data="screen:S8:manual_payment_receipt",
                     ),
                 ]
             )
@@ -1352,12 +1352,21 @@ def screen_s7(state: dict[str, Any]) -> ScreenContent:
     return ScreenContent(messages=[text], keyboard=keyboard)
 
 
-def screen_s8(_: dict[str, Any]) -> ScreenContent:
+def screen_s8(state: dict[str, Any]) -> ScreenContent:
+    feedback_context = str(state.get("s8_context") or "").strip().lower()
+    if feedback_context == "manual_payment_receipt":
+        text_body = (
+            "Отправьте скриншот оплаты в этот чат одним сообщением. "
+            "При желании добавьте комментарий к платежу в подписи.\n\n"
+            "После проверки оплаты администратор подтвердит заказ и сообщит вам о статусе."
+        )
+    else:
+        text_body = (
+            "Напишите нам. Наши администраторы внимательны к вашим обращениям и обожают ваши отзывы ❤️"
+        )
     text = _with_screen_prefix(
         "S8",
-        (
-            "Напишите нам. Наши администраторы внимательны к вашим обращениям и обожают ваши отзывы ❤️"
-        ),
+        text_body,
     )
     return ScreenContent(messages=[text], keyboard=None)
 
