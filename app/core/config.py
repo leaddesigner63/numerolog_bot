@@ -1,3 +1,5 @@
+import logging
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -129,3 +131,33 @@ class Settings(BaseSettings):
         return str(self.env or "").lower() in {"prod", "production"}
 
 settings = Settings()
+
+
+def get_payment_runtime_snapshot() -> dict[str, str | bool | None]:
+    payment_mode = str(getattr(settings, "payment_mode", "provider") or "provider").strip().lower()
+    payment_provider = str(getattr(settings, "payment_provider", "") or "").strip().lower() or None
+    manual_card_number = str(getattr(settings, "manual_payment_card_number", "") or "").strip()
+    manual_recipient_name = str(getattr(settings, "manual_payment_recipient_name", "") or "").strip()
+    return {
+        "payment_mode": payment_mode,
+        "payment_provider": payment_provider,
+        "manual_payment_details_configured": bool(manual_card_number or manual_recipient_name),
+        "manual_payment_card_configured": bool(manual_card_number),
+        "manual_payment_recipient_configured": bool(manual_recipient_name),
+    }
+
+
+def log_payment_runtime_snapshot(logger: logging.Logger | None = None) -> None:
+    target_logger = logger or logging.getLogger(__name__)
+    snapshot = get_payment_runtime_snapshot()
+    target_logger.info(
+        "payment_runtime_config_snapshot",
+        extra={
+            "event_code": "payment_runtime_config_snapshot",
+            "PAYMENT_MODE": snapshot["payment_mode"],
+            "PAYMENT_PROVIDER": snapshot["payment_provider"],
+            "manual_payment_details_configured": snapshot["manual_payment_details_configured"],
+            "manual_payment_card_configured": snapshot["manual_payment_card_configured"],
+            "manual_payment_recipient_configured": snapshot["manual_payment_recipient_configured"],
+        },
+    )
