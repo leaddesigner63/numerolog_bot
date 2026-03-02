@@ -35,7 +35,7 @@
 1. Выполнить smoke-check:
    ```bash
    LANDING_URL="https://aireadu.ru/" \
-   LANDING_EXPECTED_CTA="https://t.me/AIreadUbot" \
+   LANDING_EXPECTED_CTA="https://t.me/${LANDING_TELEGRAM_BOT_USERNAME}" \
    LANDING_ASSET_URLS="https://aireadu.ru/assets/css/styles.css,https://aireadu.ru/assets/js/script.js" \
    ./scripts/smoke_check_landing.sh
    ```
@@ -49,7 +49,7 @@
 ## Обязательный шаг релиза перед продом
 Перед прод-выкладкой обязательно:
 - убедиться, что на лендинге используется домен `https://aireadu.ru`;
-- проверить, что все CTA ведут на `https://t.me/AIreadUbot`;
+- проверить, что все CTA ведут на `https://t.me/${LANDING_TELEGRAM_BOT_USERNAME}`;
 - заменить технические заглушки `будет добавлено` на финальные значения.
 
 Релиз блокируется до полной замены технических заглушек.

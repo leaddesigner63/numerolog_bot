@@ -90,7 +90,8 @@ sudo systemctl status certbot.timer
 - `SERVICE_NAME` — основной systemd unit (или используйте `SERVICE_NAMES`);
 - `SERVICE_NAMES` — несколько unit’ов через пробел (опционально, приоритетнее);
 - `LANDING_URL` — URL лендинга для smoke-check (рабочий пример: `https://aireadu.ru/`);
-- `LANDING_EXPECTED_CTA` — ожидаемый фрагмент CTA-ссылки (рабочий пример: `https://t.me/AIreadUbot`);
+- `LANDING_TELEGRAM_BOT_USERNAME` — username Telegram-бота для сборки/деплоя лендинга (без `@`, пример: `AIreadUbot`);
+- `LANDING_EXPECTED_CTA` — опциональный ожидаемый фрагмент CTA-ссылки (если пусто, `smoke_check_landing.sh` проверит `https://t.me/${LANDING_TELEGRAM_BOT_USERNAME}` автоматически);
 - `LANDING_ASSET_URLS` — список URL ассетов через запятую для проверки (рабочий пример: `https://aireadu.ru/assets/css/styles.css,https://aireadu.ru/assets/js/script.js`).
 
 ### 4.2 Защищённое хранение секретов
@@ -172,6 +173,7 @@ sudo systemctl --no-pager --full status numerolog-bot.service numerolog-web.serv
 
 # 5. Прогнать smoke-check вручную
 LANDING_URL="https://aireadu.ru/" \
+LANDING_TELEGRAM_BOT_USERNAME="AIreadUbot" \
 LANDING_EXPECTED_CTA="https://t.me/AIreadUbot" \
 LANDING_ASSET_URLS="https://aireadu.ru/assets/css/styles.css,https://aireadu.ru/assets/js/script.js" \
 bash scripts/smoke_check_landing.sh

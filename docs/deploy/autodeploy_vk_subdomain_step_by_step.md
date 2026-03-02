@@ -55,7 +55,7 @@ curl -I https://vk.aireadu.ru/
 
 Ожидается `200 OK` для страницы и клиентский редирект на:
 
-`https://t.me/AIreadUbot?start=vk_clips_1`
+`https://t.me/${LANDING_TELEGRAM_BOT_USERNAME}?start=vk_clips_1`
 
 ## 5) Быстрый rollback
 

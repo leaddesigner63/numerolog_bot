@@ -7,6 +7,7 @@ ENV_FILE="${ENV_FILE:-}"
 SERVICE_NAME="${SERVICE_NAME:-}"
 SERVICE_NAMES="${SERVICE_NAMES:-}"
 PRESERVE_PATHS="${PRESERVE_PATHS:-app/assets/screen_images app/assets/pdf}"
+LANDING_TELEGRAM_BOT_USERNAME="${LANDING_TELEGRAM_BOT_USERNAME:-AIreadUbot}"
 
 if [ -z "$DEPLOY_PATH" ]; then
   echo "DEPLOY_PATH не задан. Укажите путь к директории проекта на сервере."
@@ -98,6 +99,18 @@ if [ -n "$ENV_FILE" ] && [ -f "$ENV_FILE" ]; then
   . "$ENV_FILE"
   set +a
 fi
+
+LANDING_TELEGRAM_BOT_USERNAME="${LANDING_TELEGRAM_BOT_USERNAME:-AIreadUbot}"
+LANDING_TELEGRAM_BOT_USERNAME="${LANDING_TELEGRAM_BOT_USERNAME#@}"
+
+if [ -d web ]; then
+  while IFS= read -r landing_file; do
+    [ -z "$landing_file" ] && continue
+    sed -i "s/__LANDING_TELEGRAM_BOT_USERNAME__/$LANDING_TELEGRAM_BOT_USERNAME/g" "$landing_file"
+  done < <(find web -type f \( -name '*.html' -o -name '*.js' \))
+fi
+
+LANDING_EXPECTED_CTA="${LANDING_EXPECTED_CTA:-https://t.me/$LANDING_TELEGRAM_BOT_USERNAME}"
 
 if [ -x scripts/db/alembic_upgrade_with_retry.sh ]; then
   bash scripts/db/alembic_upgrade_with_retry.sh

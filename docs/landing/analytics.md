@@ -28,7 +28,7 @@
 
 Ссылка формируется на фронте автоматически:
 
-`https://t.me/AIreadUbot?start=lnd.src_<source>.cmp_<campaign>.pl_<placement>`
+`https://t.me/${LANDING_TELEGRAM_BOT_USERNAME}?start=lnd.src_<source>.cmp_<campaign>.pl_<placement>`
 
 Где:
 - `source` — из `utm_source` или `source`;
