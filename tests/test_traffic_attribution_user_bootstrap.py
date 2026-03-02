@@ -6,7 +6,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
-from app.db.models import User, UserFirstTouchAttribution
+from app.db.models import User, UserFirstTouchAttribution, UserTouchEvent
 from app.services import traffic_attribution as traffic_attribution_module
 
 
@@ -53,6 +53,9 @@ class TrafficAttributionUserBootstrapTests(unittest.TestCase):
             record = session.execute(
                 select(UserFirstTouchAttribution).where(UserFirstTouchAttribution.telegram_user_id == 777001)
             ).scalar_one_or_none()
+            touch_events = session.execute(
+                select(UserTouchEvent).where(UserTouchEvent.telegram_user_id == 777001)
+            ).scalars().all()
 
         self.assertIsNotNone(user)
         self.assertEqual(user.telegram_username, "seo-user")
@@ -60,7 +63,32 @@ class TrafficAttributionUserBootstrapTests(unittest.TestCase):
         self.assertEqual(record.source, "site")
         self.assertEqual(record.campaign, "seo")
         self.assertEqual(record.placement, "cta")
+        self.assertEqual(len(touch_events), 1)
+        self.assertEqual(touch_events[0].source, "site")
 
+    def test_repeated_payload_creates_touch_events_but_preserves_single_first_touch(self) -> None:
+        first_saved = traffic_attribution_module.save_user_first_touch_attribution(
+            telegram_user_id=777002,
+            payload="site_cmp_one",
+        )
+        second_saved = traffic_attribution_module.save_user_first_touch_attribution(
+            telegram_user_id=777002,
+            payload="site_cmp_two",
+        )
+
+        self.assertTrue(first_saved)
+        self.assertFalse(second_saved)
+
+        with self.SessionLocal() as session:
+            first_touch_records = session.execute(
+                select(UserFirstTouchAttribution).where(UserFirstTouchAttribution.telegram_user_id == 777002)
+            ).scalars().all()
+            touch_events = session.execute(
+                select(UserTouchEvent).where(UserTouchEvent.telegram_user_id == 777002)
+            ).scalars().all()
+
+        self.assertEqual(len(first_touch_records), 1)
+        self.assertEqual(len(touch_events), 2)
 
     def test_parse_first_touch_payload_supports_marker_format_and_preserves_placement(self) -> None:
         parsed = traffic_attribution_module.parse_first_touch_payload("src_sitecmp_launchpl_tariff_t2")

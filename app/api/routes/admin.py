@@ -1165,6 +1165,13 @@ def admin_ui(request: Request) -> HTMLResponse:
             </select>
           </div>
           <div class="field">
+            <label for="analyticsAttributionMode">Режим атрибуции</label>
+            <select id="analyticsAttributionMode">
+              <option value="first_touch">First-touch</option>
+              <option value="all_touch">All-touch</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="analyticsDropoffWindow">Drop-off окно, мин</label>
             <input id="analyticsDropoffWindow" type="number" min="1" max="1440" value="60" />
           </div>
@@ -1182,6 +1189,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         <div class="analytics-block">
           <div class="analytics-title">Каналы трафика</div>
           <div id="analyticsTrafficKpi" class="kpi-grid"></div>
+          <div id="analyticsTrafficSourceMode" class="muted">Режим атрибуции: first_touch</div>
           <div id="analyticsTrafficSource" class="muted">Нет данных</div>
           <div style="height: 12px;"></div>
           <div id="analyticsTrafficCampaign" class="muted">Нет данных</div>
@@ -3227,6 +3235,7 @@ def admin_ui(request: Request) -> HTMLResponse:
       const fromIso = toIsoFromLocal(document.getElementById("analyticsFrom")?.value || "");
       const toIso = toIsoFromLocal(document.getElementById("analyticsTo")?.value || "");
       const tariff = document.getElementById("analyticsTariff")?.value || "";
+      const attributionMode = document.getElementById("analyticsAttributionMode")?.value || "first_touch";
       const dropoffWindow = Number(document.getElementById("analyticsDropoffWindow")?.value || "60");
       const topN = Number(document.getElementById("analyticsTopN")?.value || "50");
       if (period) {
@@ -3240,6 +3249,9 @@ def admin_ui(request: Request) -> HTMLResponse:
       }
       if (tariff) {
         query.set("tariff", tariff);
+      }
+      if (attributionMode) {
+        query.set("attribution_mode", attributionMode);
       }
       query.set("dropoff_window_minutes", String(Math.min(1440, Math.max(1, dropoffWindow || 60))));
       query.set("top_n", String(Math.min(500, Math.max(3, topN || 50))));
@@ -3302,6 +3314,7 @@ def admin_ui(request: Request) -> HTMLResponse:
         const financeNudgeByTariff = financeNudgeByTariffRes?.data?.resume_after_nudge_by_tariff || [];
         const financeTimeseries = financeTimeseriesRes?.data?.timeseries || [];
         const trafficSummary = trafficSummaryRes?.data?.summary || {};
+        const attributionMode = trafficSummary?.attribution_mode || "first_touch";
         const trafficBySource = trafficSourceRes?.data?.by_source || [];
         const trafficByCampaign = trafficCampaignRes?.data?.by_campaign || [];
         const trafficByTariffClick = trafficSummary?.paid_per_tariff_click || [];
@@ -3326,6 +3339,10 @@ def admin_ui(request: Request) -> HTMLResponse:
 
         renderKpis(summary, funnelRows, dropoffRows);
         renderTrafficKpis(trafficSummary, trafficBySource);
+        const trafficState = document.getElementById("analyticsTrafficSourceMode");
+        if (trafficState) {
+          trafficState.textContent = `Режим атрибуции: ${attributionMode}`;
+        }
         renderTrafficTables(trafficBySource, trafficByCampaign, trafficByTariffClick, trafficByTariffClickFirstTouch);
         renderFunnelChart(funnelAggregateRows, funnelByTariff);
         renderFinanceSummary(financeSummary);
@@ -3843,6 +3860,7 @@ class TrafficSummaryItem(BaseModel):
     conversions: list[dict]
     paid_per_tariff_click: list[dict] = Field(default_factory=list)
     paid_per_tariff_click_first_touch: list[dict] = Field(default_factory=list)
+    attribution_mode: str = "first_touch"
 
 
 class TrafficSourceItem(BaseModel):
@@ -4015,6 +4033,7 @@ def _safe_build_traffic_analytics(session: Session, filters: TrafficAnalyticsFil
         "conversions": [],
         "paid_per_tariff_click": [],
         "paid_per_tariff_click_first_touch": [],
+        "attribution_mode": filters.attribution_mode,
     }
     try:
         return build_traffic_analytics(session, filters), []
@@ -4338,16 +4357,21 @@ def _build_traffic_filters(
     to_dt: datetime | None,
     period: str | None,
     tariff: str | None,
+    attribution_mode: str | None,
 ) -> tuple[TrafficAnalyticsFilters, dict]:
     from_dt, to_dt, normalized_period = _resolve_period_bounds(period, from_dt, to_dt)
     if from_dt and to_dt and from_dt > to_dt:
         raise HTTPException(status_code=422, detail="Parameter 'from' must be less than or equal to 'to'")
-    filters = TrafficAnalyticsFilters(from_dt=from_dt, to_dt=to_dt, tariff=tariff)
+    attribution_mode_value = str(attribution_mode or "first_touch")
+    if attribution_mode_value not in {"first_touch", "all_touch"}:
+        attribution_mode_value = "first_touch"
+    filters = TrafficAnalyticsFilters(from_dt=from_dt, to_dt=to_dt, tariff=tariff, attribution_mode=attribution_mode_value)
     return filters, {
         "from_dt": from_dt.isoformat() if from_dt else None,
         "to_dt": to_dt.isoformat() if to_dt else None,
         "period": normalized_period,
         "tariff": tariff,
+        "attribution_mode": attribution_mode_value,
     }
 
 
@@ -4455,9 +4479,10 @@ def admin_traffic_summary(
     to_dt: datetime | None = Query(default=None, alias="to"),
     period: str | None = Query(default=None),
     tariff: str | None = Query(default=None),
+    attribution_mode: str | None = Query(default="first_touch"),
     session: Session = Depends(_get_db_session),
 ) -> dict:
-    filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
+    filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff, attribution_mode=attribution_mode)
     result, warnings = _get_traffic_analytics(session, filters)
     summary = TrafficSummaryItem.model_validate(
         {
@@ -4465,6 +4490,7 @@ def admin_traffic_summary(
             "conversions": result.get("conversions", []),
             "paid_per_tariff_click": result.get("paid_per_tariff_click", []),
             "paid_per_tariff_click_first_touch": result.get("paid_per_tariff_click_first_touch", []),
+            "attribution_mode": result.get("attribution_mode", "first_touch"),
         }
     ).model_dump(mode="json")
     return {
@@ -4481,10 +4507,11 @@ def admin_traffic_by_source(
     to_dt: datetime | None = Query(default=None, alias="to"),
     period: str | None = Query(default=None),
     tariff: str | None = Query(default=None),
+    attribution_mode: str | None = Query(default="first_touch"),
     top_n: int = Query(default=20, ge=1, le=500),
     session: Session = Depends(_get_db_session),
 ) -> dict:
-    filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
+    filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff, attribution_mode=attribution_mode)
     result, warnings = _get_traffic_analytics(session, filters)
     rows = [
         TrafficSourceItem.model_validate(item).model_dump(mode="json")
@@ -4504,12 +4531,13 @@ def admin_traffic_by_campaign(
     to_dt: datetime | None = Query(default=None, alias="to"),
     period: str | None = Query(default=None),
     tariff: str | None = Query(default=None),
+    attribution_mode: str | None = Query(default="first_touch"),
     top_n: int = Query(default=200, ge=1, le=5000),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=500),
     session: Session = Depends(_get_db_session),
 ) -> dict:
-    filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff)
+    filters, filters_applied = _build_traffic_filters(from_dt=from_dt, to_dt=to_dt, period=period, tariff=tariff, attribution_mode=attribution_mode)
     result, warnings = _get_traffic_analytics(session, filters)
     top_rows = _slice_top_n(result.get("users_by_source_campaign", []), top_n)
     paged_rows, pagination = _paginate_items(top_rows, page=page, page_size=page_size)

@@ -40,10 +40,10 @@ app/
     report_safety.py  # фильтрация запрещённых слов, гарантий и красных зон
     report_service.py # сервис генерации отчёта и каркаса T0-T3
   db/                 # модели и подключение к БД
-    models.py         # включает report_jobs, service_heartbeats, support_dialog_messages, screen_transition_events, user_first_touch_attribution и технический флаг orders.is_smoke_check
+    models.py         # включает report_jobs, service_heartbeats, support_dialog_messages, screen_transition_events, user_first_touch_attribution, user_touch_events и технический флаг orders.is_smoke_check
   services/           # сервисы бизнес-логики API/бота
-    admin_analytics.py # агрегации аналитики переходов + финансы + traffic first-touch (source/campaign/conversion)
-    traffic_attribution.py # парсинг /start payload и сохранение first-touch атрибуции в user_first_touch_attribution
+    admin_analytics.py # агрегации аналитики переходов + финансы + traffic (first-touch/all-touch переключатель источника данных)
+    traffic_attribution.py # парсинг /start payload, сохранение first-touch в user_first_touch_attribution и всех touch-событий в user_touch_events
     marketing_messaging.py # единый сервис отправки маркетинговых сообщений (consent-check, ссылка отписки, campaign-логирование)
   payments/           # платёжные провайдеры и проверки webhook
 scripts/              # вспомогательные скрипты
@@ -1176,3 +1176,11 @@ journalctl -u <service> -n 200 --no-pager
 - В фильтрах исключения deploy smoke-check вынесена предварительная загрузка `user_id` в память одного запроса, чтобы не выполнять повторно тяжёлый подзапрос для каждого KPI в `/admin/api/overview`.
 - Фильтрация smoke-order переведена на префиксную проверку `startswith("smoke-")`, что снижает риск таймаутов на больших таблицах заказов.
 - При отсутствии smoke-пользователей фильтр подставляет SQL-условие `true`, чтобы не замедлять выборки админки.
+
+
+## Атрибуция трафика в админке
+
+- В `/admin` для блока Traffic доступен переключатель режима атрибуции: `first_touch` и `all_touch`.
+- `first_touch` читает таблицу `user_first_touch_attribution` (исторический первый источник пользователя).
+- `all_touch` читает таблицу `user_touch_events` и учитывает каждое событие `/start` с payload, включая повторные переходы существующих пользователей.
+- Это позволяет не терять текущие переходы с сайта у старых пользователей в оперативной аналитике.

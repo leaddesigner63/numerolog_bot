@@ -22,6 +22,7 @@ from app.db.models import (
     User,
     UserFirstTouchAttribution,
     UserProfile,
+    UserTouchEvent,
 )
 
 
@@ -122,6 +123,7 @@ class TrafficAnalyticsFilters:
     from_dt: datetime | None = None
     to_dt: datetime | None = None
     tariff: str | None = None
+    attribution_mode: str = "first_touch"
 
 
 def build_screen_transition_analytics(session: Session, filters: AnalyticsFilters) -> dict:
@@ -201,18 +203,24 @@ def build_marketing_subscription_analytics(session: Session, filters: MarketingA
 
 
 def build_traffic_analytics(session: Session, filters: TrafficAnalyticsFilters) -> dict:
-    first_touch = _load_first_touch_entries(session, filters)
-    base_user_ids = {item.telegram_user_id for item in first_touch}
+    attribution_mode = str(filters.attribution_mode or "first_touch")
+    if attribution_mode == "all_touch":
+        attribution_entries = _load_touch_event_entries(session, filters)
+    else:
+        attribution_mode = "first_touch"
+        attribution_entries = _load_first_touch_entries(session, filters)
+
+    base_user_ids = {item.telegram_user_id for item in attribution_entries}
     paid_telegram_user_ids = _load_paid_telegram_user_ids(session, filters, base_user_ids)
     paid_telegram_user_ids_by_tariff = _load_paid_telegram_user_ids_by_tariff(session, filters)
-    users_by_source = _build_users_by_source(first_touch, paid_telegram_user_ids) if first_touch else []
+    users_by_source = _build_users_by_source(attribution_entries, paid_telegram_user_ids) if attribution_entries else []
     users_by_source_campaign = (
-        _build_users_by_source_campaign(first_touch, paid_telegram_user_ids) if first_touch else []
+        _build_users_by_source_campaign(attribution_entries, paid_telegram_user_ids) if attribution_entries else []
     )
-    conversions = _build_first_touch_conversions(session, filters, base_user_ids, paid_telegram_user_ids) if first_touch else []
+    conversions = _build_first_touch_conversions(session, filters, base_user_ids, paid_telegram_user_ids) if attribution_entries else []
     paid_per_tariff_click = _build_paid_per_tariff_click_from_transitions(session, filters, paid_telegram_user_ids_by_tariff)
     paid_per_tariff_click_first_touch = _build_paid_per_tariff_click_from_first_touch(
-        first_touch,
+        attribution_entries,
         paid_telegram_user_ids_by_tariff,
     )
     return {
@@ -222,6 +230,7 @@ def build_traffic_analytics(session: Session, filters: TrafficAnalyticsFilters) 
         "conversions": conversions,
         "paid_per_tariff_click": paid_per_tariff_click,
         "paid_per_tariff_click_first_touch": paid_per_tariff_click_first_touch,
+        "attribution_mode": attribution_mode,
     }
 
 
@@ -232,6 +241,29 @@ def _load_first_touch_entries(session: Session, filters: TrafficAnalyticsFilters
     if filters.to_dt:
         query = query.where(UserFirstTouchAttribution.captured_at <= filters.to_dt)
     query = query.order_by(UserFirstTouchAttribution.captured_at.asc(), UserFirstTouchAttribution.id.asc())
+
+    items = session.execute(query).scalars().all()
+    if not items:
+        return []
+
+    admin_ids = _parse_admin_ids(settings.admin_ids)
+    filtered = [item for item in items if item.telegram_user_id not in admin_ids]
+    if not filters.tariff:
+        return filtered
+
+    allowed_user_ids = _load_user_ids_by_tariff(session, filters)
+    if not allowed_user_ids:
+        return []
+    return [item for item in filtered if item.telegram_user_id in allowed_user_ids]
+
+
+def _load_touch_event_entries(session: Session, filters: TrafficAnalyticsFilters) -> list[UserTouchEvent]:
+    query: Select[tuple[UserTouchEvent]] = select(UserTouchEvent)
+    if filters.from_dt:
+        query = query.where(UserTouchEvent.captured_at >= filters.from_dt)
+    if filters.to_dt:
+        query = query.where(UserTouchEvent.captured_at <= filters.to_dt)
+    query = query.order_by(UserTouchEvent.captured_at.asc(), UserTouchEvent.id.asc())
 
     items = session.execute(query).scalars().all()
     if not items:
@@ -285,7 +317,7 @@ def _load_paid_telegram_user_ids(
     return {user.telegram_user_id for user in users if user.telegram_user_id in base_user_ids}
 
 
-def _build_users_by_source(items: list[UserFirstTouchAttribution], paid_telegram_user_ids: set[int]) -> list[dict]:
+def _build_users_by_source(items: list[UserFirstTouchAttribution] | list[UserTouchEvent], paid_telegram_user_ids: set[int]) -> list[dict]:
     grouped: dict[str, set[int]] = {}
     for item in items:
         source = _normalize_traffic_value(item.source)
@@ -300,7 +332,7 @@ def _build_users_by_source(items: list[UserFirstTouchAttribution], paid_telegram
     ]
 
 
-def _build_users_by_source_campaign(items: list[UserFirstTouchAttribution], paid_telegram_user_ids: set[int]) -> list[dict]:
+def _build_users_by_source_campaign(items: list[UserFirstTouchAttribution] | list[UserTouchEvent], paid_telegram_user_ids: set[int]) -> list[dict]:
     grouped: dict[tuple[str, str], set[int]] = {}
     for item in items:
         source = _normalize_traffic_value(item.source)
@@ -318,7 +350,7 @@ def _build_users_by_source_campaign(items: list[UserFirstTouchAttribution], paid
 
 
 def _build_paid_per_tariff_click_from_first_touch(
-    items: list[UserFirstTouchAttribution],
+    items: list[UserFirstTouchAttribution] | list[UserTouchEvent],
     paid_telegram_user_ids_by_tariff: dict[str, set[int]],
 ) -> list[dict]:
     grouped: dict[str, set[int]] = {tariff: set() for tariff in _FUNNEL_TARIFFS}
