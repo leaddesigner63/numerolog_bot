@@ -22,7 +22,11 @@ def _assert(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-def _collect_runtime_state(page: Any, timeout_ms: int) -> dict[str, Any]:
+def _collect_runtime_state(
+    page: Any,
+    timeout_ms: int,
+    external_state: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     elapsed_ms = 0
     step_ms = 200
     last_error = ""
@@ -38,6 +42,17 @@ def _collect_runtime_state(page: Any, timeout_ms: int) -> dict[str, Any]:
 
         ym_calls = state.get("ymCalls", []) if isinstance(state, dict) else []
         redirect_attempts = state.get("redirectAttempts", []) if isinstance(state, dict) else []
+        if external_state:
+            external_ym_calls = external_state.get("ymCalls", [])
+            external_redirect_attempts = external_state.get("redirectAttempts", [])
+            if isinstance(external_ym_calls, list):
+                ym_calls = external_ym_calls if len(external_ym_calls) >= len(ym_calls) else ym_calls
+            if isinstance(external_redirect_attempts, list):
+                redirect_attempts = (
+                    external_redirect_attempts
+                    if len(external_redirect_attempts) >= len(redirect_attempts)
+                    else redirect_attempts
+                )
         if isinstance(ym_calls, list):
             last_ym_calls = ym_calls
         if isinstance(redirect_attempts, list):
@@ -86,11 +101,17 @@ def main() -> int:
   if (typeof originalReplace === 'function') {
     locationProto.replace = function(url) {
       window.__bridgeSmoke.redirectAttempts.push(String(url));
+      if (typeof window.__bridgeSmokeRecord === 'function') {
+        window.__bridgeSmokeRecord('redirect', String(url));
+      }
     };
   }
 
   window.ym = function(...args) {
     window.__bridgeSmoke.ymCalls.push(args);
+    if (typeof window.__bridgeSmokeRecord === 'function') {
+      window.__bridgeSmokeRecord('ym', args);
+    }
     if (args[1] === 'reachGoal') {
       const maybeCallback = args[4];
       if (typeof maybeCallback === 'function') {
@@ -106,14 +127,30 @@ def main() -> int:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             context = browser.new_context()
+
+            external_smoke_state: dict[str, Any] = {
+                "ymCalls": [],
+                "redirectAttempts": [],
+            }
+
+            def _bridge_smoke_record(_: Any, event_type: str, payload: Any) -> None:
+                if event_type == "ym" and isinstance(payload, list):
+                    external_smoke_state["ymCalls"].append(payload)
+                    return
+                if event_type == "redirect" and isinstance(payload, str):
+                    external_smoke_state["redirectAttempts"].append(payload)
+
+            context.expose_binding("__bridgeSmokeRecord", _bridge_smoke_record)
             context.add_init_script(init_script)
 
             for source, start_payload in expected_sources.items():
                 url = f"https://{source}.{base_domain}/"
                 page = context.new_page()
+                external_smoke_state["ymCalls"].clear()
+                external_smoke_state["redirectAttempts"].clear()
                 print(f"[INFO] Runtime-smoke: {url}")
                 page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-                runtime_state = _collect_runtime_state(page, timeout_ms)
+                runtime_state = _collect_runtime_state(page, timeout_ms, external_state=external_smoke_state)
                 ym_calls = runtime_state.get("ymCalls", [])
                 redirect_attempts = runtime_state.get("redirectAttempts", [])
 
