@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
 
     payment_enabled: bool = True
+    payment_mode: str = "provider"
+    manual_payment_card_number: str | None = None
+    manual_payment_recipient_name: str | None = None
     payment_debug_auto_confirm_local: bool = False
     payment_provider: str = "prodamus"
     prodamus_form_url: str | None = None

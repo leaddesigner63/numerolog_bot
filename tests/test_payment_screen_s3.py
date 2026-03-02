@@ -5,6 +5,18 @@ from app.core.config import settings
 
 
 class PaymentScreenS3Tests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.original_payment_mode = getattr(settings, "payment_mode", "provider")
+        self.original_manual_payment_card_number = getattr(settings, "manual_payment_card_number", None)
+        self.original_manual_payment_recipient_name = getattr(settings, "manual_payment_recipient_name", None)
+        self.original_feedback_group_url = getattr(settings, "feedback_group_url", None)
+
+    def tearDown(self) -> None:
+        settings.payment_mode = self.original_payment_mode
+        settings.manual_payment_card_number = self.original_manual_payment_card_number
+        settings.manual_payment_recipient_name = self.original_manual_payment_recipient_name
+        settings.feedback_group_url = self.original_feedback_group_url
+
     def test_s3_shows_tariff_price_disclaimer_and_payment_button(self) -> None:
         content = screen_s3(
             {
@@ -65,6 +77,37 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertNotIn("https://example.com/pay", url_values)
         self.assertNotIn("s3:report_details", callback_values)
         self.assertNotIn("legal:offer", callback_values)
+
+    def test_s3_falls_back_to_provider_mode_for_unknown_payment_mode(self) -> None:
+        settings.payment_mode = "unexpected_mode"
+
+        content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
+
+        keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
+        self.assertEqual(keyboard_rows[0][0].url, "https://example.com/pay")
+
+    def test_s3_manual_mode_without_card_shows_support_cta(self) -> None:
+        settings.payment_mode = "manual"
+        settings.manual_payment_card_number = None
+        settings.feedback_group_url = "https://t.me/example_support"
+
+        content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
+
+        self.assertIn("Ручной режим оплаты включён", content.messages[0])
+        keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
+        self.assertEqual(keyboard_rows[0][0].url, "https://t.me/example_support")
+        self.assertIn("Написать в поддержку", keyboard_rows[0][0].text)
+
+    def test_s3_manual_mode_with_card_shows_requisites(self) -> None:
+        settings.payment_mode = "manual"
+        settings.manual_payment_card_number = "2200 7000 1234 5678"
+        settings.manual_payment_recipient_name = "Иван Иванов"
+
+        content = screen_s3({"selected_tariff": "T1"})
+
+        self.assertIn("Оплата сейчас принимается по ручным реквизитам", content.messages[0])
+        self.assertIn("2200 7000 1234 5678", content.messages[0])
+        self.assertIn("Иван Иванов", content.messages[0])
 
     def test_s3_has_no_manual_payment_confirmation_button(self) -> None:
         content = screen_s3(

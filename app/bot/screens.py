@@ -117,6 +117,26 @@ EMOJI_ACTION = "👉"
 EMOJI_WARNING = "⚠️"
 
 
+def resolve_payment_mode(raw_mode: str | None) -> str:
+    mode = str(raw_mode or "").strip().lower()
+    if mode == "manual":
+        return "manual"
+    return "provider"
+
+
+def get_payment_flow_context() -> dict[str, Any]:
+    mode = resolve_payment_mode(getattr(settings, "payment_mode", None))
+    manual_card_number = getattr(settings, "manual_payment_card_number", None)
+    manual_recipient_name = getattr(settings, "manual_payment_recipient_name", None)
+    manual_card_ready = bool(str(manual_card_number or "").strip())
+    return {
+        "mode": mode,
+        "manual_card_number": manual_card_number,
+        "manual_recipient_name": manual_recipient_name,
+        "manual_card_ready": manual_card_ready,
+    }
+
+
 def _build_screen_header(title: str) -> str:
     return f"{EMOJI_STEP} {title.strip()}\n{SCREEN_SEPARATOR}"
 
@@ -448,7 +468,9 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
     selected_tariff = _format_tariff_label(selected_tariff_raw)
     order_status = state.get("order_status")
     price_label = _format_price(state, str(selected_tariff_raw)) or "не указана"
-    payment_url = state.get("payment_url") or settings.prodamus_form_url
+    payment_context = get_payment_flow_context()
+    manual_mode = payment_context["mode"] == "manual"
+    payment_url = None if manual_mode else (state.get("payment_url") or settings.prodamus_form_url)
 
     payment_processing_notice = bool(state.get("payment_processing_notice"))
     order_is_paid = str(order_status or "").lower() == "paid"
@@ -482,7 +504,27 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
                 ]
             )
         )
-        if not payment_url:
+        if manual_mode:
+            manual_card_number = str(payment_context.get("manual_card_number") or "").strip()
+            manual_recipient_name = str(payment_context.get("manual_recipient_name") or "").strip()
+            if payment_context.get("manual_card_ready"):
+                manual_lines = [
+                    "Оплата сейчас принимается по ручным реквизитам.",
+                    f"Номер карты: {manual_card_number}",
+                ]
+                if manual_recipient_name:
+                    manual_lines.append(f"Получатель: {manual_recipient_name}")
+                manual_lines.append("После перевода нажмите кнопку «Обратная связь», чтобы ускорить подтверждение.")
+                text_parts.append("\n\n" + _build_bullets(manual_lines, EMOJI_ACTION))
+            else:
+                text_parts.append(
+                    "\n\n"
+                    + _build_cta_line(
+                        "Ручной режим оплаты включён, но реквизиты пока не заполнены. Напишите в поддержку — поможем завершить оплату.",
+                        EMOJI_WARNING,
+                    )
+                )
+        elif not payment_url:
             text_parts.append(
                 "\n\n"
                 + _build_cta_line(
@@ -515,6 +557,26 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
                     ),
                 ]
             )
+        elif manual_mode and not payment_context.get("manual_card_ready"):
+            support_url = str(getattr(settings, "feedback_group_url", "") or "").strip()
+            if support_url:
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            text=_with_button_icons("Написать в поддержку", "💬"),
+                            url=support_url,
+                        )
+                    ]
+                )
+            else:
+                rows.append(
+                    [
+                        InlineKeyboardButton(
+                            text=_with_button_icons("Написать в поддержку", "💬"),
+                            callback_data="screen:S8",
+                        )
+                    ]
+                )
         else:
             rows.append(
                 [
