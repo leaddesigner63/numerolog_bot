@@ -1871,8 +1871,19 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         await _safe_callback_answer(callback)
         return
 
+    if callback.data == "screen:S8:manual_payment_receipt":
+        screen_manager.update_state(
+            callback.from_user.id,
+            s8_context="manual_payment_receipt",
+        )
+        await _show_screen_for_callback(callback, screen_id="S8")
+        await _safe_callback_answer(callback)
+        return
+
     if callback.data.startswith("screen:"):
         screen_id = callback.data.split("screen:")[-1]
+        if screen_id == "S8":
+            screen_manager.update_state(callback.from_user.id, s8_context=None)
         if screen_id == "S3":
             screen_manager.update_state(
                 callback.from_user.id,
