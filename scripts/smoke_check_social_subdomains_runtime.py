@@ -22,6 +22,39 @@ def _assert(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+def _collect_runtime_state(page: Any, timeout_ms: int) -> dict[str, Any]:
+    elapsed_ms = 0
+    step_ms = 200
+    last_error = ""
+    last_ym_calls: list[Any] = []
+
+    while elapsed_ms <= timeout_ms:
+        try:
+            state = page.evaluate("() => window.__bridgeSmoke")
+        except Exception as exc:  # pragma: no cover - runtime-only browser edge case
+            last_error = str(exc)
+            state = {}
+
+        ym_calls = state.get("ymCalls", []) if isinstance(state, dict) else []
+        if isinstance(ym_calls, list):
+            last_ym_calls = ym_calls
+        if isinstance(ym_calls, list) and len(ym_calls) >= 3:
+            return {
+                "ymCalls": ym_calls,
+                "elapsedMs": elapsed_ms,
+                "lastError": last_error,
+            }
+
+        page.wait_for_timeout(step_ms)
+        elapsed_ms += step_ms
+
+    return {
+        "ymCalls": last_ym_calls,
+        "elapsedMs": elapsed_ms,
+        "lastError": last_error,
+    }
+
+
 def main() -> int:
     base_domain = os.getenv("SOCIAL_SUBDOMAIN_BASE_DOMAIN", "aireadu.ru")
     counter_id = int(os.getenv("SOCIAL_SUBDOMAIN_METRIKA_COUNTER_ID", "106884182"))
@@ -73,19 +106,17 @@ def main() -> int:
                 redirect_attempts.clear()
                 print(f"[INFO] Runtime-smoke: {url}")
                 page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-                page.wait_for_function(
-                    """() => {
-                        const state = window.__bridgeSmoke;
-                        return Boolean(state && Array.isArray(state.ymCalls) && state.ymCalls.length >= 3);
-                    }""",
-                    timeout=timeout_ms,
+                runtime_state = _collect_runtime_state(page, timeout_ms)
+                ym_calls = runtime_state.get("ymCalls", [])
+
+                _assert(
+                    len(ym_calls) >= 3,
+                    (
+                        f"{url}: ожидалось минимум 3 вызова ym, получено {len(ym_calls)}; "
+                        f"elapsed_ms={runtime_state.get('elapsedMs')}; "
+                        f"last_error={runtime_state.get('lastError', '')}"
+                    ),
                 )
-                page.wait_for_timeout(300)
-
-                state = page.evaluate("() => window.__bridgeSmoke")
-                ym_calls = state.get("ymCalls", [])
-
-                _assert(len(ym_calls) >= 3, f"{url}: ожидалось минимум 3 вызова ym, получено {len(ym_calls)}")
 
                 init_call = next((call for call in ym_calls if len(call) > 1 and call[1] == "init"), None)
                 hit_call = next((call for call in ym_calls if len(call) > 1 and call[1] == "hit"), None)
