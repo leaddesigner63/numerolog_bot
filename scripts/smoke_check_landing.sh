@@ -2,8 +2,14 @@
 set -euo pipefail
 
 LANDING_URL="${LANDING_URL:-}"
+LANDING_TELEGRAM_BOT_USERNAME="${LANDING_TELEGRAM_BOT_USERNAME:-}"
 LANDING_EXPECTED_CTA="${LANDING_EXPECTED_CTA:-}"
 LANDING_ASSET_URLS="${LANDING_ASSET_URLS:-}"
+
+if [ -n "$LANDING_TELEGRAM_BOT_USERNAME" ] && [ -z "$LANDING_EXPECTED_CTA" ]; then
+  LANDING_TELEGRAM_BOT_USERNAME="${LANDING_TELEGRAM_BOT_USERNAME#@}"
+  LANDING_EXPECTED_CTA="https://t.me/$LANDING_TELEGRAM_BOT_USERNAME"
+fi
 
 if [ -z "$LANDING_URL" ]; then
   echo "LANDING_URL не задан, smoke-check пропущен (без ошибки)."
@@ -26,6 +32,20 @@ if [ -n "$LANDING_EXPECTED_CTA" ]; then
     echo "Smoke-check: CTA-ссылка не найдена: $LANDING_EXPECTED_CTA"
     exit 1
   fi
+
+  mapfile -t telegram_links < <(grep -Eo 'https://t\.me/[^"'"'"'[:space:]<]+' "$TMP_HTML" | sort -u)
+  if [ "${#telegram_links[@]}" -eq 0 ]; then
+    echo "Smoke-check: в HTML не найдено Telegram-ссылок"
+    exit 1
+  fi
+
+  for telegram_link in "${telegram_links[@]}"; do
+    if [[ "$telegram_link" != "$LANDING_EXPECTED_CTA"* ]]; then
+      echo "Smoke-check: найден неожиданный Telegram CTA: $telegram_link (ожидается префикс $LANDING_EXPECTED_CTA)"
+      exit 1
+    fi
+  done
+
   echo "Smoke-check: CTA-ссылка найдена"
 else
   echo "LANDING_EXPECTED_CTA не задан, проверка CTA пропущена."

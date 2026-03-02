@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  const TELEGRAM_BOT_URL = 'https://t.me/AIreadUbot';
+  const TELEGRAM_BOT_URL = 'https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__';
   const trackingSessionId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   const readAttribution = () => {

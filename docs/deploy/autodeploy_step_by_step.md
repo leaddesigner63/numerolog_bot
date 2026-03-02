@@ -35,7 +35,8 @@
 - `ENV_FILE` — путь к env-файлу на сервере (если используется).
 - `PRESERVE_PATHS` — пути, которые нужно сохранять при деплое.
 - `LANDING_URL` — URL лендинга для smoke-check (рабочий пример: `https://aireadu.ru/`).
-- `LANDING_EXPECTED_CTA` — ожидаемый текст CTA для проверки после деплоя (рабочий пример: `https://t.me/AIreadUbot`).
+- `LANDING_TELEGRAM_BOT_USERNAME` — username Telegram-бота для сборки/деплоя лендинга (без `@`, пример: `AIreadUbot`).
+- `LANDING_EXPECTED_CTA` — опциональный ожидаемый текст CTA для проверки после деплоя. Если не задан, smoke-check автоматически использует `https://t.me/${LANDING_TELEGRAM_BOT_USERNAME}`.
 - `LANDING_ASSET_URLS` — список критичных asset URL для проверки (рабочий пример: `https://aireadu.ru/assets/css/styles.css,https://aireadu.ru/assets/js/script.js`).
 - `SITEMAP_BASE_URL` — базовый домен для генерации URL в sitemap (например, `https://aireadu.ru`).
 - `WEBMASTER_PING_SCRIPT` — путь до исполняемого скрипта пост-релизного пинга (опционально).
@@ -80,6 +81,7 @@
 4. При необходимости прогоните smoke-check вручную с единым рабочим примером:
    ```bash
    LANDING_URL="https://aireadu.ru/" \
+   LANDING_TELEGRAM_BOT_USERNAME="AIreadUbot" \
    LANDING_EXPECTED_CTA="https://t.me/AIreadUbot" \
    LANDING_ASSET_URLS="https://aireadu.ru/assets/css/styles.css,https://aireadu.ru/assets/js/script.js" \
    ./scripts/smoke_check_landing.sh

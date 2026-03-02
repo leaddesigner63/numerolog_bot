@@ -75,6 +75,7 @@ docs/
     autodeploy_admin_reliability_step_by_step.md # защита от недоступности админки после деплоя (systemd + API healthcheck)
     autodeploy_db_recovery_retry_step_by_step.md # защита автодеплоя при recovery PostgreSQL (ретраи Alembic до готовности БД)
     autodeploy_vk_subdomain_step_by_step.md # пошаговое подключение и автодеплой редиректа для vk.aireadu.ru
+    autodeploy_landing_bot_username_step_by_step.md # пошаговая смена username Telegram-бота на лендинге через автодеплой
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   landing/
     release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)
@@ -237,7 +238,7 @@ python -m http.server 8080 --directory web
 - Подробный чеклист релиза лендинга v2: [`docs/landing/release-v2-checklist.md`](docs/landing/release-v2-checklist.md).
 - Краткий порядок выкладки:
   1. Пройти контент- и SEO-ревизию, проверить `robots.txt`, `sitemap.xml`, JSON-LD, A11y и CTA smoke-check по чеклисту.
-  2. Проверить, что домен `aireadu.ru` (в canonical/OG/robots/sitemap) и ссылка на бота `https://t.me/AIreadUbot` используются на всех ключевых страницах, а также заменить все `будет добавлено` на финальные значения перед прод-выкладкой.
+  2. Проверить, что домен `aireadu.ru` (в canonical/OG/robots/sitemap) и ссылка на бота `https://t.me/${LANDING_TELEGRAM_BOT_USERNAME}` используются на всех ключевых страницах, а также заменить все `будет добавлено` на финальные значения перед прод-выкладкой.
   3. Запустить автодеплой и выполнить пост-проверки из `AUTODEPLOY_INSTRUCTIONS.md` (включая smoke-check лендинга и ручной обход страниц).
   4. Перед публикацией новых статей обновить `docs/landing/seo-keyword-map.md` и подтвердить чек «новый URL не дублирует существующий кластер».
 
@@ -245,6 +246,7 @@ python -m http.server 8080 --directory web
 - Для изменения логики раскладки кнопок используйте отдельный runbook: [`docs/deploy/autodeploy_keyboard_layout_step_by_step.md`](docs/deploy/autodeploy_keyboard_layout_step_by_step.md).
 - Для релиза и проверки целей bridge-редиректов (`ig`/`vk`/`yt`) используйте runbook: [`docs/deploy/autodeploy_bridge_redirect_goal_step_by_step.md`](docs/deploy/autodeploy_bridge_redirect_goal_step_by_step.md).
 - Для полного пошагового автодеплоя социальных поддоменов (`ig.aireadu.ru`, `vk.aireadu.ru`, `yt.aireadu.ru`) используйте runbook: [`docs/deploy/autodeploy_social_subdomains_step_by_step.md`](docs/deploy/autodeploy_social_subdomains_step_by_step.md).
+- Для смены username Telegram-бота на всех CTA лендинга используйте runbook: [`docs/deploy/autodeploy_landing_bot_username_step_by_step.md`](docs/deploy/autodeploy_landing_bot_username_step_by_step.md).
 - Для временного hot-switch оплаты (`provider -> manual -> provider`) используйте runbook: [`docs/deploy/autodeploy_manual_payment_mode_step_by_step.md`](docs/deploy/autodeploy_manual_payment_mode_step_by_step.md). После любого изменения `PAYMENT_MODE` обязателен рестарт `numerolog-bot.service` и `numerolog-api.service`.
 
 ### Checklist наблюдаемости (manual-оплаты)
