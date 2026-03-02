@@ -10,6 +10,7 @@ from sqlalchemy import Select, and_, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.services.admin_ids import parse_admin_ids
 from app.db.models import (
     MarketingConsentEvent,
     MarketingConsentEventType,
@@ -246,7 +247,7 @@ def _load_first_touch_entries(session: Session, filters: TrafficAnalyticsFilters
     if not items:
         return []
 
-    admin_ids = _parse_admin_ids(settings.admin_ids)
+    admin_ids = parse_admin_ids(settings.admin_ids)
     filtered = [item for item in items if item.telegram_user_id not in admin_ids]
     if not filters.tariff:
         return filtered
@@ -269,7 +270,7 @@ def _load_touch_event_entries(session: Session, filters: TrafficAnalyticsFilters
     if not items:
         return []
 
-    admin_ids = _parse_admin_ids(settings.admin_ids)
+    admin_ids = parse_admin_ids(settings.admin_ids)
     filtered = [item for item in items if item.telegram_user_id not in admin_ids]
     if not filters.tariff:
         return filtered
@@ -385,7 +386,7 @@ def _build_paid_per_tariff_click_from_transitions(
     paid_telegram_user_ids_by_tariff: dict[str, set[int]],
 ) -> list[dict]:
     grouped: dict[str, set[int]] = {tariff: set() for tariff in _FUNNEL_TARIFFS}
-    admin_ids = _parse_admin_ids(settings.admin_ids)
+    admin_ids = parse_admin_ids(settings.admin_ids)
     query: Select[tuple[ScreenTransitionEvent]] = select(ScreenTransitionEvent).where(
         ScreenTransitionEvent.trigger_type == ScreenTransitionTriggerType.CALLBACK,
     )
@@ -592,7 +593,7 @@ def _count_s3_report_details_clicks(
     if not rows:
         return 0, 0
 
-    admin_ids = _parse_admin_ids(settings.admin_ids)
+    admin_ids = parse_admin_ids(settings.admin_ids)
     filtered_rows = [row for row in rows if int(row.telegram_user_id or 0) not in admin_ids]
     if not filtered_rows:
         return 0, 0
@@ -630,6 +631,9 @@ def _load_provider_confirmed_orders(session: Session, filters: FinanceAnalyticsF
         Order.payment_confirmation_source.in_(list(_PROVIDER_CONFIRMATION_SOURCES)),
         ~_deploy_smoke_order_filter(Order),
     )
+    admin_ids = parse_admin_ids(settings.admin_ids)
+    if admin_ids:
+        query = query.join(User, User.id == Order.user_id).where(~User.telegram_user_id.in_(admin_ids))
     if filters.from_dt:
         query = query.where(Order.payment_confirmed_at >= filters.from_dt)
     if filters.to_dt:
@@ -704,7 +708,7 @@ def _build_finance_timeseries(entries: list[EventPoint], orders: list[FinanceOrd
 
 
 def _load_events(session: Session, filters: AnalyticsFilters) -> list[EventPoint]:
-    admin_ids = _parse_admin_ids(settings.admin_ids)
+    admin_ids = parse_admin_ids(settings.admin_ids)
     query: Select[tuple[ScreenTransitionEvent]] = select(ScreenTransitionEvent)
     if filters.from_dt:
         query = query.where(ScreenTransitionEvent.created_at >= filters.from_dt)
@@ -754,20 +758,6 @@ def _load_events(session: Session, filters: AnalyticsFilters) -> list[EventPoint
         )
     return events
 
-
-def _parse_admin_ids(raw_value: str | None) -> set[int]:
-    if not raw_value:
-        return set()
-    admin_ids: set[int] = set()
-    for item in raw_value.split(","):
-        candidate = item.strip()
-        if not candidate:
-            continue
-        try:
-            admin_ids.add(int(candidate))
-        except ValueError:
-            continue
-    return admin_ids
 
 
 def _normalize_screen_id(screen_id: str | None) -> str:

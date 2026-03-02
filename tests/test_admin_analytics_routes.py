@@ -257,7 +257,8 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
             )
             session.commit()
 
-        response = self.client.get("/admin/api/orders")
+        with patch("app.api.routes.admin.settings.admin_ids", ""):
+            response = self.client.get("/admin/api/orders")
         self.assertEqual(response.status_code, 200)
         order_ids = {item["id"] for item in response.json()["orders"]}
         self.assertNotIn(261, order_ids)
@@ -811,6 +812,107 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         user_ids = {item["id"] for item in users_response.json()["users"]}
         self.assertNotIn(730, user_ids)
         self.assertIn(731, user_ids)
+
+    def test_overview_users_excludes_admin_ids(self) -> None:
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    User(id=901, telegram_user_id=99001),
+                    User(id=902, telegram_user_id=99002),
+                ]
+            )
+            session.commit()
+
+        with patch("app.api.routes.admin.settings.admin_ids", "99001"):
+            response = self.client.get("/admin/api/overview")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["users"], 1)
+
+    def test_users_list_excludes_admin_ids(self) -> None:
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    User(id=911, telegram_user_id=99101, telegram_username="admin-user"),
+                    User(id=912, telegram_user_id=99102, telegram_username="regular-user"),
+                ]
+            )
+            session.commit()
+
+        with patch("app.api.routes.admin.settings.admin_ids", "99101"):
+            response = self.client.get("/admin/api/users")
+
+        self.assertEqual(response.status_code, 200)
+        user_ids = {item["telegram_user_id"] for item in response.json()["users"]}
+        self.assertNotIn(99101, user_ids)
+        self.assertIn(99102, user_ids)
+
+    def test_overview_and_finance_summary_match_admin_filter_for_provider_metrics(self) -> None:
+        now = datetime.now(timezone.utc)
+        with self.SessionLocal() as session:
+            session.add_all(
+                [
+                    User(id=921, telegram_user_id=99201),
+                    User(id=922, telegram_user_id=99202),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=99201,
+                        from_screen_id="S3",
+                        to_screen_id="S4",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T1"},
+                    ),
+                    ScreenTransitionEvent.build_fail_safe(
+                        telegram_user_id=99202,
+                        from_screen_id="S3",
+                        to_screen_id="S4",
+                        trigger_type=ScreenTransitionTriggerType.CALLBACK,
+                        metadata_json={"tariff": "T1"},
+                    ),
+                    Order(
+                        id=941,
+                        user_id=921,
+                        tariff=Tariff.T1,
+                        amount=1000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=now,
+                    ),
+                    Order(
+                        id=942,
+                        user_id=922,
+                        tariff=Tariff.T1,
+                        amount=2000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=now,
+                    ),
+                ]
+            )
+            session.commit()
+
+        with patch("app.api.routes.admin.settings.admin_ids", "99201"):
+            overview = self.client.get("/admin/api/overview")
+            finance = self.client.get(
+                "/admin/api/analytics/finance/summary",
+                params={"from": "2026-01-01T00:00:00+00:00", "to": "2026-12-31T23:59:59+00:00"},
+            )
+
+        self.assertEqual(overview.status_code, 200)
+        self.assertEqual(finance.status_code, 200)
+        overview_payload = overview.json()
+        finance_summary = finance.json()["data"]["summary"]
+
+        self.assertEqual(overview_payload["confirmed_paid_orders"], 1)
+        self.assertEqual(overview_payload["confirmed_revenue_total"], 2000.0)
+        self.assertEqual(finance_summary["provider_confirmed_orders"], 1)
+        self.assertEqual(finance_summary["provider_confirmed_revenue"], 2000.0)
 
     def test_overview_includes_worker_metrics(self) -> None:
         now = datetime.now(timezone.utc)
