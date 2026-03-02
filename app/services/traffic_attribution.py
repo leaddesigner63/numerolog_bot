@@ -97,8 +97,6 @@ def save_user_first_touch_attribution(
         ).scalar_one_or_none()
 
         if existing is None:
-            if not has_attribution_data:
-                return False
             session.add(
                 UserFirstTouchAttribution(
                     telegram_user_id=telegram_user_id,
@@ -109,7 +107,7 @@ def save_user_first_touch_attribution(
                     raw_parts=parsed_payload.get("raw_parts"),
                 )
             )
-            return True
+            return has_attribution_data
 
         existing_is_empty = not (
             existing.start_payload

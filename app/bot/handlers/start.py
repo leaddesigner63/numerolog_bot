@@ -85,10 +85,11 @@ async def handle_start(message: Message) -> None:
         return
 
     payload = _extract_start_payload(message)
+    payload_for_attribution = payload or ""
     try:
         save_user_first_touch_attribution(
             message.from_user.id,
-            payload,
+            payload_for_attribution,
             telegram_username=getattr(message.from_user, "username", None),
         )
     except Exception as exc:
@@ -97,7 +98,7 @@ async def handle_start(message: Message) -> None:
             "first_touch_attribution_failed",
             extra={
                 "telegram_user_id": message.from_user.id,
-                "payload": payload,
+                "payload": payload_for_attribution,
                 "error_type": exc.__class__.__name__,
             },
             exc_info=exc,
