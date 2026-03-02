@@ -53,6 +53,7 @@ scripts/              # вспомогательные скрипты
   fast_checks.py      # быстрые сценарные проверки без внешних зависимостей
   check_landing_content.py # статическая проверка словаря/дисклеймеров лендинга
   smoke_check_landing.sh # smoke-check доступности лендинга/CTA/ассетов после деплоя
+  smoke_check_social_subdomains.sh # post-deploy smoke-check поддоменов ig/vk/yt: HTTP 200 + наличие bridge-метрик в HTML
   smoke_check_report_job_completion.sh # post-deploy smoke-check paid-заказа: создание ReportJob и ожидание COMPLETED
   smoke_check_report_job_completion.py # сценарий smoke-check paid order -> ReportJob -> COMPLETED с подробным логом; устойчив к запуску из любого рабочего каталога и очищает созданные smoke-данные после проверки
   db/alembic_upgrade_with_retry.sh # запуск alembic upgrade head с ретраями (в т.ч. для recovery PostgreSQL) для deploy/systemd ExecStartPre
@@ -242,6 +243,7 @@ python -m http.server 8080 --directory web
 - Для контроля connection budget PostgreSQL после автодеплоя используйте runbook: [`docs/deploy/autodeploy_connection_budget_step_by_step.md`](docs/deploy/autodeploy_connection_budget_step_by_step.md).
 - Для изменения логики раскладки кнопок используйте отдельный runbook: [`docs/deploy/autodeploy_keyboard_layout_step_by_step.md`](docs/deploy/autodeploy_keyboard_layout_step_by_step.md).
 - Для релиза и проверки целей bridge-редиректов (`ig`/`vk`/`yt`) используйте runbook: [`docs/deploy/autodeploy_bridge_redirect_goal_step_by_step.md`](docs/deploy/autodeploy_bridge_redirect_goal_step_by_step.md).
+- Для полного пошагового автодеплоя социальных поддоменов (`ig.aireadu.ru`, `vk.aireadu.ru`, `yt.aireadu.ru`) используйте runbook: [`docs/deploy/autodeploy_social_subdomains_step_by_step.md`](docs/deploy/autodeploy_social_subdomains_step_by_step.md).
 
 5. Для релиза уникальности `reports.order_id` сначала выполните предмиграционную очистку дублей:
 

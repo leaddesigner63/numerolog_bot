@@ -132,3 +132,10 @@ jobs:
           echo "Первичный SSH-запуск деплоя завершился с ошибкой. Проверяем маркер успешного завершения..."
           ssh "${SSH_OPTS[@]}" "$USER@$HOST" \
             "test -s '$DEPLOY_PATH/.last_deploy_success' && echo '[OK] Найден маркер успешного деплоя: $DEPLOY_PATH/.last_deploy_success'"
+
+      - name: Post-deploy smoke check social subdomains
+        env:
+          SOCIAL_SUBDOMAIN_BASE_DOMAIN: aireadu.ru
+          SOCIAL_SUBDOMAIN_METRIKA_COUNTER_ID: "106884182"
+          SOCIAL_SUBDOMAIN_TARGET_EVENT: bridge_redirect
+        run: bash scripts/smoke_check_social_subdomains.sh
