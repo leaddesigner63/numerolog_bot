@@ -56,9 +56,9 @@ scripts/              # вспомогательные скрипты
   smoke_check_landing.sh # smoke-check доступности лендинга/CTA/ассетов после деплоя
   smoke_check_social_subdomains.sh # post-deploy smoke-check поддоменов ig/vk/yt: HTTP 200 + наличие bridge-метрик в HTML
   smoke_check_report_job_completion.sh # post-deploy smoke-check paid-заказа: создание ReportJob и ожидание COMPLETED
-  smoke_check_report_job_completion.py # сценарий smoke-check paid order -> ReportJob -> COMPLETED с подробным логом; устойчив к запуску из любого рабочего каталога и очищает созданные smoke-данные после проверки
+  smoke_check_report_job_completion.py # сценарий smoke-check paid order -> ReportJob -> COMPLETED; переиспользует техпользователя (SMOKE_TELEGRAM_USER_ID), идемпотентно обновляет профиль/состояние и очищает только временные сущности
   db/alembic_upgrade_with_retry.sh # запуск alembic upgrade head с ретраями (в т.ч. для recovery PostgreSQL) для deploy/systemd ExecStartPre
-  db/check_smoke_residuals.py # обязательный post-check остатков smoke-данных в ключевых таблицах после cleanup; печатает детализацию и возвращает ошибку при count > 0
+  db/check_smoke_residuals.py # post-check идемпотентного smoke-сценария: допускает 1 техпользователя/профиль/заказ/state и падает при остатках временных сущностей или дублях
   smoke_check_checkout_flow.sh # smoke-check checkout-флоу; при отсутствии pytest пытается установить зависимости автоматически
   db/archive_duplicate_reports_by_order.py # архивирование дублей reports.order_id перед миграцией уникального индекса
   db/backfill_screen_transition_tariff.py # one-off backfill metadata.tariff в screen_transition_events из trigger_value/соседних событий

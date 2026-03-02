@@ -6,6 +6,7 @@
    Внутри `scripts/deploy.sh` после деплоя обязателен smoke-check `bash scripts/smoke_check_report_job_completion.sh` (paid-заказ -> ReportJob -> COMPLETED).
    Перед этим скрипт ожидает worker-health (`/health/report-worker`, поле `"alive": true`) и только потом запускает smoke-check генерации отчёта.
    При медленной генерации отчёта можно поднять лимит ожидания через `SMOKE_REPORT_JOB_TIMEOUT_SECONDS` (по умолчанию `420`).
+   Для идемпотентного smoke-прогона используйте фиксированный `SMOKE_TELEGRAM_USER_ID` (если не задан, применяется безопасное значение по умолчанию).
 3. После push дождитесь успешного job `deploy` в GitHub Actions.
 4. На сервере выполните:
    - `systemctl status numerolog-api.service numerolog-bot.service`
