@@ -145,6 +145,7 @@ class User(Base):
         back_populates="user",
         uselist=False,
     )
+    touch_events: Mapped[list["UserTouchEvent"]] = relationship(back_populates="user")
 
 
 class UserFirstTouchAttribution(Base):
@@ -179,6 +180,29 @@ class UserFirstTouchAttribution(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="first_touch_attribution")
+
+
+class UserTouchEvent(Base):
+    __tablename__ = "user_touch_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    telegram_user_id: Mapped[int] = mapped_column(
+        BigInteger,
+        ForeignKey("users.telegram_user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    start_payload: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    campaign: Mapped[str | None] = mapped_column(Text, nullable=True)
+    placement: Mapped[str | None] = mapped_column(Text, nullable=True)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+    user: Mapped[User] = relationship(back_populates="touch_events")
 
 
 class UserProfile(Base):
