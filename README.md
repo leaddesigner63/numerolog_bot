@@ -72,6 +72,7 @@ docs/
     autodeploy_admin_username_step_by_step.md # автодеплой изменений админки с отображением пользователей по username
     autodeploy_admin_reliability_step_by_step.md # защита от недоступности админки после деплоя (systemd + API healthcheck)
     autodeploy_db_recovery_retry_step_by_step.md # защита автодеплоя при recovery PostgreSQL (ретраи Alembic до готовности БД)
+    autodeploy_vk_subdomain_step_by_step.md # пошаговое подключение и автодеплой редиректа для vk.aireadu.ru
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   landing/
     release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)
@@ -103,6 +104,8 @@ web/                  # многостраничный статический с
   assets/css/styles.css # единый CSS для всех страниц (в т.ч. компонент final-cta)
   assets/js/script.js   # клиентские интеракции сайта
   ig/index.html       # быстрый редирект в Telegram-бота с start-параметром ig_reels_1
+  yt/index.html       # быстрый редирект в Telegram-бота с start-параметром yt_shorts_1
+  vk/index.html       # быстрый редирект в Telegram-бота с start-параметром vk_clips_1
   assets/svg/sprite.svg # SVG-спрайт иконок
 AUTODEPLOY_INSTRUCTIONS.md # пошаговая инструкция по автодеплою
 CONTRIBUTING.md      # правила разработки и обязательный паттерн enter_text_input_mode для текстового ввода
