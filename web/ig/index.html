@@ -13,14 +13,14 @@
 
     var redirected = false;
     var source = 'ig';
-    var startPayload = 'ig_reels_1';
+    var startPayload = 'src=ig&cmp=reels&pl=1';
 
     function redirectToBot() {
       if (redirected) {
         return;
       }
       redirected = true;
-      window.location.replace('https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__?start=' + startPayload);
+      window.location.replace('https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__?start=' + encodeURIComponent(startPayload));
     }
 
     function sendBridgeGoalAndRedirect() {
@@ -59,7 +59,7 @@
 </head>
 <body>
   <p>Если редирект не сработал автоматически, откройте бота по ссылке:
-    <a href="https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__?start=ig_reels_1">@AIreadUbot</a>
+    <a href="https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__?start=src%3Dig%26cmp%3Dreels%26pl%3D1">@AIreadUbot</a>
   </p>
 </body>
 </html>

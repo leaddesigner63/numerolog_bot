@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const campaign = attribution.campaign || 'na';
     const safePlacement = placement || 'na';
 
-    return `src_${source}cmp_${campaign}pl_${safePlacement}`;
+    return `src=${encodeURIComponent(source)}&cmp=${encodeURIComponent(campaign)}&pl=${encodeURIComponent(safePlacement)}`;
   };
 
   const buildTelegramTargetUrl = (placement) => {

@@ -15,14 +15,14 @@
 
     var redirected = false;
     var source = 'vk';
-    var startPayload = 'vk_clips_1';
+    var startPayload = 'src=vk&cmp=clips&pl=1';
 
     function redirectToBot() {
       if (redirected) {
         return;
       }
       redirected = true;
-      window.location.replace('https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__?start=' + startPayload);
+      window.location.replace('https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__?start=' + encodeURIComponent(startPayload));
     }
 
     function sendBridgeGoalAndRedirect() {
@@ -59,7 +59,7 @@
 </head>
 <body>
   <p>Если редирект не сработал автоматически, откройте бота по ссылке:
-    <a href="https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__?start=vk_clips_1">@AIreadUbot</a>
+    <a href="https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__?start=src%3Dvk%26cmp%3Dclips%26pl%3D1">@AIreadUbot</a>
   </p>
 </body>
 </html>

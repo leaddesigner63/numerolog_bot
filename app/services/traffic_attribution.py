@@ -20,32 +20,54 @@ def _extract_marker_value(payload: str, marker: str, next_markers: tuple[str, ..
     return match.group(1)
 
 
-def parse_first_touch_payload(payload: str | None) -> dict[str, Any]:
-    raw_payload = payload or ""
-    parsed_query_payload = ""
-    if raw_payload:
-        decoded_payload = unquote_plus(raw_payload)
-        if "?" in decoded_payload:
-            query = urlparse(decoded_payload).query
-            if query:
-                parsed_query_payload = (parse_qs(query).get("start") or [""])[0]
-        if not parsed_query_payload and decoded_payload.startswith("start="):
-            parsed_query_payload = decoded_payload.split("start=", maxsplit=1)[-1]
-        if parsed_query_payload:
-            raw_payload = parsed_query_payload
-        else:
-            raw_payload = decoded_payload
+def _unwrap_start_payload(payload: str) -> str:
+    if not payload:
+        return ""
 
+    parsed_url = urlparse(payload)
+    if parsed_url.query:
+        start_values = parse_qs(parsed_url.query, keep_blank_values=True).get("start")
+        if start_values:
+            return unquote_plus(start_values[0])
+
+    if payload.startswith("start="):
+        start_values = parse_qs(payload, keep_blank_values=True).get("start")
+        if start_values:
+            return unquote_plus(start_values[0])
+
+    return unquote_plus(payload)
+
+
+def _parse_exact_querystring_payload(raw_payload: str) -> tuple[str | None, str | None, str | None] | None:
+    if not raw_payload or "=" not in raw_payload:
+        return None
+
+    parsed = parse_qs(raw_payload, keep_blank_values=True)
+    if "src" not in parsed and "cmp" not in parsed and "pl" not in parsed:
+        return None
+
+    source = parsed.get("src", [None])[0]
+    campaign = parsed.get("cmp", [None])[0]
+    placement = parsed.get("pl", [None])[0]
+    return source, campaign, placement
+
+
+def parse_first_touch_payload(payload: str | None) -> dict[str, Any]:
+    raw_payload = _unwrap_start_payload(payload or "")
     raw_parts = raw_payload.split("_") if raw_payload else []
 
-    source = _extract_marker_value(raw_payload, "src_", ("cmp_", "pl_"))
-    campaign = _extract_marker_value(raw_payload, "cmp_", ("pl_",))
-    placement = _extract_marker_value(raw_payload, "pl_", tuple())
+    exact_querystring_values = _parse_exact_querystring_payload(raw_payload)
+    if exact_querystring_values is not None:
+        source, campaign, placement = exact_querystring_values
+    else:
+        source = _extract_marker_value(raw_payload, "src_", ("cmp_", "pl_"))
+        campaign = _extract_marker_value(raw_payload, "cmp_", ("pl_",))
+        placement = _extract_marker_value(raw_payload, "pl_", tuple())
 
-    if source is None and campaign is None and placement is None:
-        source = raw_parts[0] if len(raw_parts) > 0 and raw_parts[0] else None
-        campaign = raw_parts[1] if len(raw_parts) > 1 and raw_parts[1] else None
-        placement = "_".join(raw_parts[2:]) if len(raw_parts) > 2 else None
+        if source is None and campaign is None and placement is None:
+            source = raw_parts[0] if len(raw_parts) > 0 and raw_parts[0] else None
+            campaign = raw_parts[1] if len(raw_parts) > 1 and raw_parts[1] else None
+            placement = "_".join(raw_parts[2:]) if len(raw_parts) > 2 else None
 
     return {
         "start_payload": raw_payload,

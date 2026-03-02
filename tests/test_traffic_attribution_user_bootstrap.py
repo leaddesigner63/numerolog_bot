@@ -159,6 +159,24 @@ class TrafficAttributionUserBootstrapTests(unittest.TestCase):
         self.assertEqual(first_touch_record.campaign, "seo")
         self.assertEqual(first_touch_record.placement, "cta")
 
+    def test_parse_first_touch_payload_supports_exact_querystring_format(self) -> None:
+        parsed = traffic_attribution_module.parse_first_touch_payload(
+            "src=site.ads_v2&cmp=cmp_launch.pl_1&pl=cta_cmp_main_pl_footer"
+        )
+        self.assertEqual(parsed["start_payload"], "src=site.ads_v2&cmp=cmp_launch.pl_1&pl=cta_cmp_main_pl_footer")
+        self.assertEqual(parsed["source"], "site.ads_v2")
+        self.assertEqual(parsed["campaign"], "cmp_launch.pl_1")
+        self.assertEqual(parsed["placement"], "cta_cmp_main_pl_footer")
+
+    def test_parse_first_touch_payload_supports_urlencoded_querystring_payload(self) -> None:
+        parsed = traffic_attribution_module.parse_first_touch_payload(
+            "src%3Dsite.ads_v2%26cmp%3Dcmp_launch.pl_1%26pl%3Dcta_cmp_main_pl_footer"
+        )
+        self.assertEqual(parsed["start_payload"], "src=site.ads_v2&cmp=cmp_launch.pl_1&pl=cta_cmp_main_pl_footer")
+        self.assertEqual(parsed["source"], "site.ads_v2")
+        self.assertEqual(parsed["campaign"], "cmp_launch.pl_1")
+        self.assertEqual(parsed["placement"], "cta_cmp_main_pl_footer")
+
     def test_parse_first_touch_payload_supports_marker_format_and_preserves_placement(self) -> None:
         parsed = traffic_attribution_module.parse_first_touch_payload("src_sitecmp_launchpl_tariff_t2")
         self.assertEqual(parsed["start_payload"], "src_sitecmp_launchpl_tariff_t2")
@@ -175,15 +193,15 @@ class TrafficAttributionUserBootstrapTests(unittest.TestCase):
 
     def test_parse_first_touch_payload_supports_tme_links_and_start_prefix(self) -> None:
         parsed_from_link = traffic_attribution_module.parse_first_touch_payload(
-            "https://t.me/AIreadUbot?start=site_seo_cta"
+            "https://t.me/AIreadUbot?start=src%3Dsite%26cmp%3Dseo%26pl%3Dcta"
         )
-        self.assertEqual(parsed_from_link["start_payload"], "site_seo_cta")
+        self.assertEqual(parsed_from_link["start_payload"], "src=site&cmp=seo&pl=cta")
         self.assertEqual(parsed_from_link["source"], "site")
         self.assertEqual(parsed_from_link["campaign"], "seo")
         self.assertEqual(parsed_from_link["placement"], "cta")
 
-        parsed_from_prefix = traffic_attribution_module.parse_first_touch_payload("start=site_seo_cta")
-        self.assertEqual(parsed_from_prefix["start_payload"], "site_seo_cta")
+        parsed_from_prefix = traffic_attribution_module.parse_first_touch_payload("start=src%3Dsite%26cmp%3Dseo%26pl%3Dcta")
+        self.assertEqual(parsed_from_prefix["start_payload"], "src=site&cmp=seo&pl=cta")
         self.assertEqual(parsed_from_prefix["source"], "site")
         self.assertEqual(parsed_from_prefix["campaign"], "seo")
         self.assertEqual(parsed_from_prefix["placement"], "cta")

@@ -75,25 +75,40 @@ class StartPayloadFirstTouchTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_start_payload_persists_only_first_touch_payload(self) -> None:
         with patch.object(screen_manager, "show_screen", new=AsyncMock()):
-            await start_module.handle_start(self._message("/start source_a_campaign_a"))
-            await start_module.handle_start(self._message("/start source_b_campaign_b"))
+            await start_module.handle_start(self._message("/start src=source_a.v2&cmp=campaign_a.pl_1&pl=cta_cmp_block_pl_footer"))
+            await start_module.handle_start(self._message("/start src=source_b.v2&cmp=campaign_b.pl_2&pl=cta_cmp_sidebar_pl_bottom"))
 
         records = self._first_touch_records()
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0].start_payload, "source_a_campaign_a")
-        self.assertEqual(records[0].source, "source")
-        self.assertEqual(records[0].campaign, "a")
+        self.assertEqual(records[0].start_payload, "src=source_a.v2&cmp=campaign_a.pl_1&pl=cta_cmp_block_pl_footer")
+        self.assertEqual(records[0].source, "source_a.v2")
+        self.assertEqual(records[0].campaign, "campaign_a.pl_1")
+        self.assertEqual(records[0].placement, "cta_cmp_block_pl_footer")
 
     async def test_start_without_payload_then_with_payload_updates_first_touch(self) -> None:
         with patch.object(screen_manager, "show_screen", new=AsyncMock()):
             await start_module.handle_start(self._message("/start"))
-            await start_module.handle_start(self._message("/start source_a_campaign_a"))
+            await start_module.handle_start(self._message("/start src=source_a.v2&cmp=campaign_a.pl_1&pl=cta_cmp_block_pl_footer"))
 
         records = self._first_touch_records()
         self.assertEqual(len(records), 1)
-        self.assertEqual(records[0].start_payload, "source_a_campaign_a")
-        self.assertEqual(records[0].source, "source")
-        self.assertEqual(records[0].campaign, "a")
+        self.assertEqual(records[0].start_payload, "src=source_a.v2&cmp=campaign_a.pl_1&pl=cta_cmp_block_pl_footer")
+        self.assertEqual(records[0].source, "source_a.v2")
+        self.assertEqual(records[0].campaign, "campaign_a.pl_1")
+        self.assertEqual(records[0].placement, "cta_cmp_block_pl_footer")
+
+    async def test_start_payload_accepts_urlencoded_querystring_format(self) -> None:
+        with patch.object(screen_manager, "show_screen", new=AsyncMock()):
+            await start_module.handle_start(
+                self._message("/start src%3Dsource_a.v2%26cmp%3Dcampaign_a.pl_1%26pl%3Dcta_cmp_block_pl_footer")
+            )
+
+        records = self._first_touch_records()
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0].start_payload, "src=source_a.v2&cmp=campaign_a.pl_1&pl=cta_cmp_block_pl_footer")
+        self.assertEqual(records[0].source, "source_a.v2")
+        self.assertEqual(records[0].campaign, "campaign_a.pl_1")
+        self.assertEqual(records[0].placement, "cta_cmp_block_pl_footer")
 
 
 if __name__ == "__main__":
