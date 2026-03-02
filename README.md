@@ -359,6 +359,8 @@ pytest -q tests/test_yandex_metrika_counter.py
 - цена и кнопка оплаты не показываются на ранних шагах (S2/S4/S5);
 - заказ и payment link создаются только перед финальным checkout (S3);
 - отсутствие ключей/конфигов оплаты не должно ронять бота: пользователь получает уведомление, флоу остаётся управляемым;
+- режим оплаты управляется `PAYMENT_MODE`: `provider` (через платёжного провайдера) или `manual` (ручные реквизиты);
+- в `manual`-режиме при пустом `MANUAL_PAYMENT_CARD_NUMBER` бот не падает, а показывает мягкое уведомление и CTA в поддержку;
 - никакой валидации/нормализации пользовательского ввода: данные сохраняются как есть.
 
 ## Настройка окружения (минимум для воспроизводимого запуска)
@@ -369,6 +371,9 @@ pytest -q tests/test_yandex_metrika_counter.py
    - `DATABASE_URL`
 3. Для платёжного checkout-at-end дополнительно:
    - `PAYMENT_ENABLED=true` (обязательно для production: переход после оплаты только по webhook/polling провайдера)
+   - `PAYMENT_MODE=provider` (стандартный режим; для временного ручного приёма переводов можно переключить в `manual`)
+   - `MANUAL_PAYMENT_CARD_NUMBER` (нужен только для `PAYMENT_MODE=manual`; если пустой, бот покажет CTA в поддержку вместо падения)
+   - `MANUAL_PAYMENT_RECIPIENT_NAME` (опционально, имя получателя на экране оплаты)
    - `PAYMENT_DEBUG_AUTO_CONFIRM_LOCAL=false` (опционально, только локальная отладка при `ENV=local/dev`)
    - `PAYMENT_PROVIDER` (`prodamus`/`cloudpayments`)
    - `PRODAMUS_FORM_URL` и/или `CLOUDPAYMENTS_PUBLIC_ID`

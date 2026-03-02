@@ -13,7 +13,11 @@ from sqlalchemy import select, func
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.bot.questionnaire.config import load_questionnaire_config, resolve_next_question_id
-from app.bot.screens import build_payment_wait_message, build_report_wait_message
+from app.bot.screens import (
+    build_payment_wait_message,
+    build_report_wait_message,
+    get_payment_flow_context,
+)
 from app.bot.handlers.profile import (
     accept_marketing_consent_prompt,
     accept_profile_consent,
@@ -1638,7 +1642,9 @@ async def _prepare_checkout_order(
             order = _create_order(session, user, tariff)
 
         payment_link = None
-        if settings.payment_enabled and order.status != OrderStatus.PAID:
+        payment_context = get_payment_flow_context()
+        provider_mode_enabled = payment_context["mode"] == "provider"
+        if settings.payment_enabled and provider_mode_enabled and order.status != OrderStatus.PAID:
             provider = get_payment_provider(order.provider.value)
             payment_link = _safe_create_payment_link(
                 provider,
