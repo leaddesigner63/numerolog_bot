@@ -655,8 +655,9 @@ python scripts/check_landing_content.py
 
 - При первом входе пользователя команда `/start` сохраняет payload в таблицу `user_first_touch_attribution`.
 - Сохраняется только **первое касание**: повторные `/start` не перезаписывают исходный источник.
-- Для payload поддерживаются как структурные маркеры (`src_`, `cmp_`, `pl_`), так и fallback по частям через `_`.
-- Если в БД ещё нет записи пользователя, first-touch сохранение автоматически создаёт пользователя по `telegram_user_id`, чтобы deep-link вида `https://t.me/<bot>?start=site_seo_cta` не терялся.
+- Базовый формат payload для новых deep-link: `src=<source>&cmp=<campaign>&pl=<placement>` (querystring-стиль, значения URL-encoded).
+- Legacy-форматы (`src_...cmp_...pl_...` и `<source>_<campaign>_<placement...>`) сохранены как backward-compatible fallback.
+- Если в БД ещё нет записи пользователя, first-touch сохранение автоматически создаёт пользователя по `telegram_user_id`, чтобы deep-link вида `https://t.me/<bot>?start=src%3Dsite%26cmp%3Dseo%26pl%3Dcta` не терялся.
 - Админ-аналитика traffic использует эти данные для срезов `source`, `source+campaign` и воронки конверсий до оплаты.
 
 ### Как читать метрики эффективности каналов

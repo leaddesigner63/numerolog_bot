@@ -5,9 +5,9 @@ from pathlib import Path
 
 
 BRIDGE_PAGES = {
-    "ig": "ig_reels_1",
-    "vk": "vk_clips_1",
-    "yt": "yt_shorts_1",
+    "ig": "src=ig&cmp=reels&pl=1",
+    "vk": "src=vk&cmp=clips&pl=1",
+    "yt": "src=yt&cmp=shorts&pl=1",
 }
 
 
