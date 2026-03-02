@@ -35,6 +35,11 @@ try:
         UserProfile,
     )
     from app.db.session import get_session
+    from app.services.smoke_detection import (
+        collect_smoke_order_ids,
+        collect_smoke_telegram_ids,
+        collect_smoke_user_ids,
+    )
 except Exception as exc:  # pragma: no cover - защитный путь для окружения
     print(f"[smoke_residuals] stage=bootstrap_error error={exc.__class__.__name__}: {exc}", flush=True)
     sys.exit(1)
@@ -53,40 +58,14 @@ def _env_int(name: str, default: int) -> int:
 def _collect_smoke_ids() -> tuple[set[int], set[int], set[int], set[int], set[int], int]:
     smoke_telegram_user_id = _env_int(SMOKE_USER_ID_ENV, SMOKE_TELEGRAM_USER_ID_DEFAULT)
     with get_session() as session:
-        smoke_order_ids = set(
-            session.execute(
-                select(Order.id).where(or_(Order.is_smoke_check.is_(True), Order.provider_payment_id.like("smoke-%")))
-            )
-            .scalars()
-            .all()
-        )
-        smoke_order_user_ids = set(
-            session.execute(
-                select(Order.user_id).where(or_(Order.is_smoke_check.is_(True), Order.provider_payment_id.like("smoke-%")))
-            )
-            .scalars()
-            .all()
-        )
-        smoke_profile_user_ids = set(
-            session.execute(select(UserProfile.user_id).where(UserProfile.name == SMOKE_PROFILE_NAME)).scalars().all()
-        )
-        smoke_state_telegram_ids = set(
-            session.execute(
-                select(ScreenStateRecord.telegram_user_id).where(
-                    cast(ScreenStateRecord.data, Text).like(f'%"{SMOKE_MARKER_KEY}": "{SMOKE_MARKER_VALUE}"%')
-                )
-            )
-            .scalars()
-            .all()
-        )
-        smoke_state_user_ids = set(
-            session.execute(select(User.id).where(User.telegram_user_id.in_(smoke_state_telegram_ids))).scalars().all()
-        )
+        smoke_order_ids = collect_smoke_order_ids(session)
+        smoke_state_telegram_ids = collect_smoke_telegram_ids(session)
+        smoke_user_ids = collect_smoke_user_ids(session)
         smoke_tech_user_ids = set(
             session.execute(select(User.id).where(User.telegram_user_id == smoke_telegram_user_id)).scalars().all()
         )
 
-        smoke_user_ids = smoke_order_user_ids | smoke_profile_user_ids | smoke_state_user_ids | smoke_tech_user_ids
+        smoke_user_ids |= smoke_tech_user_ids
         smoke_telegram_ids = set(
             session.execute(select(User.telegram_user_id).where(User.id.in_(smoke_user_ids))).scalars().all()
         ) | smoke_state_telegram_ids

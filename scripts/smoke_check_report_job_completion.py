@@ -7,7 +7,7 @@ import sys
 import time
 from datetime import datetime, timezone
 
-from sqlalchemy import Text, cast, delete, or_, select
+from sqlalchemy import delete, or_, select
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -37,6 +37,11 @@ from app.db.models import (
     UserProfile,
 )
 from app.db.session import get_session
+from app.services.smoke_detection import (
+    collect_smoke_order_ids,
+    collect_smoke_telegram_ids,
+    collect_smoke_user_ids,
+)
 
 
 SMOKE_PROFILE_NAME = "Smoke Check"
@@ -170,52 +175,14 @@ def _prepare_paid_order_and_job() -> tuple[int, int, int, int]:
 
 def _collect_smoke_entity_ids() -> tuple[set[int], set[int], set[int], set[int]]:
     with get_session() as session:
-        smoke_order_ids = set(
-            session.execute(
-                select(Order.id).where(or_(Order.is_smoke_check.is_(True), Order.provider_payment_id.like("smoke-%")))
-            )
-            .scalars()
-            .all()
-        )
-        smoke_order_user_ids = set(
-            session.execute(
-                select(Order.user_id).where(or_(Order.is_smoke_check.is_(True), Order.provider_payment_id.like("smoke-%")))
-            )
-            .scalars()
-            .all()
-        )
-
-        smoke_profile_user_ids = set(
-            session.execute(select(UserProfile.user_id).where(UserProfile.name == SMOKE_PROFILE_NAME))
-            .scalars()
-            .all()
-        )
-
-        smoke_state_telegram_ids = set(
-            session.execute(
-                select(ScreenStateRecord.telegram_user_id).where(
-                    cast(ScreenStateRecord.data, Text).like(f'%"{SMOKE_MARKER_KEY}": "{SMOKE_MARKER_VALUE}"%')
-                )
-            )
-            .scalars()
-            .all()
-        )
-
-        smoke_state_user_ids = set(
-            session.execute(
-                select(User.id).where(User.telegram_user_id.in_(smoke_state_telegram_ids))
-            )
-            .scalars()
-            .all()
-        )
-
-        smoke_user_ids = smoke_order_user_ids | smoke_profile_user_ids | smoke_state_user_ids
-        smoke_telegram_ids = set(
-            session.execute(select(User.telegram_user_id).where(User.id.in_(smoke_user_ids))).scalars().all()
-        ) | smoke_state_telegram_ids
-        smoke_order_ids |= set(
-            session.execute(select(Order.id).where(Order.user_id.in_(smoke_user_ids))).scalars().all()
-        )
+        smoke_user_ids = collect_smoke_user_ids(session)
+        smoke_order_ids = collect_smoke_order_ids(session)
+        smoke_state_telegram_ids = collect_smoke_telegram_ids(session)
+        smoke_telegram_ids = {
+            int(telegram_user_id)
+            for telegram_user_id in session.scalars(select(User.telegram_user_id).where(User.id.in_(smoke_user_ids)))
+            if telegram_user_id is not None
+        } | smoke_state_telegram_ids
         smoke_report_ids = set(
             session.execute(
                 select(Report.id).where(or_(Report.user_id.in_(smoke_user_ids), Report.order_id.in_(smoke_order_ids)))

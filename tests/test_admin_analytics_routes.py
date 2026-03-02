@@ -743,6 +743,75 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         self.assertEqual(payload["confirmed_paid_orders"], 1)
         self.assertEqual(payload["confirmed_revenue_total"], 2000.0)
 
+
+    def test_state_marker_only_smoke_user_is_excluded_from_overview_and_users(self) -> None:
+        now = datetime.now(timezone.utc)
+        with self.SessionLocal() as session:
+            smoke_user = User(id=730, telegram_user_id=9730)
+            regular_user = User(id=731, telegram_user_id=9731)
+            session.add_all([smoke_user, regular_user])
+            session.flush()
+            session.add_all(
+                [
+                    ScreenStateRecord(
+                        telegram_user_id=9730,
+                        data={"smoke_marker": "state-only"},
+                    ),
+                    UserProfile(
+                        user_id=731,
+                        name="Regular",
+                        birth_date="2000-01-01",
+                        birth_place_city="M",
+                        birth_place_country="RU",
+                    ),
+                    Order(
+                        id=830,
+                        user_id=730,
+                        tariff=Tariff.T1,
+                        amount=1000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        provider_payment_id="regular-payment-1",
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=now,
+                    ),
+                    Order(
+                        id=831,
+                        user_id=731,
+                        tariff=Tariff.T2,
+                        amount=2000,
+                        currency="RUB",
+                        provider=PaymentProvider.PRODAMUS,
+                        provider_payment_id="regular-payment-2",
+                        status=OrderStatus.PAID,
+                        payment_confirmed=True,
+                        payment_confirmation_source=PaymentConfirmationSource.PROVIDER_WEBHOOK,
+                        payment_confirmed_at=now,
+                    ),
+                    Report(user_id=730, order_id=830, tariff=Tariff.T1, report_text="smoke"),
+                    Report(user_id=731, order_id=831, tariff=Tariff.T2, report_text="real"),
+                    FeedbackMessage(user_id=730, text="smoke", status=FeedbackStatus.SENT),
+                    FeedbackMessage(user_id=731, text="real", status=FeedbackStatus.SENT),
+                ]
+            )
+            session.commit()
+
+        overview_response = self.client.get("/admin/api/overview")
+        self.assertEqual(overview_response.status_code, 200)
+        overview_payload = overview_response.json()
+        self.assertEqual(overview_payload["users"], 1)
+        self.assertEqual(overview_payload["orders"], 1)
+        self.assertEqual(overview_payload["reports"], 1)
+        self.assertEqual(overview_payload["feedback_messages"], 1)
+
+        users_response = self.client.get("/admin/api/users")
+        self.assertEqual(users_response.status_code, 200)
+        user_ids = {item["id"] for item in users_response.json()["users"]}
+        self.assertNotIn(730, user_ids)
+        self.assertIn(731, user_ids)
+
     def test_overview_includes_worker_metrics(self) -> None:
         now = datetime.now(timezone.utc)
         with self.SessionLocal() as session:
