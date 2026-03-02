@@ -3112,24 +3112,39 @@ def admin_ui(request: Request) -> HTMLResponse:
     }
 
     function renderTrafficTables(sourceRows, campaignRows, tariffRows, firstTouchTariffRows) {
-      renderAnalyticsTable(
-        "analyticsTrafficSource",
-        ["Источник", "Пользователи", "Конверсия в оплату"],
-        sourceRows.map((row) => [
-          {value: row.source || "UNKNOWN"},
-          {value: Number(row.users) || 0},
-          {value: formatPercent(row.conversion_to_paid)},
-        ])
-      );
-      renderAnalyticsTable(
-        "analyticsTrafficCampaign",
-        ["Источник / кампания", "Пользователи", "Конверсия"],
-        campaignRows.map((row) => [
-          {value: `${row.source || "UNKNOWN"} / ${row.campaign || "UNKNOWN"}`},
-          {value: Number(row.users) || 0},
-          {value: formatPercent(row.conversion)},
-        ])
-      );
+      const hasTrafficSourceData = Array.isArray(sourceRows) && sourceRows.length > 0;
+      const hasTrafficCampaignData = Array.isArray(campaignRows) && campaignRows.length > 0;
+
+      if (!hasTrafficSourceData && !hasTrafficCampaignData) {
+        const sourceTarget = document.getElementById("analyticsTrafficSource");
+        if (sourceTarget) {
+          sourceTarget.innerHTML = '<div class="muted">Нет данных за выбранный период.</div>';
+        }
+        const campaignTarget = document.getElementById("analyticsTrafficCampaign");
+        if (campaignTarget) {
+          campaignTarget.innerHTML = "";
+        }
+      } else {
+        renderAnalyticsTable(
+          "analyticsTrafficSource",
+          ["Источник", "Пользователи", "Конверсия в оплату"],
+          sourceRows.map((row) => [
+            {value: row.source || "UNKNOWN"},
+            {value: Number(row.users) || 0},
+            {value: formatPercent(row.conversion_to_paid)},
+          ])
+        );
+        renderAnalyticsTable(
+          "analyticsTrafficCampaign",
+          ["Источник / кампания", "Пользователи", "Конверсия"],
+          campaignRows.map((row) => [
+            {value: `${row.source || "UNKNOWN"} / ${row.campaign || "UNKNOWN"}`},
+            {value: Number(row.users) || 0},
+            {value: formatPercent(row.conversion)},
+          ])
+        );
+      }
+
       renderAnalyticsTable(
         "analyticsTrafficTariff",
         ["Тариф", "Клик тарифа в боте (users)", "Paid по тому же тарифу (users)", "Paid / tariff_click"],
