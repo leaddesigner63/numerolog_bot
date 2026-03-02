@@ -52,3 +52,49 @@ async def handle_feedback_text(message: Message) -> None:
         user_id=message.from_user.id,
         message_id=message.message_id,
     )
+
+
+@router.message(IsFeedbackScreen(), F.photo)
+async def handle_feedback_photo(message: Message) -> None:
+    if not message.from_user or not message.photo:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    caption = message.caption or ""
+    await _submit_feedback(
+        message.bot,
+        user_id=message.from_user.id,
+        username=message.from_user.username,
+        feedback_text=caption,
+        attachment_type="photo",
+        attachment_file_id=message.photo[-1].file_id,
+        attachment_caption=caption,
+    )
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
+
+
+@router.message(IsFeedbackScreen(), F.document)
+async def handle_feedback_document(message: Message) -> None:
+    if not message.from_user or not message.document:
+        return
+    screen_manager.add_user_message_id(message.from_user.id, message.message_id)
+    caption = message.caption or ""
+    await _submit_feedback(
+        message.bot,
+        user_id=message.from_user.id,
+        username=message.from_user.username,
+        feedback_text=caption,
+        attachment_type="document",
+        attachment_file_id=message.document.file_id,
+        attachment_caption=caption,
+    )
+    await screen_manager.delete_user_message(
+        bot=message.bot,
+        chat_id=message.chat.id,
+        user_id=message.from_user.id,
+        message_id=message.message_id,
+    )
