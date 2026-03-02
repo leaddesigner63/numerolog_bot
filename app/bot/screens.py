@@ -470,7 +470,12 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
     price_label = _format_price(state, str(selected_tariff_raw)) or "не указана"
     payment_context = get_payment_flow_context()
     manual_mode = payment_context["mode"] == "manual"
-    payment_url = None if manual_mode else (state.get("payment_url") or settings.prodamus_form_url)
+    raw_payment_url = state.get("payment_url")
+    payment_url = None
+    if not manual_mode and isinstance(raw_payment_url, str):
+        candidate_url = raw_payment_url.strip()
+        if candidate_url.startswith(("https://", "http://")):
+            payment_url = candidate_url
 
     payment_processing_notice = bool(state.get("payment_processing_notice"))
     order_is_paid = str(order_status or "").lower() == "paid"
@@ -530,11 +535,31 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
                     )
                 )
         elif not payment_url:
+            support_url = str(getattr(settings, "feedback_group_url", "") or "").strip()
+            order_id = str(state.get("order_id") or "").strip() or "не назначен"
             text_parts.append(
                 "\n\n"
-                + _build_cta_line(
-                    "Платёжная ссылка пока недоступна. Проверьте настройки провайдера.",
-                    EMOJI_WARNING,
+                + "\n".join(
+                    [
+                        _build_cta_line(
+                            "Платёжная ссылка пока недоступна (provider-режим).",
+                            EMOJI_WARNING,
+                        ),
+                        _build_cta_line(
+                            f"Диагностика: order_id={order_id}, payment_url отсутствует.",
+                            EMOJI_WARNING,
+                        ),
+                        _build_cta_line(
+                            "Нажмите «Перейти к оплате» для повторной генерации ссылки.",
+                        ),
+                        _build_cta_line(
+                            (
+                                "Если ссылка снова не появится — напишите в поддержку."
+                                if support_url
+                                else "Если ссылка снова не появится — нажмите кнопку поддержки."
+                            ),
+                        ),
+                    ]
                 )
             )
 
@@ -598,6 +623,22 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
                         text=_with_button_icons(payment_cta, "💳"),
                         callback_data="payment:start",
                     ),
+                ]
+            )
+            support_url = str(getattr(settings, "feedback_group_url", "") or "").strip()
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=_with_button_icons("Написать в поддержку", "💬"),
+                        url=support_url,
+                    )
+                ]
+                if support_url
+                else [
+                    InlineKeyboardButton(
+                        text=_with_button_icons("Написать в поддержку", "💬"),
+                        callback_data="screen:S8",
+                    )
                 ]
             )
         rows.append(

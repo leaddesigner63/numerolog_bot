@@ -1045,6 +1045,17 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state_snapshot.data.get("order_status"), OrderStatus.CREATED.value)
         self.assertIsNone(state_snapshot.data.get("payment_url"))
 
+    async def test_prepare_checkout_order_clears_payment_url_when_tariff_invalid(self) -> None:
+        screens.screen_manager.update_state(1001, payment_url="https://stale.example/pay")
+
+        callback = _DummyCallback("profile:save")
+        order = await screens._prepare_checkout_order(callback, tariff_value="INVALID")
+
+        self.assertIsNone(order)
+        state_snapshot = screens.screen_manager.update_state(1001)
+        self.assertIsNone(state_snapshot.data.get("payment_url"))
+
+
 
 if __name__ == "__main__":
     unittest.main()
