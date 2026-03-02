@@ -27,6 +27,7 @@ from app.services.admin_analytics import (
     build_screen_transition_analytics,
     parse_trigger_type,
 )
+from app.services.order_fulfillment import ensure_report_job_for_paid_order
 from pydantic import BaseModel, Field
 from app.db.models import (
     AdminFinanceEvent,
@@ -4871,6 +4872,7 @@ async def admin_order_status(
                 if order.status == OrderStatus.PAID:
                     order.payment_confirmation_source = PaymentConfirmationSource.ADMIN_MANUAL
                     action = "manual_paid_set"
+                    ensure_report_job_for_paid_order(session, order.id, reason="manual_paid_set")
                 else:
                     action = "manual_status_change"
             except ValueError:
@@ -4973,6 +4975,7 @@ async def admin_orders_bulk_status(
             if status_update == OrderStatus.PAID:
                 order.payment_confirmation_source = PaymentConfirmationSource.ADMIN_MANUAL
                 action = "bulk_paid_set"
+                ensure_report_job_for_paid_order(session, order.id, reason="bulk_paid_set")
             else:
                 action = "manual_status_change"
         if action:
