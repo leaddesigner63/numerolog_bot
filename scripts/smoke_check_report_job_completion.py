@@ -39,6 +39,13 @@ from app.db.models import (
 from app.db.session import get_session
 
 
+SMOKE_PROFILE_NAME = "Smoke Check"
+SMOKE_MARKER_KEY = "smoke_marker"
+SMOKE_MARKER_VALUE = "report_job_completion"
+SMOKE_USER_ID_ENV = "SMOKE_TELEGRAM_USER_ID"
+SMOKE_TELEGRAM_USER_ID_DEFAULT = 9700000001
+
+
 def _env_int(name: str, default: int) -> int:
     raw = os.getenv(name)
     if raw is None:
@@ -56,43 +63,61 @@ def _log(stage: str, **payload: object) -> None:
 
 def _prepare_paid_order_and_job() -> tuple[int, int, int, int]:
     now = datetime.now(timezone.utc)
-    telegram_user_id = int(f"97{int(now.timestamp())}")
+    telegram_user_id = _env_int(SMOKE_USER_ID_ENV, SMOKE_TELEGRAM_USER_ID_DEFAULT)
 
     with get_session() as session:
-        user = User(telegram_user_id=telegram_user_id)
-        session.add(user)
-        session.flush()
+        user = session.execute(select(User).where(User.telegram_user_id == telegram_user_id).limit(1)).scalar_one_or_none()
+        if user is None:
+            user = User(telegram_user_id=telegram_user_id)
+            session.add(user)
+            session.flush()
 
-        profile = UserProfile(
-            user_id=user.id,
-            name="Smoke Check",
-            gender=None,
-            birth_date="01.01.1990",
-            birth_time="00:00",
-            birth_place_city="Moscow",
-            birth_place_region=None,
-            birth_place_country="RU",
-        )
-        session.add(profile)
+        profile = session.execute(select(UserProfile).where(UserProfile.user_id == user.id).limit(1)).scalar_one_or_none()
+        if profile is None:
+            profile = UserProfile(
+                user_id=user.id,
+                name=SMOKE_PROFILE_NAME,
+                gender=None,
+                birth_date="01.01.1990",
+                birth_time="00:00",
+                birth_place_city="Moscow",
+                birth_place_region=None,
+                birth_place_country="RU",
+            )
+            session.add(profile)
+        elif profile.name != SMOKE_PROFILE_NAME:
+            profile.name = SMOKE_PROFILE_NAME
+            session.add(profile)
 
         paid_amount = settings.tariff_prices_rub.get(Tariff.T1.value, 0)
-        order = Order(
-            user_id=user.id,
-            tariff=Tariff.T1,
-            amount=paid_amount,
-            currency="RUB",
-            provider=PaymentProvider.NONE,
-            provider_payment_id=f"smoke-{now.strftime('%Y%m%d%H%M%S')}",
-            is_smoke_check=True,
-            status=OrderStatus.PAID,
-            paid_at=now,
-            payment_confirmed=True,
-            payment_confirmed_at=now,
-            payment_confirmation_source=PaymentConfirmationSource.SYSTEM,
-            fulfillment_status=OrderFulfillmentStatus.PENDING,
-        )
-        session.add(order)
-        session.flush()
+        order = session.execute(
+            select(Order)
+            .where(
+                Order.user_id == user.id,
+                Order.is_smoke_check.is_(True),
+                Order.status == OrderStatus.PAID,
+            )
+            .order_by(Order.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if order is None:
+            order = Order(
+                user_id=user.id,
+                tariff=Tariff.T1,
+                amount=paid_amount,
+                currency="RUB",
+                provider=PaymentProvider.NONE,
+                provider_payment_id=f"smoke-{telegram_user_id}",
+                is_smoke_check=True,
+                status=OrderStatus.PAID,
+                paid_at=now,
+                payment_confirmed=True,
+                payment_confirmed_at=now,
+                payment_confirmation_source=PaymentConfirmationSource.SYSTEM,
+                fulfillment_status=OrderFulfillmentStatus.PENDING,
+            )
+            session.add(order)
+            session.flush()
 
         state = session.get(ScreenStateRecord, telegram_user_id)
         if state is None:
@@ -101,11 +126,12 @@ def _prepare_paid_order_and_job() -> tuple[int, int, int, int]:
                 data={},
             )
         state.data = {
-            "smoke_marker": "report_job_completion",
+            SMOKE_MARKER_KEY: SMOKE_MARKER_VALUE,
+            "smoke_tech_user": True,
             "selected_tariff": Tariff.T1.value,
             "order_id": str(order.id),
             "profile": {
-                "name": "Smoke Check",
+                "name": SMOKE_PROFILE_NAME,
                 "birth_date": "01.01.1990",
                 "birth_time": "00:00",
                 "birth_place": {"city": "Moscow", "country": "RU"},
@@ -113,11 +139,22 @@ def _prepare_paid_order_and_job() -> tuple[int, int, int, int]:
         }
         session.add(state)
 
-        job = _create_paid_order_report_job(
-            session,
-            order=order,
-            chat_id=telegram_user_id,
-        )
+        job = session.execute(
+            select(ReportJob)
+            .where(
+                ReportJob.user_id == user.id,
+                ReportJob.order_id == order.id,
+                ReportJob.status.in_([ReportJobStatus.PENDING, ReportJobStatus.IN_PROGRESS]),
+            )
+            .order_by(ReportJob.id.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if job is None:
+            job = _create_paid_order_report_job(
+                session,
+                order=order,
+                chat_id=telegram_user_id,
+            )
         session.flush()
 
         _log(
@@ -149,7 +186,7 @@ def _collect_smoke_entity_ids() -> tuple[set[int], set[int], set[int], set[int]]
         )
 
         smoke_profile_user_ids = set(
-            session.execute(select(UserProfile.user_id).where(UserProfile.name == "Smoke Check"))
+            session.execute(select(UserProfile.user_id).where(UserProfile.name == SMOKE_PROFILE_NAME))
             .scalars()
             .all()
         )
@@ -157,7 +194,7 @@ def _collect_smoke_entity_ids() -> tuple[set[int], set[int], set[int], set[int]]
         smoke_state_telegram_ids = set(
             session.execute(
                 select(ScreenStateRecord.telegram_user_id).where(
-                    cast(ScreenStateRecord.data, Text).like('%"smoke_marker": "report_job_completion"%')
+                    cast(ScreenStateRecord.data, Text).like(f'%"{SMOKE_MARKER_KEY}": "{SMOKE_MARKER_VALUE}"%')
                 )
             )
             .scalars()
@@ -256,13 +293,6 @@ def _cleanup_smoke_entities() -> None:
     _delete(
         "reports",
         delete(Report).where(or_(Report.user_id.in_(smoke_user_ids), Report.id.in_(smoke_report_ids))),
-    )
-    _delete("orders", delete(Order).where(Order.id.in_(smoke_order_ids)))
-    _delete("user_profile", delete(UserProfile).where(UserProfile.user_id.in_(smoke_user_ids)))
-    _delete("users", delete(User).where(User.id.in_(smoke_user_ids)))
-    _delete(
-        "screen_states",
-        delete(ScreenStateRecord).where(ScreenStateRecord.telegram_user_id.in_(smoke_telegram_ids)),
     )
 
     for table_name, count in deleted_counts.items():
