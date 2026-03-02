@@ -93,7 +93,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
 
         content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
 
-        self.assertIn("Ручной режим оплаты включён", content.messages[0])
+        self.assertIn("Реквизиты временно недоступны, напишите в поддержку", content.messages[0])
         keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
         self.assertEqual(keyboard_rows[0][0].url, "https://t.me/example_support")
         self.assertIn("Написать в поддержку", keyboard_rows[0][0].text)
@@ -106,8 +106,16 @@ class PaymentScreenS3Tests(unittest.TestCase):
         content = screen_s3({"selected_tariff": "T1"})
 
         self.assertIn("Оплата сейчас принимается по ручным реквизитам", content.messages[0])
+        self.assertIn("Тариф:", content.messages[0])
+        self.assertIn("Стоимость:", content.messages[0])
         self.assertIn("2200 7000 1234 5678", content.messages[0])
         self.assertIn("Иван Иванов", content.messages[0])
+        self.assertIn("После оплаты отправьте скриншот чека в этот чат", content.messages[0])
+        self.assertIn("Отчёт будет готов в течение 15 минут", content.messages[0])
+
+        keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
+        self.assertEqual(keyboard_rows[0][0].callback_data, "screen:S8")
+        self.assertIn("Я оплатил(а), отправить скрин", keyboard_rows[0][0].text)
 
     def test_s3_has_no_manual_payment_confirmation_button(self) -> None:
         content = screen_s3(
@@ -195,6 +203,13 @@ class PaymentScreenS3Tests(unittest.TestCase):
 
         keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
         self.assertEqual(keyboard_rows[0][0].callback_data, "s3:report_details:back")
+
+    def test_s3_report_details_shows_manual_sla_in_manual_mode(self) -> None:
+        settings.payment_mode = "manual"
+
+        content = screen_s3_report_details({"selected_tariff": "T1"})
+
+        self.assertIn("Отчёт будет готов в течение 15 минут после подтверждения оплаты", content.messages[0])
 
     def test_s3_back_button_targets_s4_by_default(self) -> None:
         content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})

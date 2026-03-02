@@ -500,7 +500,11 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
                     _build_bullets(quick_value_block),
                     "",
                     "Без подписки и автосписаний.",
-                    _build_cta_line(f"Нажмите «{payment_cta}», чтобы перейти к оплате."),
+                    (
+                        _build_cta_line("Оплатите по реквизитам ниже и отправьте скриншот чека в поддержку.")
+                        if manual_mode
+                        else _build_cta_line(f"Нажмите «{payment_cta}», чтобы перейти к оплате.")
+                    ),
                 ]
             )
         )
@@ -511,16 +515,17 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
                 manual_lines = [
                     "Оплата сейчас принимается по ручным реквизитам.",
                     f"Номер карты: {manual_card_number}",
+                    "После оплаты отправьте скриншот чека в этот чат (кнопка поддержки).",
+                    "Отчёт будет готов в течение 15 минут после подтверждения оплаты.",
                 ]
                 if manual_recipient_name:
                     manual_lines.append(f"Получатель: {manual_recipient_name}")
-                manual_lines.append("После перевода нажмите кнопку «Обратная связь», чтобы ускорить подтверждение.")
                 text_parts.append("\n\n" + _build_bullets(manual_lines, EMOJI_ACTION))
             else:
                 text_parts.append(
                     "\n\n"
                     + _build_cta_line(
-                        "Ручной режим оплаты включён, но реквизиты пока не заполнены. Напишите в поддержку — поможем завершить оплату.",
+                        "Реквизиты временно недоступны, напишите в поддержку.",
                         EMOJI_WARNING,
                     )
                 )
@@ -554,6 +559,15 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
                     InlineKeyboardButton(
                         text=_with_button_icons(payment_cta, "💳"),
                         url=payment_url,
+                    ),
+                ]
+            )
+        elif manual_mode and payment_context.get("manual_card_ready"):
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=_with_button_icons("Я оплатил(а), отправить скрин", "📎"),
+                        callback_data="screen:S8",
                     ),
                 ]
             )
@@ -601,6 +615,8 @@ def screen_s3(state: dict[str, Any]) -> ScreenContent:
 
 def screen_s3_report_details(state: dict[str, Any]) -> ScreenContent:
     selected_tariff = _format_tariff_label(state.get("selected_tariff", "T1"))
+    payment_context = get_payment_flow_context()
+    manual_mode = payment_context["mode"] == "manual"
     order_id = state.get("order_id")
     order_status = state.get("order_status")
     order_line = ""
@@ -611,6 +627,7 @@ def screen_s3_report_details(state: dict[str, Any]) -> ScreenContent:
 
     offer_url = settings.offer_url
     offer_line = f"Оплата подтверждает согласие с офертой: {offer_url}." if offer_url else "Оплата подтверждает согласие с офертой."
+    manual_sla_line = "\n• Отчёт будет готов в течение 15 минут после подтверждения оплаты." if manual_mode else ""
 
     text = _with_screen_prefix(
         "S3_INFO",
@@ -622,6 +639,7 @@ def screen_s3_report_details(state: dict[str, Any]) -> ScreenContent:
             "• Прозрачность: сервис не гарантирует конкретный результат, но даёт практичные ориентиры.\n\n"
             "Юридическая информация:\n"
             f"• {offer_line}\n"
+            f"{manual_sla_line}"
             "• Сервис носит информационно-аналитический характер."
             f"{order_line}"
         ),
