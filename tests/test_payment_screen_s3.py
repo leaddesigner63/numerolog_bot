@@ -58,8 +58,14 @@ class PaymentScreenS3Tests(unittest.TestCase):
             self.assertIn("Стоимость:", message)
             self.assertNotIn("||", message)
 
-    def test_s3_shows_start_payment_callback_when_order_not_created_yet(self) -> None:
-        content = screen_s3({"selected_tariff": "T1"})
+    def test_s3_provider_without_payment_url_shows_diagnostic_and_support_cta(self) -> None:
+        settings.payment_mode = "provider"
+        settings.feedback_group_url = "https://t.me/example_support"
+
+        content = screen_s3({"selected_tariff": "T1", "order_id": "42"})
+
+        self.assertIn("Платёжная ссылка пока недоступна (provider-режим)", content.messages[0])
+        self.assertIn("Диагностика: order_id=42, payment_url отсутствует", content.messages[0])
 
         buttons = []
         if content.keyboard and content.keyboard.inline_keyboard:
@@ -68,15 +74,19 @@ class PaymentScreenS3Tests(unittest.TestCase):
                     buttons.append((button.text, button.callback_data, button.url))
 
         callback_values = {callback for _, callback, _ in buttons if callback}
-        fallback_payment_buttons = [
-            text for text, callback, _ in buttons if callback == "payment:start"
-        ]
         url_values = {url for _, _, url in buttons if url}
         self.assertIn("payment:start", callback_values)
-        self.assertTrue(any("Перейти к оплате" in text for text in fallback_payment_buttons))
+        self.assertIn("https://t.me/example_support", url_values)
         self.assertNotIn("https://example.com/pay", url_values)
-        self.assertNotIn("s3:report_details", callback_values)
-        self.assertNotIn("legal:offer", callback_values)
+
+    def test_s3_provider_with_payment_url_renders_url_button(self) -> None:
+        settings.payment_mode = "provider"
+
+        content = screen_s3({"selected_tariff": "T1", "payment_url": "https://example.com/pay"})
+
+        keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
+        self.assertEqual(keyboard_rows[0][0].url, "https://example.com/pay")
+        self.assertIsNone(keyboard_rows[0][0].callback_data)
 
     def test_s3_falls_back_to_provider_mode_for_unknown_payment_mode(self) -> None:
         settings.payment_mode = "unexpected_mode"
@@ -86,7 +96,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
         self.assertEqual(keyboard_rows[0][0].url, "https://example.com/pay")
 
-    def test_s3_manual_mode_without_card_shows_support_cta(self) -> None:
+    def test_s3_manual_without_requisites_shows_support_cta(self) -> None:
         settings.payment_mode = "manual"
         settings.manual_payment_card_number = None
         settings.feedback_group_url = "https://t.me/example_support"
@@ -98,7 +108,7 @@ class PaymentScreenS3Tests(unittest.TestCase):
         self.assertEqual(keyboard_rows[0][0].url, "https://t.me/example_support")
         self.assertIn("Написать в поддержку", keyboard_rows[0][0].text)
 
-    def test_s3_manual_mode_with_card_shows_requisites(self) -> None:
+    def test_s3_manual_with_requisites_shows_card_details(self) -> None:
         settings.payment_mode = "manual"
         settings.manual_payment_card_number = "2200 7000 1234 5678"
         settings.manual_payment_recipient_name = "Иван Иванов"

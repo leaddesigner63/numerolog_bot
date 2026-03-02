@@ -1630,6 +1630,7 @@ async def _prepare_checkout_order(
     tariff_value: str | None,
     force_new_order: bool = False,
 ) -> Order | None:
+    screen_manager.update_state(callback.from_user.id, payment_url=None)
     if tariff_value not in PAID_TARIFFS:
         return None
     try:
@@ -1705,6 +1706,7 @@ async def _prepare_checkout_order(
             order = _create_order(session, user, tariff)
 
         payment_link = None
+        resolved_payment_url = None
         payment_context = get_payment_flow_context()
         provider_mode_enabled = payment_context["mode"] == "provider"
         if settings.payment_enabled and provider_mode_enabled and order.status != OrderStatus.PAID:
@@ -1754,10 +1756,11 @@ async def _prepare_checkout_order(
                     "Платёжная ссылка недоступна: не настроены ключи оплаты. "
                     f"Проверьте переменные {missing_vars}.",
                 )
+            resolved_payment_url = payment_link.url if payment_link else None
 
         screen_manager.update_state(
             callback.from_user.id,
-            payment_url=payment_link.url if payment_link else None,
+            payment_url=resolved_payment_url,
             payment_processing_notice=False,
             **_refresh_order_state(order),
         )
