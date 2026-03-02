@@ -30,9 +30,13 @@ def test_bridge_pages_have_redirect_function_metrika_calls_and_fallback_timer() 
     for source in BRIDGE_PAGES:
         html = _read_bridge_page(source)
 
-        assert "function redirectToBot()" in html
-        assert 'ym(106884182, "hit"' in html or 'ym(106884182, "reachGoal"' in html
-        assert "setTimeout(redirectToBot," in html or "setTimeout(function()" in html
+        assert "function redirectToBot(reason)" in html
+        assert 'ym(106884182, "init"' in html
+        assert 'ym(106884182, "hit"' in html
+        assert 'ym(106884182, "reachGoal"' in html
+        assert html.index('ym(106884182, "init"') < html.index('ym(106884182, "hit"') < html.index('ym(106884182, "reachGoal"')
+        assert "function scheduleFallbackRedirects()" in html
+        assert "setTimeout(function()" in html
 
 
 def test_bridge_pages_have_unique_source_and_start_payload() -> None:

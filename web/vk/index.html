@@ -16,43 +16,72 @@
     var redirected = false;
     var source = 'vk';
     var startPayload = 'src=vk&cmp=clips&pl=1';
+    var fallbackDelaysMs = [1200, 2400, 4200];
+    var emergencyDelayMs = 10000;
+    var trackingUnavailable = false;
 
-    function redirectToBot() {
+    function rememberNoTrackingSignal() {
+      trackingUnavailable = true;
+      if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+        console.warn('Metrika ym is unavailable, fallback telemetry is active', {source: source, payload: startPayload});
+      }
+
+      try {
+        if (window && window.localStorage) {
+          window.localStorage.setItem('bridge_no_tracking_' + source, String(Date.now()));
+        }
+      } catch (error) {
+        if (typeof console !== 'undefined' && typeof console.warn === 'function') {
+          console.warn('Unable to persist no-tracking telemetry flag', error);
+        }
+      }
+    }
+
+    function redirectToBot(reason) {
       if (redirected) {
         return;
       }
       redirected = true;
-      window.location.replace('https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__?start=' + encodeURIComponent(startPayload));
+      var targetUrl = 'https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__?start=' + encodeURIComponent(startPayload);
+      if (trackingUnavailable) {
+        targetUrl += '&trk=0';
+      }
+      if (reason) {
+        targetUrl += '&rr=' + encodeURIComponent(reason);
+      }
+      window.location.replace(targetUrl);
     }
 
-    function sendBridgeGoalAndRedirect() {
+    function scheduleFallbackRedirects() {
+      for (var attemptIndex = 0; attemptIndex < fallbackDelaysMs.length; attemptIndex += 1) {
+        (function(attemptNumber, delayMs) {
+          setTimeout(function() {
+            redirectToBot('fallback_' + attemptNumber);
+          }, delayMs);
+        })(attemptIndex + 1, fallbackDelaysMs[attemptIndex]);
+      }
+    }
+
+    function runBridgeFlow() {
       if (typeof ym !== 'function') {
-        setTimeout(redirectToBot, 250);
+        rememberNoTrackingSignal();
+        scheduleFallbackRedirects();
         return;
       }
 
-      var goalProcessed = false;
-      ym(106884182, "reachGoal", "bridge_redirect", {source: source, payload: startPayload}, function() {
-        goalProcessed = true;
-        redirectToBot();
-      });
-
-      setTimeout(function() {
-        if (!goalProcessed) {
-          redirectToBot();
-        }
-      }, 800);
-    }
-
-    if (typeof ym === 'function') {
       ym(106884182, "init", {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
       ym(106884182, "hit", location.href, {params:{source:source, start_payload:startPayload}});
-      sendBridgeGoalAndRedirect();
-    } else {
-      setTimeout(redirectToBot, 250);
+      ym(106884182, "reachGoal", "bridge_redirect", {source: source, payload: startPayload}, function() {
+        redirectToBot('reachGoal_callback');
+      });
+
+      scheduleFallbackRedirects();
     }
 
-    setTimeout(redirectToBot, 1500);
+    runBridgeFlow();
+    setTimeout(function() {
+      redirectToBot('emergency_timeout');
+    }, emergencyDelayMs);
   </script>
   <noscript><div><img src="https://mc.yandex.ru/watch/106884182" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
   <!-- /Yandex.Metrika counter -->
