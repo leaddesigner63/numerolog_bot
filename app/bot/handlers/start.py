@@ -1,3 +1,5 @@
+import logging
+
 from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.types import Message
@@ -7,6 +9,7 @@ from datetime import datetime, timezone
 from app.bot.handlers.screen_manager import screen_manager
 from app.bot.handlers.screens import ensure_payment_waiter
 from app.bot.screens import get_payment_flow_context
+from app.core.monitoring import increment_first_touch_attribution_errors_total
 from app.db.models import (
     Order,
     OrderStatus,
@@ -22,6 +25,7 @@ from app.db.session import get_session
 from app.services.traffic_attribution import save_user_first_touch_attribution
 
 router = Router()
+logger = logging.getLogger(__name__)
 
 
 def _extract_start_payload(message: Message) -> str | None:
@@ -87,8 +91,17 @@ async def handle_start(message: Message) -> None:
             payload,
             telegram_username=getattr(message.from_user, "username", None),
         )
-    except Exception:
-        pass
+    except Exception as exc:
+        increment_first_touch_attribution_errors_total()
+        logger.warning(
+            "first_touch_attribution_failed",
+            extra={
+                "telegram_user_id": message.from_user.id,
+                "payload": payload,
+                "error_type": exc.__class__.__name__,
+            },
+            exc_info=exc,
+        )
 
     if payload:
         if payload.startswith("resume_nudge"):
