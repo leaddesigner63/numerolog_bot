@@ -10,6 +10,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.bot.handlers import screen_manager as screen_manager_module
 from app.bot.handlers import screens
+from app.core.config import settings
 from app.db.base import Base
 from app.db.models import (
     Order,
@@ -138,35 +139,64 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(state_snapshot.data.get("order_id"))
         self.assertEqual(state_snapshot.data.get("s3_back_target"), "S4")
 
-    async def test_profile_save_routes_to_s3_with_s5_back_target_for_t2_t3(self) -> None:
+    async def test_profile_save_checkout_contract_for_t2_t3_by_mode_and_questionnaire_state(self) -> None:
         self._create_profile(consent_accepted=True)
 
-        for tariff in (Tariff.T2, Tariff.T3):
-            with self.subTest(tariff=tariff.value):
-                screens.screen_manager._store._states.clear()
-                screens.screen_manager.update_state(
-                    1001,
-                    selected_tariff=tariff.value,
-                    questionnaire={"status": "completed"},
-                    personal_data_consent_accepted=True,
-                    order_id=None,
-                )
-                callback = _DummyCallback("profile:save")
-
-                with (
-                    patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
-                    patch.object(screens, "_send_notice", new=AsyncMock()) as send_notice,
-                    patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
-                    patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
-                    patch.object(screens, "_refresh_questionnaire_state") as refresh_questionnaire,
-                    patch.object(screens, "_maybe_run_payment_waiter", new=AsyncMock()),
+        original_payment_mode = getattr(settings, "payment_mode", "provider")
+        cases = (
+            ("manual", Tariff.T2.value, "empty", "S5", None),
+            ("manual", Tariff.T2.value, "in_progress", "S5", None),
+            ("manual", Tariff.T2.value, "completed", "S3", "S5"),
+            ("manual", Tariff.T3.value, "empty", "S5", None),
+            ("manual", Tariff.T3.value, "in_progress", "S5", None),
+            ("manual", Tariff.T3.value, "completed", "S3", "S5"),
+            ("provider", Tariff.T2.value, "empty", "S5", None),
+            ("provider", Tariff.T2.value, "in_progress", "S5", None),
+            ("provider", Tariff.T2.value, "completed", "S3", "S5"),
+            ("provider", Tariff.T3.value, "empty", "S5", None),
+            ("provider", Tariff.T3.value, "in_progress", "S5", None),
+            ("provider", Tariff.T3.value, "completed", "S3", "S5"),
+        )
+        try:
+            for payment_mode, tariff, questionnaire_status, expected_screen, expected_back_target in cases:
+                with self.subTest(
+                    payment_mode=payment_mode,
+                    tariff=tariff,
+                    questionnaire_status=questionnaire_status,
                 ):
-                    refresh_questionnaire.return_value = None
-                    await screens.handle_callbacks(callback, state=SimpleNamespace())
+                    # Контракт: после profile:save для T2/T3 без завершённой анкеты
+                    # пользователь обязан возвращаться на S5, и переход в оплату S3 не допускается.
+                    # При completed-анкете открывается S3 с back-целью S5 независимо от payment_mode.
+                    settings.payment_mode = payment_mode
+                    screens.screen_manager._store._states.clear()
+                    screens.screen_manager.update_state(
+                        1001,
+                        selected_tariff=tariff,
+                        questionnaire={"status": questionnaire_status},
+                        personal_data_consent_accepted=True,
+                        order_id=None,
+                        s3_back_target=None,
+                    )
+                    callback = _DummyCallback("profile:save")
 
-                show_screen.assert_awaited_with(callback, screen_id="S3")
-                state_snapshot = screens.screen_manager.update_state(1001)
-                self.assertEqual(state_snapshot.data.get("s3_back_target"), "S5")
+                    with (
+                        patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+                        patch.object(screens, "_send_notice", new=AsyncMock()),
+                        patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+                        patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+                        patch.object(screens, "_refresh_questionnaire_state") as refresh_questionnaire,
+                        patch.object(screens, "_maybe_run_payment_waiter", new=AsyncMock()),
+                    ):
+                        refresh_questionnaire.return_value = None
+                        await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+                    show_screen.assert_awaited_with(callback, screen_id=expected_screen)
+                    state_snapshot = screens.screen_manager.update_state(1001)
+                    self.assertEqual(state_snapshot.data.get("s3_back_target"), expected_back_target)
+                    if questionnaire_status in {"empty", "in_progress"}:
+                        self.assertNotEqual(expected_screen, "S3")
+        finally:
+            settings.payment_mode = original_payment_mode
 
     async def test_open_checkout_s3_sets_default_back_target_for_t1(self) -> None:
         callback = _DummyCallback("screen:S3")

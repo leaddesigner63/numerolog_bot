@@ -241,6 +241,25 @@ class PaymentScreenS3Tests(unittest.TestCase):
         back_button = keyboard_rows[1][0]
         self.assertEqual(back_button.callback_data, "screen:S5")
 
+    def test_s3_manual_back_button_after_profile_save_for_t2_t3_returns_to_s5(self) -> None:
+        settings.payment_mode = "manual"
+
+        for tariff in ("T2", "T3"):
+            with self.subTest(tariff=tariff):
+                # Контракт: если в manual-режиме пользователь попал в S3 из profile:save
+                # на тарифах T2/T3, back-кнопка всегда возвращает на S5 (анкета).
+                content = screen_s3(
+                    {
+                        "selected_tariff": tariff,
+                        "s3_back_target": "S5",
+                        "order_status": "created",
+                    }
+                )
+
+                keyboard_rows = content.keyboard.inline_keyboard if content.keyboard else []
+                back_button = keyboard_rows[1][0]
+                self.assertEqual(back_button.callback_data, "screen:S5")
+
 
 class PaymentScreenS15Tests(unittest.TestCase):
     def test_s15_shows_only_reports_for_current_tariff(self) -> None:
