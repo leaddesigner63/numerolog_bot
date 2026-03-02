@@ -20,3 +20,18 @@ def test_unsubscribe_page_contains_metrika_counter() -> None:
     assert "https://mc.yandex.ru/metrika/tag.js\"" in html
     assert "https://mc.yandex.ru/watch/106884182" in html
     assert 'ym(106884182, "init"' in html
+
+
+def test_bridge_pages_send_reach_goal_with_source_and_payload() -> None:
+    bridge_pages = {
+        "ig": "ig_reels_1",
+        "vk": "vk_clips_1",
+        "yt": "yt_shorts_1",
+    }
+
+    for source, payload in bridge_pages.items():
+        html = Path(f"web/{source}/index.html").read_text(encoding="utf-8")
+        assert '"reachGoal", "bridge_redirect"' in html
+        assert f"var source = '{source}';" in html
+        assert f"var startPayload = '{payload}';" in html
+        assert 'params:{source:source, start_payload:startPayload}' in html

@@ -103,3 +103,19 @@
 - `source` или `campaign` не переданы (должны быть хотя бы `na`);
 - `start_payload` длиннее 64 символов;
 - `tariff` не входит в список `t0|t1|t2|t3` для тарифного клика.
+
+## 6. Bridge-редиректы (`/ig`, `/vk`, `/yt`) и цель Метрики
+
+Для отдельных bridge-страниц перед редиректом в Telegram отправляется JavaScript-событие:
+
+- `ym(106884182, "reachGoal", "bridge_redirect", {source, payload}, callback)`
+
+Где:
+- `source`: `ig`, `vk`, `yt`;
+- `payload`: соответствующий `start` payload (`ig_reels_1`, `vk_clips_1`, `yt_shorts_1`).
+
+Дополнительно в `hit` передаются `params`:
+- `source`
+- `start_payload`
+
+Это позволяет в отчётах Метрики делать разрез трафика и конверсий по каналу bridge-страницы.
