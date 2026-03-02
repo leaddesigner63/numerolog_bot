@@ -146,6 +146,14 @@ def main() -> int:
             for source, start_payload in expected_sources.items():
                 url = f"https://{source}.{base_domain}/"
                 page = context.new_page()
+                request_redirect_attempts: list[str] = []
+
+                def _capture_request(request: Any) -> None:
+                    request_url = request.url
+                    if isinstance(request_url, str) and request_url.startswith("https://t.me/"):
+                        request_redirect_attempts.append(request_url)
+
+                page.on("request", _capture_request)
                 external_smoke_state["ymCalls"].clear()
                 external_smoke_state["redirectAttempts"].clear()
                 print(f"[INFO] Runtime-smoke: {url}")
@@ -153,6 +161,8 @@ def main() -> int:
                 runtime_state = _collect_runtime_state(page, timeout_ms, external_state=external_smoke_state)
                 ym_calls = runtime_state.get("ymCalls", [])
                 redirect_attempts = runtime_state.get("redirectAttempts", [])
+                if isinstance(redirect_attempts, list) and request_redirect_attempts:
+                    redirect_attempts = [*redirect_attempts, *request_redirect_attempts]
 
                 _assert(
                     len(ym_calls) >= 3,
