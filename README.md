@@ -22,6 +22,7 @@ app/
       screen_manager.py # менеджер экранов (очищает чат, ведёт safe-лог переходов экранов и funnel entry/exit)
       screen_images.py # команда /fill_screen_images для генерации картинок экранов
       fallback.py     # обработчик сообщений/кнопок без сценария (очистка и возврат на старт)
+      tariff_context.py # восстановление тарифного контекста пользователя из БД при пустом state
     report_jobs_worker.py # фоновые задания генерации отчётов (pending/in_progress), heartbeat и авто-нуджи (resume + checkout-value)
     markdown.py       # рендеринг Markdown-разметки в Telegram-HTML
     keyboards.py      # общее правило раскладки inline-кнопок (длинные кнопки: максимум 2 в строке)

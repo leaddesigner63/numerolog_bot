@@ -31,6 +31,7 @@ from app.bot.flows.checkout_state_machine import (
     resolve_checkout_transition,
 )
 from app.bot.handlers.screen_manager import screen_manager
+from app.bot.handlers.tariff_context import resolve_latest_tariff_for_user
 from app.bot.screen_images import (
     S4_SCENARIO_AFTER_PAYMENT,
     S4_SCENARIO_PROFILE,
@@ -2033,6 +2034,16 @@ async def handle_callbacks(callback: CallbackQuery, state: FSMContext) -> None:
         if screen_id == "S5":
             state_snapshot = screen_manager.update_state(callback.from_user.id)
             selected_tariff = state_snapshot.data.get("selected_tariff")
+            if selected_tariff not in {Tariff.T2.value, Tariff.T3.value}:
+                selected_tariff = resolve_latest_tariff_for_user(
+                    callback.from_user.id,
+                    allowed_tariffs={Tariff.T2.value, Tariff.T3.value},
+                )
+                if selected_tariff in {Tariff.T2.value, Tariff.T3.value}:
+                    screen_manager.update_state(
+                        callback.from_user.id,
+                        selected_tariff=selected_tariff,
+                    )
             if selected_tariff not in {Tariff.T2.value, Tariff.T3.value}:
                 await _send_notice(
                     callback, "Анкета доступна только для тарифов T2 и T3."

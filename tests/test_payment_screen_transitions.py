@@ -9,7 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.bot.handlers import screen_manager as screen_manager_module
-from app.bot.handlers import screens
+from app.bot.handlers import screens, tariff_context
 from app.core.config import settings
 from app.db.base import Base
 from app.db.models import (
@@ -63,8 +63,10 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
 
         self._old_get_session_screens = screens.get_session
         self._old_get_session_screen_manager = screen_manager_module.get_session
+        self._old_get_session_tariff_context = tariff_context.get_session
         screens.get_session = _test_get_session
         screen_manager_module.get_session = _test_get_session
+        tariff_context.get_session = _test_get_session
 
         screens.screen_manager._store._states.clear()
 
@@ -76,6 +78,7 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
     def tearDown(self) -> None:
         screens.get_session = self._old_get_session_screens
         screen_manager_module.get_session = self._old_get_session_screen_manager
+        tariff_context.get_session = self._old_get_session_tariff_context
         screens.screen_manager._store._states.clear()
         Base.metadata.drop_all(self.engine)
         self.engine.dispose()
@@ -460,6 +463,48 @@ class PaymentScreenTransitionsTests(unittest.IsolatedAsyncioTestCase):
         send_notice.assert_awaited_with(callback, "Сначала заполните анкету.")
         show_screen.assert_awaited_with(callback, screen_id="S5")
         prepare_checkout.assert_not_awaited()
+
+    async def test_screen_s5_restores_t2_t3_tariff_from_db_when_state_missing(self) -> None:
+        self._create_profile(consent_accepted=True)
+        self._create_order(OrderStatus.CREATED, tariff=Tariff.T2)
+        screens.screen_manager.update_state(
+            1001,
+            selected_tariff=None,
+            profile={"name": "Иван"},
+        )
+        callback = _DummyCallback("screen:S5")
+
+        with (
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+            patch.object(screens, "_show_marketing_consent_or_target_screen", new=AsyncMock()) as open_screen,
+            patch.object(screens, "_send_notice", new=AsyncMock()) as send_notice,
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        send_notice.assert_not_awaited()
+        open_screen.assert_awaited_with(callback, screen_id="S5")
+        self.assertEqual(
+            screens.screen_manager.update_state(1001).data.get("selected_tariff"),
+            Tariff.T2.value,
+        )
+
+    async def test_screen_s5_blocks_when_no_state_and_no_db_tariff_context(self) -> None:
+        screens.screen_manager.update_state(1001, selected_tariff=None, profile={"name": "Иван"})
+        callback = _DummyCallback("screen:S5")
+
+        with (
+            patch.object(screens, "_safe_callback_processing", new=AsyncMock()),
+            patch.object(screens, "_safe_callback_answer", new=AsyncMock()),
+            patch.object(screens, "_show_screen_for_callback", new=AsyncMock()) as show_screen,
+            patch.object(screens, "_show_marketing_consent_or_target_screen", new=AsyncMock()) as open_screen,
+            patch.object(screens, "_send_notice", new=AsyncMock()) as send_notice,
+        ):
+            await screens.handle_callbacks(callback, state=SimpleNamespace())
+
+        send_notice.assert_awaited_with(callback, "Анкета доступна только для тарифов T2 и T3.")
+        show_screen.assert_awaited_with(callback, screen_id="S1")
+        open_screen.assert_not_awaited()
 
     async def test_report_retry_requires_confirmed_payment(self) -> None:
         order_id = self._create_order(OrderStatus.CREATED)

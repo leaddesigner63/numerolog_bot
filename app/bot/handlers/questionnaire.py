@@ -17,6 +17,7 @@ from app.bot.questionnaire.config import (
 )
 from app.bot.handlers.profile import start_profile_wizard
 from app.bot.handlers.screen_manager import screen_manager
+from app.bot.handlers.tariff_context import resolve_latest_tariff_for_user
 from app.db.models import (
     QuestionnaireResponse,
     QuestionnaireStatus,
@@ -346,6 +347,16 @@ def _build_actual_answers(
 async def _ensure_questionnaire_access(callback: CallbackQuery) -> bool:
     state_snapshot = screen_manager.update_state(callback.from_user.id)
     selected_tariff = state_snapshot.data.get("selected_tariff")
+    if selected_tariff not in {Tariff.T2.value, Tariff.T3.value}:
+        selected_tariff = resolve_latest_tariff_for_user(
+            callback.from_user.id,
+            allowed_tariffs={Tariff.T2.value, Tariff.T3.value},
+        )
+        if selected_tariff in {Tariff.T2.value, Tariff.T3.value}:
+            screen_manager.update_state(
+                callback.from_user.id,
+                selected_tariff=selected_tariff,
+            )
     if selected_tariff not in {Tariff.T2.value, Tariff.T3.value}:
         await screen_manager.send_ephemeral_message(
             callback.message,
