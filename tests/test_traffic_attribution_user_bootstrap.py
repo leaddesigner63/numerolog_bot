@@ -61,6 +61,21 @@ class TrafficAttributionUserBootstrapTests(unittest.TestCase):
         self.assertEqual(record.campaign, "seo")
         self.assertEqual(record.placement, "cta")
 
+
+    def test_parse_first_touch_payload_supports_marker_format_and_preserves_placement(self) -> None:
+        parsed = traffic_attribution_module.parse_first_touch_payload("src_sitecmp_launchpl_tariff_t2")
+        self.assertEqual(parsed["start_payload"], "src_sitecmp_launchpl_tariff_t2")
+        self.assertEqual(parsed["source"], "site")
+        self.assertEqual(parsed["campaign"], "launch")
+        self.assertEqual(parsed["placement"], "tariff_t2")
+
+    def test_parse_first_touch_payload_supports_underscore_format_with_complex_placement(self) -> None:
+        parsed = traffic_attribution_module.parse_first_touch_payload("site_seo_tariff_t3")
+        self.assertEqual(parsed["start_payload"], "site_seo_tariff_t3")
+        self.assertEqual(parsed["source"], "site")
+        self.assertEqual(parsed["campaign"], "seo")
+        self.assertEqual(parsed["placement"], "tariff_t3")
+
     def test_parse_first_touch_payload_supports_tme_links_and_start_prefix(self) -> None:
         parsed_from_link = traffic_attribution_module.parse_first_touch_payload(
             "https://t.me/AIreadUbot?start=site_seo_cta"

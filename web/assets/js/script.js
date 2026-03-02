@@ -46,7 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   });
 
-  const TELEGRAM_TARGET_URL = 'https://t.me/AIreadUbot?start=site_seo_all';
+  const TELEGRAM_BOT_URL = 'https://t.me/AIreadUbot';
   const trackingSessionId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
   const readAttribution = () => {
@@ -59,6 +59,19 @@ document.addEventListener('DOMContentLoaded', () => {
   };
 
   const attribution = readAttribution();
+
+  const buildTelegramStartPayload = (placement) => {
+    const source = attribution.source || 'na';
+    const campaign = attribution.campaign || 'na';
+    const safePlacement = placement || 'na';
+
+    return `src_${source}cmp_${campaign}pl_${safePlacement}`;
+  };
+
+  const buildTelegramTargetUrl = (placement) => {
+    const startPayload = buildTelegramStartPayload(placement);
+    return `${TELEGRAM_BOT_URL}?start=${encodeURIComponent(startPayload)}`;
+  };
 
   const trackEvent = (eventName, payload) => {
     const eventPayload = {
@@ -90,7 +103,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const placement = cta.dataset.placement || 'na';
       const tariff = cta.dataset.tariff || 'na';
-      const targetUrl = TELEGRAM_TARGET_URL;
+      const targetUrl = buildTelegramTargetUrl(placement);
       const eventName = cta.hasAttribute('data-tariff') ? 'landing_tariff_click' : 'landing_cta_click';
 
       cta.setAttribute('href', targetUrl);
