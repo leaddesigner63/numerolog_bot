@@ -11,6 +11,7 @@ from app.bot.handlers import start as start_module
 from app.bot.handlers import screen_manager as screen_manager_module
 from app.services import traffic_attribution as traffic_attribution_module
 from app.bot.handlers.screen_manager import screen_manager
+from app.core import monitoring as monitoring_module
 from app.db.base import Base
 from app.db.models import (
     Order,
@@ -56,6 +57,7 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
         screen_manager_module.get_session = _test_get_session
         traffic_attribution_module.get_session = _test_get_session
         screen_manager._store._states.clear()
+        monitoring_module.reset_monitoring_counters()
 
         with self.SessionLocal() as session:
             session.add_all(
@@ -71,6 +73,7 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
         screen_manager_module.get_session = self._old_screen_manager_get_session
         traffic_attribution_module.get_session = self._old_traffic_get_session
         screen_manager._store._states.clear()
+        monitoring_module.reset_monitoring_counters()
         Base.metadata.drop_all(self.engine)
         self.engine.dispose()
 
@@ -306,6 +309,23 @@ class StartPayloadRoutingTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(records[0].campaign)
         self.assertIsNone(records[0].placement)
         self.assertEqual(records[0].raw_parts, [])
+
+
+    async def test_start_logs_and_counts_first_touch_errors_without_breaking_flow(self) -> None:
+        with (
+            patch.object(start_module, "save_user_first_touch_attribution", side_effect=RuntimeError("boom")),
+            patch.object(start_module, "logger") as mocked_logger,
+            patch.object(screen_manager, "show_screen", new=AsyncMock()) as show_screen,
+        ):
+            await start_module.handle_start(self._message("/start source_campaign"))
+
+        self.assertEqual(show_screen.await_args.kwargs["screen_id"], "S0")
+        self.assertEqual(monitoring_module.get_first_touch_attribution_errors_total(), 1)
+        mocked_logger.warning.assert_called_once()
+        warning_kwargs = mocked_logger.warning.call_args.kwargs
+        self.assertEqual(warning_kwargs["extra"]["telegram_user_id"], 1001)
+        self.assertEqual(warning_kwargs["extra"]["payload"], "source_campaign")
+        self.assertEqual(warning_kwargs["extra"]["error_type"], "RuntimeError")
 
     async def test_start_ignores_paid_history_without_payload(self) -> None:
         self._create_order(1, OrderStatus.PAID)
