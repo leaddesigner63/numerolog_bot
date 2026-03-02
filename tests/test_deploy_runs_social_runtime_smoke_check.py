@@ -20,4 +20,6 @@ def test_runtime_social_smoke_script_spies_on_ym_and_redirect() -> None:
     assert "args[1] === 'reachGoal'" in script
     assert 'redirectAttempts' in script
     assert 'locationProto.replace = function(url)' in script
+    assert 'page.on("request", _capture_request)' in script
+    assert 'request_url.startswith("https://t.me/")' in script
     assert 'rr=reachGoal_callback' in script
