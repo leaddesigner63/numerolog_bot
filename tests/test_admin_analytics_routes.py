@@ -32,6 +32,7 @@ from app.db.models import (
     FeedbackMessage,
     FeedbackStatus,
     UserFirstTouchAttribution,
+    UserTouchEvent,
 )
 from app.main import create_app
 
@@ -1424,14 +1425,14 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
             )
             session.commit()
 
-        summary = self.client.get("/admin/api/analytics/traffic/summary")
+        summary = self.client.get("/admin/api/analytics/traffic/summary", params={"attribution_mode": "first_touch"})
         self.assertEqual(summary.status_code, 200)
         summary_payload = summary.json()
         self.assertEqual(summary_payload["data"]["summary"]["users_started_total"], 3)
         self.assertIn("conversions", summary_payload["data"]["summary"])
         self.assertEqual(summary_payload["warnings"], [])
 
-        by_source = self.client.get("/admin/api/analytics/traffic/by-source", params={"top_n": 1})
+        by_source = self.client.get("/admin/api/analytics/traffic/by-source", params={"top_n": 1, "attribution_mode": "first_touch"})
         self.assertEqual(by_source.status_code, 200)
         by_source_payload = by_source.json()
         self.assertEqual(len(by_source_payload["data"]["by_source"]), 1)
@@ -1441,7 +1442,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
 
         by_campaign = self.client.get(
             "/admin/api/analytics/traffic/by-campaign",
-            params={"top_n": 2, "page": 1, "page_size": 1},
+            params={"top_n": 2, "page": 1, "page_size": 1, "attribution_mode": "first_touch"},
         )
         self.assertEqual(by_campaign.status_code, 200)
         by_campaign_payload = by_campaign.json()
@@ -1527,7 +1528,7 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
                 event.created_at = base_time + timedelta(minutes=idx)
             session.commit()
 
-        summary = self.client.get("/admin/api/analytics/traffic/summary", params={"tariff": "T2", "period": "all"})
+        summary = self.client.get("/admin/api/analytics/traffic/summary", params={"tariff": "T2", "period": "all", "attribution_mode": "first_touch"})
         self.assertEqual(summary.status_code, 200)
         summary_payload = summary.json()
         self.assertEqual(summary_payload["filters_applied"]["tariff"], "T2")
@@ -1543,14 +1544,14 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
         by_tariff_click_first_touch = {item["tariff"]: item for item in summary_payload["data"]["summary"]["paid_per_tariff_click_first_touch"]}
         self.assertEqual(by_tariff_click_first_touch["T2"]["tariff_click_users"], 2)
 
-        by_source = self.client.get("/admin/api/analytics/traffic/by-source", params={"tariff": "T2", "top_n": 10})
+        by_source = self.client.get("/admin/api/analytics/traffic/by-source", params={"tariff": "T2", "top_n": 10, "attribution_mode": "first_touch"})
         self.assertEqual(by_source.status_code, 200)
         source_rows = by_source.json()["data"]["by_source"]
         self.assertEqual(source_rows, [{"source": "vk", "users": 2, "conversion_to_paid": 0.5}])
 
         by_campaign = self.client.get(
             "/admin/api/analytics/traffic/by-campaign",
-            params={"tariff": "T2", "top_n": 10, "page": 1, "page_size": 10},
+            params={"tariff": "T2", "top_n": 10, "page": 1, "page_size": 10, "attribution_mode": "first_touch"},
         )
         self.assertEqual(by_campaign.status_code, 200)
         campaign_payload = by_campaign.json()
@@ -1559,6 +1560,50 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
             campaign_payload["data"]["by_campaign"],
             [{"source": "vk", "campaign": "retarget", "users": 2, "conversion": 0.5}],
         )
+
+    def test_traffic_analytics_endpoints_default_to_all_touch_mode(self) -> None:
+        base_time = datetime(2026, 4, 1, tzinfo=timezone.utc)
+        with self.SessionLocal() as session:
+            session.add(User(id=811, telegram_user_id=9811))
+            session.add(
+                UserFirstTouchAttribution(
+                    telegram_user_id=9811,
+                    source="legacy",
+                    campaign="legacy",
+                    start_payload="legacy",
+                    captured_at=base_time,
+                )
+            )
+            session.add(
+                UserTouchEvent(
+                    telegram_user_id=9811,
+                    source="new",
+                    campaign="new_campaign",
+                    start_payload="new",
+                    captured_at=base_time + timedelta(minutes=1),
+                )
+            )
+            session.commit()
+
+        summary = self.client.get("/admin/api/analytics/traffic/summary")
+        self.assertEqual(summary.status_code, 200)
+        summary_payload = summary.json()
+        self.assertEqual(summary_payload["filters_applied"]["attribution_mode"], "all_touch")
+        self.assertEqual(summary_payload["data"]["summary"]["attribution_mode"], "all_touch")
+
+        by_source = self.client.get("/admin/api/analytics/traffic/by-source")
+        self.assertEqual(by_source.status_code, 200)
+        source_rows = by_source.json()["data"]["by_source"]
+        self.assertEqual(source_rows, [{"source": "new", "users": 1, "conversion_to_paid": 0.0}])
+
+        by_campaign = self.client.get("/admin/api/analytics/traffic/by-campaign")
+        self.assertEqual(by_campaign.status_code, 200)
+        self.assertEqual(
+            by_campaign.json()["data"]["by_campaign"],
+            [{"source": "new", "campaign": "new_campaign", "users": 1, "conversion": 0.0}],
+        )
+
+
 
     def test_traffic_analytics_endpoints_return_safe_fallback_on_db_error(self) -> None:
         with patch.object(
