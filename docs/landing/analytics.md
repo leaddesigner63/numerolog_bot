@@ -106,16 +106,31 @@
 
 ## 6. Bridge-редиректы (`/ig`, `/vk`, `/yt`) и цель Метрики
 
+### 6.1 Финальный словарь полей для `hit` и `reachGoal`
+
+- `source` — канал bridge-страницы (`ig` | `vk` | `yt`).
+- `start_payload` — итоговый payload для Telegram deep-link (`start`).
+- `rr` — причина редиректа в URL (технический маркер `fallback_*`, `reachGoal_callback`, `emergency_timeout`).
+- `trk` — технический флаг отсутствия трекинга (`0`, если `ym` недоступен).
+
+
 Для отдельных bridge-страниц перед редиректом в Telegram отправляется JavaScript-событие:
 
-- `ym(106884182, "reachGoal", "bridge_redirect", {source, payload}, callback)`
+- `ym(106884182, "reachGoal", "bridge_redirect", {source, start_payload}, callback)`
 
 Где:
 - `source`: `ig`, `vk`, `yt`;
-- `payload`: соответствующий `start` payload (`ig_reels_1`, `vk_clips_1`, `yt_shorts_1`).
+- `start_payload`: соответствующий `start` payload (`src=ig&cmp=reels&pl=1`, `src=vk&cmp=clips&pl=1`, `src=yt&cmp=shorts&pl=1`).
 
 Дополнительно в `hit` передаются `params`:
 - `source`
 - `start_payload`
 
 Это позволяет в отчётах Метрики делать разрез трафика и конверсий по каналу bridge-страницы.
+
+### 6.2 Примеры сегментации в Метрике
+
+1. Конверсии `bridge_redirect` по источнику: срез `source` (`ig/vk/yt`).
+2. Конверсии `bridge_redirect` по payload: срез `start_payload` (например, `src=yt&cmp=shorts&pl=1`).
+3. Сравнение качества редиректа: сегмент `rr=reachGoal_callback` против `rr=fallback_*`.
+4. Контроль отказов трекинга: сегмент `trk=0` для оценки доли визитов без активного `ym`.

@@ -22,7 +22,7 @@ def test_unsubscribe_page_contains_metrika_counter() -> None:
     assert 'ym(106884182, "init"' in html
 
 
-def test_bridge_pages_send_reach_goal_with_source_and_payload() -> None:
+def test_bridge_pages_send_reach_goal_with_source_and_start_payload() -> None:
     bridge_pages = {
         "ig": "src=ig&cmp=reels&pl=1",
         "vk": "src=vk&cmp=clips&pl=1",
@@ -35,6 +35,7 @@ def test_bridge_pages_send_reach_goal_with_source_and_payload() -> None:
         assert f"var source = '{source}';" in html
         assert f"var startPayload = '{payload}';" in html
         assert 'params:{source:source, start_payload:startPayload}' in html
+        assert '{source: source, start_payload: startPayload}' in html
         assert "var fallbackDelaysMs = [1200, 2400, 4200];" in html
         assert "var emergencyDelayMs = 10000;" in html
         assert "targetUrl += '&trk=0';" in html

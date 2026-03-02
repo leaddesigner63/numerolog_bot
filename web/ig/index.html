@@ -21,7 +21,7 @@
     function rememberNoTrackingSignal() {
       trackingUnavailable = true;
       if (typeof console !== 'undefined' && typeof console.warn === 'function') {
-        console.warn('Metrika ym is unavailable, fallback telemetry is active', {source: source, payload: startPayload});
+        console.warn('Metrika ym is unavailable, fallback telemetry is active', {source: source, start_payload: startPayload});
       }
 
       try {
@@ -69,7 +69,7 @@
 
       ym(106884182, "init", {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
       ym(106884182, "hit", location.href, {params:{source:source, start_payload:startPayload}});
-      ym(106884182, "reachGoal", "bridge_redirect", {source: source, payload: startPayload}, function() {
+      ym(106884182, "reachGoal", "bridge_redirect", {source: source, start_payload: startPayload}, function() {
         redirectToBot('reachGoal_callback');
       });
 
