@@ -70,6 +70,7 @@ docs/
     autodeploy_step_by_step.md # пошаговая инструкция по настройке автодеплоя для пользователя
     autodeploy_retention_nudge_step_by_step.md # деплой retention-nudge и post-deploy проверки
     autodeploy_payment_confirmation_step_by_step.md # автодеплой с безопасным подтверждением оплаты (только webhook/polling в production)
+    autodeploy_manual_payment_mode_step_by_step.md # быстрый hot-switch provider/manual/provider + smoke-check ручной оплаты
     autodeploy_admin_username_step_by_step.md # автодеплой изменений админки с отображением пользователей по username
     autodeploy_admin_reliability_step_by_step.md # защита от недоступности админки после деплоя (systemd + API healthcheck)
     autodeploy_db_recovery_retry_step_by_step.md # защита автодеплоя при recovery PostgreSQL (ретраи Alembic до готовности БД)
@@ -244,6 +245,13 @@ python -m http.server 8080 --directory web
 - Для изменения логики раскладки кнопок используйте отдельный runbook: [`docs/deploy/autodeploy_keyboard_layout_step_by_step.md`](docs/deploy/autodeploy_keyboard_layout_step_by_step.md).
 - Для релиза и проверки целей bridge-редиректов (`ig`/`vk`/`yt`) используйте runbook: [`docs/deploy/autodeploy_bridge_redirect_goal_step_by_step.md`](docs/deploy/autodeploy_bridge_redirect_goal_step_by_step.md).
 - Для полного пошагового автодеплоя социальных поддоменов (`ig.aireadu.ru`, `vk.aireadu.ru`, `yt.aireadu.ru`) используйте runbook: [`docs/deploy/autodeploy_social_subdomains_step_by_step.md`](docs/deploy/autodeploy_social_subdomains_step_by_step.md).
+- Для временного hot-switch оплаты (`provider -> manual -> provider`) используйте runbook: [`docs/deploy/autodeploy_manual_payment_mode_step_by_step.md`](docs/deploy/autodeploy_manual_payment_mode_step_by_step.md).
+
+### Checklist наблюдаемости (manual-оплаты)
+
+- Доля заказов в `paid` (manual): `manual_paid_orders_count / all_paid_orders_count` за день/неделю.
+- Время от `paid_at` до `ReportJob COMPLETED`: контролируйте p50/p95 для manual-заказов.
+- Количество недоставленных сообщений в поддержку: отдельный контроль ошибок доставки подтверждений оплаты и admin-уведомлений.
 
 5. Для релиза уникальности `reports.order_id` сначала выполните предмиграционную очистку дублей:
 
@@ -380,6 +388,26 @@ pytest -q tests/test_yandex_metrika_counter.py
 4. Для отказоустойчивости при неполной конфигурации:
    - разрешено оставлять платёжные переменные пустыми в dev,
    - бот не должен падать, но будет показывать уведомление о недоступной ссылке оплаты.
+
+## Временный manual-режим оплаты
+
+Используйте этот режим как временный fallback, если платёжный провайдер недоступен, но нужно продолжать приём оплат.
+
+Основные env-переменные:
+
+- `PAYMENT_MODE`:
+  - `provider` — стандартный путь с подтверждением через webhook/polling провайдера;
+  - `manual` — ручной путь с оплатой по реквизитам и подтверждением через админку.
+- `MANUAL_PAYMENT_CARD_NUMBER` — реквизиты, которые показываются пользователю на экране S3 в `manual`-режиме.
+
+Пользовательский путь в manual-режиме:
+
+1. Пользователь приходит на экран оплаты **S3** и видит реквизиты для перевода.
+2. Пользователь отправляет скрин оплаты в поддержку через бота.
+3. Администратор проверяет перевод и ставит заказу статус `paid` в админке.
+4. После `paid` автоматически подхватывается генерация: `ReportJob` доводится до `COMPLETED`, отчёт отправляется пользователю.
+
+Подробный пошаговый деплой и smoke-check см. в `docs/deploy/autodeploy_manual_payment_mode_step_by_step.md`.
 
 ## Запуск, тестирование, деплой (коротко)
 
