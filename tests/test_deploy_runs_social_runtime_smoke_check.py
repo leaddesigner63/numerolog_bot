@@ -18,5 +18,6 @@ def test_runtime_social_smoke_script_spies_on_ym_and_redirect() -> None:
 
     assert 'window.ym = function(...args)' in script
     assert "args[1] === 'reachGoal'" in script
-    assert 'context.route("https://t.me/**", _capture_telegram_redirect)' in script
+    assert 'redirectAttempts' in script
+    assert 'locationProto.replace = function(url)' in script
     assert 'rr=reachGoal_callback' in script
