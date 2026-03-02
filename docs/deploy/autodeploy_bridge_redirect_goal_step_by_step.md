@@ -8,7 +8,7 @@
 - `web/vk/index.html`
 - `web/yt/index.html`
 
-Изменения добавляют событие `reachGoal` для цели `bridge_redirect` и передают `source` + `start_payload` в params.
+Изменения добавляют событие `reachGoal` для цели `bridge_redirect` и передают единый словарь полей `source` + `start_payload` и в `hit`, и в `reachGoal`.
 
 ## Шаги автодеплоя
 
@@ -42,8 +42,7 @@
 3. Отфильтруйте событие `bridge_redirect`.
 4. Проверьте разрезы по параметрам:
    - `source`: `ig`, `vk`, `yt`
-   - `payload`: `ig_reels_1`, `vk_clips_1`, `yt_shorts_1`
-   - `start_payload`: в params хита на соответствующей странице
+   - `start_payload`: `src=ig&cmp=reels&pl=1`, `src=vk&cmp=clips&pl=1`, `src=yt&cmp=shorts&pl=1`
 
 ## Откат
 
@@ -52,3 +51,15 @@
 1. Откатите коммит с изменениями bridge-страниц.
 2. Перезапустите автодеплой через `deploy.yml`.
 3. Повторите smoke-check `./scripts/smoke_check_landing.sh`.
+
+
+## Финальный словарь полей
+
+Для bridge-страниц зафиксирована единая схема параметров:
+
+- `source` — источник (`ig` | `vk` | `yt`).
+- `start_payload` — payload deep-link для Telegram (`start`).
+- `rr` — техническая причина редиректа в URL (`reachGoal_callback`, `fallback_*`, `emergency_timeout`).
+- `trk` — флаг отсутствия Метрики (`0`, если `ym` недоступен).
+
+Используйте эти поля для сегментации в отчётах Метрики и проверки стабильности callback-редиректа.

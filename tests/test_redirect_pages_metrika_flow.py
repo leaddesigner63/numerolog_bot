@@ -37,6 +37,7 @@ def test_bridge_pages_have_redirect_function_metrika_calls_and_fallback_timer() 
         assert html.index('ym(106884182, "init"') < html.index('ym(106884182, "hit"') < html.index('ym(106884182, "reachGoal"')
         assert "function scheduleFallbackRedirects()" in html
         assert "setTimeout(function()" in html
+        assert "{source: source, start_payload: startPayload}" in html
 
 
 def test_bridge_pages_have_unique_source_and_start_payload() -> None:
