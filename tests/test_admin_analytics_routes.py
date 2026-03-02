@@ -21,6 +21,7 @@ from app.db.models import (
     ReportJob,
     ReportJobStatus,
     ServiceHeartbeat,
+    ScreenStateRecord,
     ScreenTransitionEvent,
     ScreenTransitionTriggerType,
     Tariff,
@@ -1476,6 +1477,96 @@ class AdminAnalyticsRoutesTests(unittest.TestCase):
             for order in refreshed:
                 self.assertEqual(order.fulfillment_status, OrderFulfillmentStatus.COMPLETED)
                 self.assertIsNotNone(order.fulfilled_at)
+
+    def test_admin_order_status_paid_creates_report_job_with_chat_id(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=106, telegram_user_id=700706)
+            order = Order(
+                id=209,
+                user_id=106,
+                tariff=Tariff.T2,
+                amount=1990,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.CREATED,
+            )
+            state = ScreenStateRecord(telegram_user_id=700706, screen_id="S3")
+            session.add_all([user, order, state])
+            session.commit()
+
+        response = self.client.post("/admin/api/orders/209/status", json={"status": "paid"})
+        self.assertEqual(response.status_code, 200)
+
+        with self.SessionLocal() as session:
+            jobs = session.query(ReportJob).filter(ReportJob.order_id == 209).all()
+            self.assertEqual(len(jobs), 1)
+            self.assertEqual(jobs[0].status, ReportJobStatus.PENDING)
+            self.assertEqual(jobs[0].chat_id, 700706)
+
+    def test_admin_orders_bulk_status_paid_requeues_failed_job(self) -> None:
+        with self.SessionLocal() as session:
+            user = User(id=107, telegram_user_id=700707)
+            first = Order(
+                id=210,
+                user_id=107,
+                tariff=Tariff.T1,
+                amount=990,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.CREATED,
+            )
+            second = Order(
+                id=211,
+                user_id=107,
+                tariff=Tariff.T3,
+                amount=2990,
+                currency="RUB",
+                provider=PaymentProvider.PRODAMUS,
+                status=OrderStatus.PENDING,
+            )
+            active_job = ReportJob(
+                user_id=107,
+                order_id=210,
+                tariff=Tariff.T1,
+                status=ReportJobStatus.IN_PROGRESS,
+                attempts=2,
+                chat_id=123,
+            )
+            failed_job = ReportJob(
+                user_id=107,
+                order_id=211,
+                tariff=Tariff.T3,
+                status=ReportJobStatus.FAILED,
+                attempts=3,
+                chat_id=1,
+                last_error="boom",
+                lock_token="token",
+                locked_at=datetime.now(timezone.utc),
+            )
+            state = ScreenStateRecord(telegram_user_id=700707, screen_id="S4")
+            session.add_all([user, first, second, active_job, failed_job, state])
+            session.commit()
+
+        response = self.client.post(
+            "/admin/api/orders/bulk-status",
+            json={"ids": [210, 211], "status": "paid"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        with self.SessionLocal() as session:
+            first_jobs = session.query(ReportJob).filter(ReportJob.order_id == 210).all()
+            second_jobs = session.query(ReportJob).filter(ReportJob.order_id == 211).all()
+            self.assertEqual(len(first_jobs), 1)
+            self.assertEqual(first_jobs[0].status, ReportJobStatus.IN_PROGRESS)
+            self.assertEqual(first_jobs[0].chat_id, 700707)
+
+            self.assertEqual(len(second_jobs), 1)
+            self.assertEqual(second_jobs[0].status, ReportJobStatus.PENDING)
+            self.assertEqual(second_jobs[0].attempts, 0)
+            self.assertIsNone(second_jobs[0].last_error)
+            self.assertIsNone(second_jobs[0].lock_token)
+            self.assertIsNone(second_jobs[0].locked_at)
+            self.assertEqual(second_jobs[0].chat_id, 700707)
 
     def test_admin_order_status_paid_marks_manual_source_without_payment_confirmation(self) -> None:
         with self.SessionLocal() as session:
