@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from sqlalchemy import Text, cast, func, or_, select
+from sqlalchemy import Text, cast, exists, func, literal, or_, select
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
@@ -55,7 +55,7 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
-def _collect_smoke_ids() -> tuple[set[int], set[int], set[int], set[int], set[int], int]:
+def _collect_smoke_ids() -> tuple[set[int], set[int], set[int], set[int], set[int], set[int], int]:
     smoke_telegram_user_id = _env_int(SMOKE_USER_ID_ENV, SMOKE_TELEGRAM_USER_ID_DEFAULT)
     with get_session() as session:
         smoke_order_ids = collect_smoke_order_ids(session)
@@ -85,12 +85,46 @@ def _collect_smoke_ids() -> tuple[set[int], set[int], set[int], set[int], set[in
             .all()
         )
 
-    return smoke_user_ids, smoke_telegram_ids, smoke_order_ids, smoke_report_ids, smoke_job_ids, smoke_telegram_user_id
+    return (
+        smoke_user_ids,
+        smoke_telegram_ids,
+        smoke_order_ids,
+        smoke_report_ids,
+        smoke_job_ids,
+        smoke_tech_user_ids,
+        smoke_telegram_user_id,
+    )
+
+
+def _collect_orphan_smoke_user_ids(smoke_tech_user_ids: set[int]) -> list[int]:
+    if not smoke_tech_user_ids:
+        return []
+
+    with get_session() as session:
+        orphan_rows = session.execute(
+            select(User.id)
+            .where(User.id.in_(smoke_tech_user_ids))
+            .where(
+                ~exists(select(literal(1)).where(UserProfile.user_id == User.id)),
+                ~exists(select(literal(1)).where(Order.user_id == User.id)),
+                ~exists(select(literal(1)).where(ScreenStateRecord.telegram_user_id == User.telegram_user_id)),
+            )
+            .order_by(User.id.asc())
+        ).scalars()
+        return [int(user_id) for user_id in orphan_rows]
 
 
 def main() -> int:
     try:
-        smoke_user_ids, smoke_telegram_ids, smoke_order_ids, smoke_report_ids, smoke_job_ids, smoke_telegram_user_id = _collect_smoke_ids()
+        (
+            smoke_user_ids,
+            smoke_telegram_ids,
+            smoke_order_ids,
+            smoke_report_ids,
+            smoke_job_ids,
+            smoke_tech_user_ids,
+            smoke_telegram_user_id,
+        ) = _collect_smoke_ids()
         with get_session() as session:
             counts = {
                 "users": session.execute(select(func.count(User.id)).where(User.id.in_(smoke_user_ids))).scalar_one(),
@@ -150,6 +184,7 @@ def main() -> int:
                     )
                 ).scalar_one(),
             }
+            orphan_user_ids = _collect_orphan_smoke_user_ids(smoke_tech_user_ids)
     except Exception as exc:
         print(f"[smoke_residuals] stage=check_error error={exc.__class__.__name__}: {exc}", flush=True)
         return 1
@@ -175,6 +210,14 @@ def main() -> int:
             [f"{table}={count}" for table, count in sorted({**transient_non_zero, **invalid_technical}.items())]
         )
         print(f"[smoke_residuals] stage=failed leftovers_detected={details}", flush=True)
+        return 1
+
+    if orphan_user_ids:
+        orphan_ids = ",".join(str(user_id) for user_id in orphan_user_ids)
+        print(
+            f"[smoke_residuals] stage=failed_orphan_users user_ids={orphan_ids} leftovers_detected=orphan_users",
+            flush=True,
+        )
         return 1
 
     print("[smoke_residuals] stage=ok leftovers_detected=0", flush=True)
