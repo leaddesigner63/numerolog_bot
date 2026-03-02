@@ -195,6 +195,48 @@ class ScreenS4KeyboardTests(unittest.TestCase):
         self.assertEqual(labels.count("➡️ Тарифы"), 0)
         self.assertEqual(labels[0], "💳 Перейти к оплате")
 
+    def test_t2_with_incomplete_questionnaire_shows_cta_to_s5(self) -> None:
+        content = screen_s4(
+            {
+                "selected_tariff": "T2",
+                "order_status": "pending",
+                "questionnaire": {"status": "in_progress", "answers": {"q1": "ответ"}},
+            }
+        )
+
+        self.assertIsNotNone(content.keyboard)
+        primary_button = content.keyboard.inline_keyboard[0][0]
+        self.assertEqual(primary_button.callback_data, "screen:S5")
+        self.assertEqual(primary_button.text, "▶️ Продолжить анкету")
+
+    def test_t3_with_completed_questionnaire_shows_cta_to_s3(self) -> None:
+        content = screen_s4(
+            {
+                "selected_tariff": "T3",
+                "order_status": "pending",
+                "questionnaire": {"status": "completed"},
+            }
+        )
+
+        self.assertIsNotNone(content.keyboard)
+        primary_button = content.keyboard.inline_keyboard[0][0]
+        self.assertEqual(primary_button.callback_data, "screen:S3")
+        self.assertEqual(primary_button.text, "💳 Перейти к оплате")
+
+    def test_t1_without_questionnaire_keeps_cta_to_s3(self) -> None:
+        content = screen_s4(
+            {
+                "selected_tariff": "T1",
+                "order_status": "pending",
+                "questionnaire": {"status": "in_progress"},
+            }
+        )
+
+        self.assertIsNotNone(content.keyboard)
+        primary_button = content.keyboard.inline_keyboard[0][0]
+        self.assertEqual(primary_button.callback_data, "screen:S3")
+        self.assertEqual(primary_button.text, "💳 Перейти к оплате")
+
 
 if __name__ == "__main__":
     unittest.main()
