@@ -30,7 +30,7 @@ from app.services.admin_analytics import (
 from app.services.admin_ids import exclude_admin_telegram_user_ids
 from app.services.admin_ids import parse_admin_ids
 from app.services.order_fulfillment import ensure_report_job_for_paid_order
-from app.services.smoke_detection import collect_smoke_order_ids, collect_smoke_user_ids
+from app.services.smoke_detection import collect_explicit_smoke_order_ids, collect_smoke_order_ids, collect_smoke_user_ids
 from pydantic import BaseModel, Field
 from app.db.models import (
     AdminFinanceEvent,
@@ -4809,7 +4809,7 @@ def admin_orders(
     payment_confirmed: bool | None = Query(default=None),
     session: Session = Depends(_get_db_session),
 ) -> dict:
-    deploy_smoke_order_ids = _load_deploy_smoke_order_ids(session)
+    deploy_smoke_order_ids = collect_explicit_smoke_order_ids(session)
     latest_manual_paid_event = (
         select(
             AdminFinanceEvent.order_id.label("event_order_id"),
