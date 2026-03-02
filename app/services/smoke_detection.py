@@ -54,12 +54,16 @@ def collect_smoke_user_ids(session: Session) -> set[int]:
     return smoke_user_ids
 
 
-def collect_smoke_order_ids(session: Session) -> set[int]:
-    smoke_order_ids = {
+def collect_explicit_smoke_order_ids(session: Session) -> set[int]:
+    return {
         int(order_id)
         for order_id in session.scalars(select(Order.id).where(_smoke_order_filter()))
         if order_id is not None
     }
+
+
+def collect_smoke_order_ids(session: Session) -> set[int]:
+    smoke_order_ids = collect_explicit_smoke_order_ids(session)
     smoke_user_ids = collect_smoke_user_ids(session)
     if smoke_user_ids:
         smoke_order_ids.update(
