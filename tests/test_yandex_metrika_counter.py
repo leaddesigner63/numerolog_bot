@@ -10,6 +10,11 @@ def test_all_html_pages_use_standard_yandex_tag_url() -> None:
 
     for html_file in html_files:
         content = html_file.read_text(encoding="utf-8")
+        if html_file.as_posix() == "web/ok/index.html":
+            assert "https://mc.yandex.ru/metrika/tag.js\"" not in content
+            assert "ym(106884182, \"init\"" not in content
+            continue
+
         assert "https://mc.yandex.ru/metrika/tag.js\"" in content
         assert "https://mc.yandex.ru/metrika/tag.js?id=" not in content
         assert "ym(106884182, \"init\"" in content
@@ -24,18 +29,26 @@ def test_unsubscribe_page_contains_metrika_counter() -> None:
 
 def test_bridge_pages_send_reach_goal_with_source_and_start_payload() -> None:
     bridge_pages = {
-        "ig": "src=ig&cmp=reels&pl=1",
-        "vk": "src=vk&cmp=clips&pl=1",
-        "yt": "src=yt&cmp=shorts&pl=1",
+        "ig": {"payload": "src=ig&cmp=reels&pl=1", "metrika": True},
+        "vk": {"payload": "src=vk&cmp=clips&pl=1", "metrika": True},
+        "yt": {"payload": "src=yt&cmp=shorts&pl=1", "metrika": True},
+        "ok": {"payload": "src=ok&cmp=video&pl=1", "metrika": False},
     }
 
-    for source, payload in bridge_pages.items():
+    for source, config in bridge_pages.items():
         html = Path(f"web/{source}/index.html").read_text(encoding="utf-8")
-        assert '"reachGoal", "bridge_redirect"' in html
+        payload = config["payload"]
+
         assert f"var source = '{source}';" in html
         assert f"var startPayload = '{payload}';" in html
-        assert 'params:{source:source, start_payload:startPayload}' in html
-        assert '{source: source, start_payload: startPayload}' in html
         assert "var fallbackDelaysMs = [1200, 2400, 4200];" in html
         assert "var emergencyDelayMs = 10000;" in html
-        assert "targetUrl += '&trk=0';" in html
+
+        if config["metrika"]:
+            assert '"reachGoal", "bridge_redirect"' in html
+            assert 'params:{source:source, start_payload:startPayload}' in html
+            assert '{source: source, start_payload: startPayload}' in html
+            assert "targetUrl += '&trk=0';" in html
+        else:
+            assert '"reachGoal", "bridge_redirect"' not in html
+            assert "targetUrl += '&trk=0';" not in html

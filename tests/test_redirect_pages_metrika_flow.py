@@ -5,9 +5,10 @@ from pathlib import Path
 
 
 BRIDGE_PAGES = {
-    "ig": "src=ig&cmp=reels&pl=1",
-    "vk": "src=vk&cmp=clips&pl=1",
-    "yt": "src=yt&cmp=shorts&pl=1",
+    "ig": {"payload": "src=ig&cmp=reels&pl=1", "metrika": True},
+    "vk": {"payload": "src=vk&cmp=clips&pl=1", "metrika": True},
+    "yt": {"payload": "src=yt&cmp=shorts&pl=1", "metrika": True},
+    "ok": {"payload": "src=ok&cmp=video&pl=1", "metrika": False},
 }
 
 
@@ -27,24 +28,31 @@ def test_bridge_pages_do_not_use_instant_meta_refresh() -> None:
 
 
 def test_bridge_pages_have_redirect_function_metrika_calls_and_fallback_timer() -> None:
-    for source in BRIDGE_PAGES:
+    for source, config in BRIDGE_PAGES.items():
         html = _read_bridge_page(source)
 
         assert "function redirectToBot(reason)" in html
-        assert 'ym(106884182, "init"' in html
-        assert 'ym(106884182, "hit"' in html
-        assert 'ym(106884182, "reachGoal"' in html
-        assert html.index('ym(106884182, "init"') < html.index('ym(106884182, "hit"') < html.index('ym(106884182, "reachGoal"')
         assert "function scheduleFallbackRedirects()" in html
         assert "setTimeout(function()" in html
-        assert "{source: source, start_payload: startPayload}" in html
+
+        if config["metrika"]:
+            assert 'ym(106884182, "init"' in html
+            assert 'ym(106884182, "hit"' in html
+            assert 'ym(106884182, "reachGoal"' in html
+            assert html.index('ym(106884182, "init"') < html.index('ym(106884182, "hit"') < html.index('ym(106884182, "reachGoal"')
+            assert "{source: source, start_payload: startPayload}" in html
+        else:
+            assert 'ym(106884182, "init"' not in html
+            assert 'ym(106884182, "hit"' not in html
+            assert 'ym(106884182, "reachGoal"' not in html
 
 
 def test_bridge_pages_have_unique_source_and_start_payload() -> None:
     seen_sources: set[str] = set()
     seen_start_payloads: set[str] = set()
 
-    for source, expected_payload in BRIDGE_PAGES.items():
+    for source, config in BRIDGE_PAGES.items():
+        expected_payload = config["payload"]
         html = _read_bridge_page(source)
 
         source_match = re.search(r"var source = '([^']+)';", html)

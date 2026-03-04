@@ -4,7 +4,7 @@ set -euo pipefail
 BASE_DOMAIN="${SOCIAL_SUBDOMAIN_BASE_DOMAIN:-aireadu.ru}"
 COUNTER_ID="${SOCIAL_SUBDOMAIN_METRIKA_COUNTER_ID:-106884182}"
 TARGET_EVENT="${SOCIAL_SUBDOMAIN_TARGET_EVENT:-bridge_redirect}"
-SUBDOMAINS=(ig vk yt)
+SUBDOMAINS=(ig vk yt ok)
 
 for subdomain in "${SUBDOMAINS[@]}"; do
   url="https://${subdomain}.${BASE_DOMAIN}/"
@@ -18,17 +18,37 @@ for subdomain in "${SUBDOMAINS[@]}"; do
 
   body="$(curl -sS "$url")"
 
-  if ! printf '%s' "$body" | grep -Fq "ym(${COUNTER_ID}, \"init\""; then
-    echo "[FAIL] На ${url} не найден вызов инициализации Метрики ym(${COUNTER_ID}, \"init\""
+  if [ "$subdomain" != "ok" ]; then
+    if ! printf '%s' "$body" | grep -Fq "ym(${COUNTER_ID}, \"init\""; then
+      echo "[FAIL] На ${url} не найден вызов инициализации Метрики ym(${COUNTER_ID}, \"init\""
+      exit 1
+    fi
+
+    if ! printf '%s' "$body" | grep -Fq "\"reachGoal\", \"${TARGET_EVENT}\""; then
+      echo "[FAIL] На ${url} не найдено целевое bridge-событие \"reachGoal\", \"${TARGET_EVENT}\""
+      exit 1
+    fi
+
+    echo "[OK] ${url}: HTTP 200, ym-init и bridge-событие присутствуют"
+    continue
+  fi
+
+  if printf '%s' "$body" | grep -Fq "ym(${COUNTER_ID}, \"init\""; then
+    echo "[FAIL] На ${url} не ожидалась инициализация Метрики"
     exit 1
   fi
 
-  if ! printf '%s' "$body" | grep -Fq "\"reachGoal\", \"${TARGET_EVENT}\""; then
-    echo "[FAIL] На ${url} не найдено целевое bridge-событие \"reachGoal\", \"${TARGET_EVENT}\""
+  if printf '%s' "$body" | grep -Fq "\"reachGoal\", \"${TARGET_EVENT}\""; then
+    echo "[FAIL] На ${url} не ожидалось bridge-событие Метрики"
     exit 1
   fi
 
-  echo "[OK] ${url}: HTTP 200, ym-init и bridge-событие присутствуют"
+  if ! printf '%s' "$body" | grep -Fq "function redirectToBot(reason)"; then
+    echo "[FAIL] На ${url} не найдена функция redirectToBot"
+    exit 1
+  fi
+
+  echo "[OK] ${url}: HTTP 200, bridge-страница без Метрики валидна"
 done
 
-echo "[OK] Все социальные поддомены прошли smoke-проверку"
+echo "[OK] Все социальные поддомены (ig/vk/yt/ok) прошли smoke-проверку"
