@@ -1,6 +1,6 @@
-# Автодеплой социальных поддоменов `ig.aireadu.ru`, `vk.aireadu.ru`, `yt.aireadu.ru` (шаг за шагом)
+# Автодеплой социальных поддоменов `ig.aireadu.ru`, `vk.aireadu.ru`, `yt.aireadu.ru`, `ok.aireadu.ru` (шаг за шагом)
 
-Документ фиксирует единый порядок выката bridge-страниц и обязательных post-deploy проверок для трёх поддоменов.
+Документ фиксирует единый порядок выката bridge-страниц и обязательных post-deploy проверок для четырёх поддоменов.
 
 ## 1) Что должно быть в репозитории
 
@@ -9,11 +9,14 @@
 - `web/ig/index.html`
 - `web/vk/index.html`
 - `web/yt/index.html`
+- `web/ok/index.html`
 
-Каждый файл должен содержать:
+Для `ig`/`vk`/`yt` файл должен содержать:
 
 - инициализацию Яндекс.Метрики: `ym(106884182, "init"`;
 - отправку целевого события bridge: `ym(106884182, "reachGoal", "bridge_redirect"`.
+
+Для `ok` файл должен содержать JS fallback-редирект в Telegram без встраивания Метрики.
 
 ## 2) Критичное требование к Nginx (без серверного 301/302)
 
@@ -68,6 +71,21 @@ server {
         try_files $uri $uri/ =404;
     }
 }
+
+server {
+    listen 443 ssl http2;
+    server_name ok.aireadu.ru;
+
+    root /opt/numerolog_bot/web;
+
+    location = / {
+        try_files /ok/index.html =404;
+    }
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}
 ```
 
 После изменений в Nginx:
@@ -79,7 +97,7 @@ sudo systemctl reload nginx
 
 ## 3) Автодеплой через pipeline
 
-1. Внести изменения в `web/ig/index.html`, `web/vk/index.html`, `web/yt/index.html` (если требуется).
+1. Внести изменения в `web/ig/index.html`, `web/vk/index.html`, `web/yt/index.html`, `web/ok/index.html` (если требуется).
 2. Сделать commit и merge в `main`.
 3. Дождаться выполнения GitHub Actions workflow `.github/workflows/deploy.yml`.
 
@@ -100,6 +118,7 @@ bash scripts/smoke_check_social_subdomains_runtime.sh
 curl -I https://ig.aireadu.ru/
 curl -I https://vk.aireadu.ru/
 curl -I https://yt.aireadu.ru/
+curl -I https://ok.aireadu.ru/
 ```
 
 Ожидаемый результат для всех команд: `HTTP/2 200` (или `HTTP/1.1 200`).
@@ -110,14 +129,22 @@ curl -I https://yt.aireadu.ru/
 curl -s https://ig.aireadu.ru/
 curl -s https://vk.aireadu.ru/
 curl -s https://yt.aireadu.ru/
+curl -s https://ok.aireadu.ru/
 ```
 
-В ответе каждой страницы обязательно должны присутствовать строки:
+В ответе страниц `ig`/`vk`/`yt` обязательно должны присутствовать строки:
 
 - `ym(106884182, "init"`
 - `"reachGoal", "bridge_redirect"`
 
-## 5) Автоматизированная единая проверка всех трёх поддоменов
+Для `ok` должны присутствовать:
+
+- `function redirectToBot(reason)`
+- `var startPayload = 'src=ok&cmp=video&pl=1';`
+
+и не должно быть строк с `ym(106884182, "init"` и `"reachGoal", "bridge_redirect"`.
+
+## 5) Автоматизированная единая проверка всех четырёх поддоменов
 
 Используйте скрипт:
 
@@ -127,10 +154,11 @@ bash scripts/smoke_check_social_subdomains.sh
 
 Что проверяет скрипт:
 
-1. `https://ig.aireadu.ru/`, `https://vk.aireadu.ru/`, `https://yt.aireadu.ru/` возвращают `200`.
-2. В HTML каждой страницы есть:
+1. `https://ig.aireadu.ru/`, `https://vk.aireadu.ru/`, `https://yt.aireadu.ru/`, `https://ok.aireadu.ru/` возвращают `200`.
+2. Для `ig`/`vk`/`yt` в HTML есть:
    - `ym(106884182, "init"`
-   - `"reachGoal", "bridge_redirect"`
+   - `"reachGoal", "bridge_redirect"`.
+3. Для `ok` подтверждается отсутствие Метрики и наличие fallback-редиректа.
 
 При любой ошибке скрипт завершится с ненулевым кодом и остановит pipeline.
 
@@ -139,9 +167,10 @@ bash scripts/smoke_check_social_subdomains.sh
 Runtime-smoke (`scripts/smoke_check_social_subdomains_runtime.sh`) проверяет уже не только HTML, но и фактический runtime страницы в headless-браузере:
 
 - подменяет `window.ym` spy-функцией до выполнения inline-скриптов;
-- проверяет вызовы `ym(..., "init", ...)`, `ym(..., "hit", ...)`, `ym(..., "reachGoal", "bridge_redirect", ...)`;
-- проверяет, что `reachGoal` вызван с ожидаемыми `source` и `start_payload`;
-- перехватывает `window.location.replace` и подтверждает редирект в Telegram с `rr=reachGoal_callback`.
+- для `ig`/`vk`/`yt` проверяет вызовы `ym(..., "init", ...)`, `ym(..., "hit", ...)`, `ym(..., "reachGoal", "bridge_redirect", ...)`;
+- для `ig`/`vk`/`yt` проверяет, что `reachGoal` вызван с ожидаемыми `source` и `start_payload`;
+- для `ok` подтверждает отсутствие `ym`-вызовов и fallback-редирект с `rr=fallback_1`;
+- перехватывает `window.location.replace` и подтверждает редирект в Telegram.
 
 Типовые причины падения и действия:
 

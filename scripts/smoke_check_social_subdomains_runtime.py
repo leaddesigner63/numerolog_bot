@@ -26,6 +26,7 @@ def _collect_runtime_state(
     page: Any,
     timeout_ms: int,
     external_state: dict[str, Any] | None = None,
+    min_ym_calls: int = 3,
 ) -> dict[str, Any]:
     elapsed_ms = 0
     step_ms = 200
@@ -57,7 +58,9 @@ def _collect_runtime_state(
             last_ym_calls = ym_calls
         if isinstance(redirect_attempts, list):
             last_redirect_attempts = redirect_attempts
-        if isinstance(ym_calls, list) and len(ym_calls) >= 3:
+        enough_ym_calls = isinstance(ym_calls, list) and len(ym_calls) >= min_ym_calls
+        redirect_captured = isinstance(redirect_attempts, list) and bool(redirect_attempts)
+        if enough_ym_calls and (min_ym_calls > 0 or redirect_captured):
             return {
                 "ymCalls": ym_calls,
                 "redirectAttempts": redirect_attempts,
@@ -83,9 +86,10 @@ def main() -> int:
     timeout_ms = int(os.getenv("SOCIAL_SUBDOMAIN_RUNTIME_TIMEOUT_MS", "12000"))
 
     expected_sources = {
-        "ig": "src=ig&cmp=reels&pl=1",
-        "vk": "src=vk&cmp=clips&pl=1",
-        "yt": "src=yt&cmp=shorts&pl=1",
+        "ig": {"payload": "src=ig&cmp=reels&pl=1", "metrika": True},
+        "vk": {"payload": "src=vk&cmp=clips&pl=1", "metrika": True},
+        "yt": {"payload": "src=yt&cmp=shorts&pl=1", "metrika": True},
+        "ok": {"payload": "src=ok&cmp=video&pl=1", "metrika": False},
     }
 
     sync_playwright = _load_playwright()
@@ -143,7 +147,9 @@ def main() -> int:
             context.expose_binding("__bridgeSmokeRecord", _bridge_smoke_record)
             context.add_init_script(init_script)
 
-            for source, start_payload in expected_sources.items():
+            for source, source_config in expected_sources.items():
+                start_payload = source_config["payload"]
+                metrika_enabled = bool(source_config.get("metrika", True))
                 url = f"https://{source}.{base_domain}/"
                 page = context.new_page()
                 request_redirect_attempts: list[str] = []
@@ -158,49 +164,63 @@ def main() -> int:
                 external_smoke_state["redirectAttempts"].clear()
                 print(f"[INFO] Runtime-smoke: {url}")
                 page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
-                runtime_state = _collect_runtime_state(page, timeout_ms, external_state=external_smoke_state)
+                runtime_state = _collect_runtime_state(
+                    page,
+                    timeout_ms,
+                    external_state=external_smoke_state,
+                    min_ym_calls=3 if metrika_enabled else 0,
+                )
                 ym_calls = runtime_state.get("ymCalls", [])
                 redirect_attempts = runtime_state.get("redirectAttempts", [])
                 if isinstance(redirect_attempts, list) and request_redirect_attempts:
                     redirect_attempts = [*redirect_attempts, *request_redirect_attempts]
 
-                _assert(
-                    len(ym_calls) >= 3,
-                    (
-                        f"{url}: ожидалось минимум 3 вызова ym, получено {len(ym_calls)}; "
-                        f"elapsed_ms={runtime_state.get('elapsedMs')}; "
-                        f"last_error={runtime_state.get('lastError', '')}"
-                    ),
-                )
+                if metrika_enabled:
+                    _assert(
+                        len(ym_calls) >= 3,
+                        (
+                            f"{url}: ожидалось минимум 3 вызова ym, получено {len(ym_calls)}; "
+                            f"elapsed_ms={runtime_state.get('elapsedMs')}; "
+                            f"last_error={runtime_state.get('lastError', '')}"
+                        ),
+                    )
 
-                init_call = next((call for call in ym_calls if len(call) > 1 and call[1] == "init"), None)
-                hit_call = next((call for call in ym_calls if len(call) > 1 and call[1] == "hit"), None)
-                goal_call = next((call for call in ym_calls if len(call) > 1 and call[1] == "reachGoal"), None)
+                    init_call = next((call for call in ym_calls if len(call) > 1 and call[1] == "init"), None)
+                    hit_call = next((call for call in ym_calls if len(call) > 1 and call[1] == "hit"), None)
+                    goal_call = next((call for call in ym_calls if len(call) > 1 and call[1] == "reachGoal"), None)
 
-                _assert(init_call is not None, f"{url}: не найден вызов ym(..., 'init', ...)")
-                _assert(hit_call is not None, f"{url}: не найден вызов ym(..., 'hit', ...)")
-                _assert(goal_call is not None, f"{url}: не найден вызов ym(..., 'reachGoal', ...)")
+                    _assert(init_call is not None, f"{url}: не найден вызов ym(..., 'init', ...)")
+                    _assert(hit_call is not None, f"{url}: не найден вызов ym(..., 'hit', ...)")
+                    _assert(goal_call is not None, f"{url}: не найден вызов ym(..., 'reachGoal', ...)")
 
-                _assert(init_call[0] == counter_id, f"{url}: ym init counter_id {init_call[0]} != {counter_id}")
-                _assert(hit_call[0] == counter_id, f"{url}: ym hit counter_id {hit_call[0]} != {counter_id}")
-                _assert(goal_call[0] == counter_id, f"{url}: ym reachGoal counter_id {goal_call[0]} != {counter_id}")
-                _assert(goal_call[2] == target_event, f"{url}: reachGoal event {goal_call[2]} != {target_event}")
+                    _assert(init_call[0] == counter_id, f"{url}: ym init counter_id {init_call[0]} != {counter_id}")
+                    _assert(hit_call[0] == counter_id, f"{url}: ym hit counter_id {hit_call[0]} != {counter_id}")
+                    _assert(goal_call[0] == counter_id, f"{url}: ym reachGoal counter_id {goal_call[0]} != {counter_id}")
+                    _assert(goal_call[2] == target_event, f"{url}: reachGoal event {goal_call[2]} != {target_event}")
 
-                params = goal_call[3] if len(goal_call) > 3 and isinstance(goal_call[3], dict) else {}
-                _assert(params.get("source") == source, f"{url}: reachGoal.source {params.get('source')} != {source}")
-                _assert(
-                    params.get("start_payload") == start_payload,
-                    f"{url}: reachGoal.start_payload {params.get('start_payload')} != {start_payload}",
-                )
+                    params = goal_call[3] if len(goal_call) > 3 and isinstance(goal_call[3], dict) else {}
+                    _assert(params.get("source") == source, f"{url}: reachGoal.source {params.get('source')} != {source}")
+                    _assert(
+                        params.get("start_payload") == start_payload,
+                        f"{url}: reachGoal.start_payload {params.get('start_payload')} != {start_payload}",
+                    )
 
-                _assert(redirect_attempts, f"{url}: не зафиксирован запрос редиректа в Telegram")
-                redirect_url = redirect_attempts[0]
-                _assert("https://t.me/" in redirect_url, f"{url}: ожидается редирект в Telegram, получено {redirect_url}")
-                _assert("rr=reachGoal_callback" in redirect_url, f"{url}: редирект должен содержать rr=reachGoal_callback")
+                    _assert(redirect_attempts, f"{url}: не зафиксирован запрос редиректа в Telegram")
+                    redirect_url = redirect_attempts[0]
+                    _assert("https://t.me/" in redirect_url, f"{url}: ожидается редирект в Telegram, получено {redirect_url}")
+                    _assert("rr=reachGoal_callback" in redirect_url, f"{url}: редирект должен содержать rr=reachGoal_callback")
 
-                goal_index = ym_calls.index(goal_call)
-                _assert(goal_index >= 2, f"{url}: reachGoal вызван слишком рано, индекс={goal_index}")
-                print(f"[OK] {url}: ym init/hit/reachGoal подтверждены, редирект перехвачен")
+                    goal_index = ym_calls.index(goal_call)
+                    _assert(goal_index >= 2, f"{url}: reachGoal вызван слишком рано, индекс={goal_index}")
+                    print(f"[OK] {url}: ym init/hit/reachGoal подтверждены, редирект перехвачен")
+                else:
+                    _assert(len(ym_calls) == 0, f"{url}: для поддомена без Метрики ym-вызовы не ожидаются")
+                    _assert(redirect_attempts, f"{url}: не зафиксирован запрос редиректа в Telegram")
+                    redirect_url = redirect_attempts[0]
+                    _assert("https://t.me/" in redirect_url, f"{url}: ожидается редирект в Telegram, получено {redirect_url}")
+                    _assert("start=src%3Dok%26cmp%3Dvideo%26pl%3D1" in redirect_url, f"{url}: неверный start-параметр редиректа")
+                    _assert("rr=fallback_1" in redirect_url, f"{url}: ожидается fallback-редирект для страницы без Метрики")
+                    print(f"[OK] {url}: страница без Метрики редиректит по fallback-сценарию")
 
                 page.close()
 

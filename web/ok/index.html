@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Переадресация в Telegram-бот</title>
+  <script type="text/javascript">
+    var redirected = false;
+    var source = 'ok';
+    var startPayload = 'src=ok&cmp=video&pl=1';
+    var fallbackDelaysMs = [1200, 2400, 4200];
+    var emergencyDelayMs = 10000;
+
+    function redirectToBot(reason) {
+      if (redirected) {
+        return;
+      }
+      redirected = true;
+
+      var targetUrl = 'https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__?start=' + encodeURIComponent(startPayload);
+      if (reason) {
+        targetUrl += '&rr=' + encodeURIComponent(reason);
+      }
+      window.location.replace(targetUrl);
+    }
+
+    function scheduleFallbackRedirects() {
+      for (var attemptIndex = 0; attemptIndex < fallbackDelaysMs.length; attemptIndex += 1) {
+        (function(attemptNumber, delayMs) {
+          setTimeout(function() {
+            redirectToBot('fallback_' + attemptNumber);
+          }, delayMs);
+        })(attemptIndex + 1, fallbackDelaysMs[attemptIndex]);
+      }
+    }
+
+    scheduleFallbackRedirects();
+    setTimeout(function() {
+      redirectToBot('emergency_timeout');
+    }, emergencyDelayMs);
+  </script>
+</head>
+<body>
+  <p>Если редирект не сработал автоматически, откройте бота по ссылке:
+    <a href="https://t.me/__LANDING_TELEGRAM_BOT_USERNAME__?start=src%3Dok%26cmp%3Dvideo%26pl%3D1">@AIreadUbot</a>
+  </p>
+</body>
+</html>
