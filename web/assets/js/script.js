@@ -60,18 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   const attribution = readAttribution();
 
-  const buildTelegramStartPayload = (placement) => {
-    const source = attribution.source || 'na';
-    const campaign = attribution.campaign || 'na';
-    const safePlacement = placement || 'na';
-
-    return `src=${encodeURIComponent(source)}&cmp=${encodeURIComponent(campaign)}&pl=${encodeURIComponent(safePlacement)}`;
-  };
-
-  const buildTelegramTargetUrl = (placement) => {
-    const startPayload = buildTelegramStartPayload(placement);
-    return `${TELEGRAM_BOT_URL}?start=${encodeURIComponent(startPayload)}`;
-  };
+  const buildTelegramTargetUrl = () => TELEGRAM_BOT_URL;
 
   const trackEvent = (eventName, payload) => {
     const eventPayload = {
@@ -103,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const placement = cta.dataset.placement || 'na';
       const tariff = cta.dataset.tariff || 'na';
-      const targetUrl = buildTelegramTargetUrl(placement);
+      const targetUrl = buildTelegramTargetUrl();
       const eventName = cta.hasAttribute('data-tariff') ? 'landing_tariff_click' : 'landing_cta_click';
 
       cta.setAttribute('href', targetUrl);

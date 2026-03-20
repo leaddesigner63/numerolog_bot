@@ -16,12 +16,7 @@
         return;
       }
       redirected = true;
-
-      var targetUrl = 'https://t.me/numminnbot?start=' + encodeURIComponent(startPayload);
-      if (reason) {
-        targetUrl += '&rr=' + encodeURIComponent(reason);
-      }
-      window.location.replace(targetUrl);
+      window.location.replace('https://t.me/numminnbot');
     }
 
     function scheduleFallbackRedirects() {
@@ -42,7 +37,7 @@
 </head>
 <body>
   <p>Если редирект не сработал автоматически, откройте бота по ссылке:
-    <a href="https://t.me/numminnbot?start=src%3Dok%26cmp%3Dvideo%26pl%3D1">@AIreadUbot</a>
+    <a href="https://t.me/numminnbot">@AIreadUbot</a>
   </p>
 </body>
 </html>

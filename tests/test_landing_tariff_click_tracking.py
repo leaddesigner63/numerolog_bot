@@ -10,4 +10,4 @@ def test_tariff_click_event_contains_required_fields() -> None:
     assert "landing_tariff_click" in script
     assert "tariff," in script
     assert "placement," in script
-    assert "start_payload" in script
+    assert "target: targetUrl" in script
