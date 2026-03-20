@@ -52,25 +52,51 @@ resolve_tmpdir || true
 mktemp_with_fallback() {
   local mktemp_kind="$1"
   local mktemp_target=""
+  local candidate=""
 
   if [ "$mktemp_kind" = "dir" ]; then
     if mktemp_target="$(mktemp -d 2>/dev/null)"; then
       printf '%s\n' "$mktemp_target"
       return 0
     fi
-    mkdir -p "$DEPLOY_TMPDIR"
-    mktemp_target="$(mktemp -d "$DEPLOY_TMPDIR/tmp.XXXXXXXXXX")"
-    printf '%s\n' "$mktemp_target"
-    return 0
+
+    for candidate in \
+      "$DEPLOY_TMPDIR" \
+      "$DEPLOY_PATH/.tmp" \
+      "${HOME:-}/.cache/numerolog_bot/tmp" \
+      "/var/tmp/numerolog_bot" \
+      "/tmp"; do
+      [ -z "$candidate" ] && continue
+      if mkdir -p "$candidate" 2>/dev/null && mktemp_target="$(mktemp -d "$candidate/tmp.XXXXXXXXXX" 2>/dev/null)"; then
+        printf '%s\n' "$mktemp_target"
+        return 0
+      fi
+    done
+
+    echo "[FAIL] Не удалось создать временную директорию (DEPLOY_TMPDIR=${DEPLOY_TMPDIR:-unset})."
+    return 1
   fi
 
   if mktemp_target="$(mktemp 2>/dev/null)"; then
     printf '%s\n' "$mktemp_target"
     return 0
   fi
-  mkdir -p "$DEPLOY_TMPDIR"
-  mktemp_target="$(mktemp "$DEPLOY_TMPDIR/tmp.XXXXXXXXXX")"
-  printf '%s\n' "$mktemp_target"
+
+  for candidate in \
+    "$DEPLOY_TMPDIR" \
+    "$DEPLOY_PATH/.tmp" \
+    "${HOME:-}/.cache/numerolog_bot/tmp" \
+    "/var/tmp/numerolog_bot" \
+    "/tmp"; do
+    [ -z "$candidate" ] && continue
+    if mkdir -p "$candidate" 2>/dev/null && mktemp_target="$(mktemp "$candidate/tmp.XXXXXXXXXX" 2>/dev/null)"; then
+      printf '%s\n' "$mktemp_target"
+      return 0
+    fi
+  done
+
+  echo "[FAIL] Не удалось создать временный файл (DEPLOY_TMPDIR=${DEPLOY_TMPDIR:-unset})."
+  return 1
 }
 
 backup_root=""
