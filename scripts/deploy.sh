@@ -30,13 +30,15 @@ fi
 
 resolve_tmpdir() {
   local candidate=""
+  local probe_dir=""
   for candidate in \
     "$DEPLOY_TMPDIR" \
     "$DEPLOY_PATH/.tmp" \
     "${HOME:-}/.cache/numerolog_bot/tmp" \
     "/var/tmp/numerolog_bot"; do
     [ -z "$candidate" ] && continue
-    if mkdir -p "$candidate" 2>/dev/null; then
+    if mkdir -p "$candidate" 2>/dev/null && probe_dir="$(mktemp -d "$candidate/tmp.XXXXXXXXXX" 2>/dev/null)"; then
+      rmdir -- "$probe_dir" 2>/dev/null || rm -rf -- "$probe_dir"
       DEPLOY_TMPDIR="$candidate"
       export TMPDIR="$candidate"
       return 0
