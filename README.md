@@ -48,7 +48,7 @@ app/
     marketing_messaging.py # единый сервис отправки маркетинговых сообщений (consent-check, ссылка отписки, campaign-логирование)
   payments/           # платёжные провайдеры и проверки webhook
 scripts/              # вспомогательные скрипты
-  deploy.sh           # серверный деплой-скрипт (используется GitHub Actions; пишет JSON-маркер .last_deploy_success с DEPLOY_RUN_ID/GITHUB_SHA/UTC-временем и имеет fallback для mktemp/DEPLOY_TMPDIR)
+  deploy.sh           # серверный деплой-скрипт (используется GitHub Actions; пишет JSON-маркер .last_deploy_success с DEPLOY_RUN_ID/GITHUB_SHA/UTC-временем и выбирает TMPDIR только после успешного пробного mktemp)
   check_runtime_services.sh # post-deploy проверка systemd + HTTP health-check API (защита от "деплой успешен, но админка не отвечает")
   test.sh             # полный набор локальных проверок
   fast_checks.py      # быстрые сценарные проверки без внешних зависимостей

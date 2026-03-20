@@ -468,6 +468,8 @@ cat <DEPLOY_PATH>/.last_deploy_success
 
 ## 11. Troubleshooting: `mktemp: No space left on device`
 
+> Начиная с текущей версии workflow, перед запуском `scripts/deploy.sh` выполняется пробное `mktemp -d` в каждом кандидате `DEPLOY_TMPDIR`; каталог берётся в работу только если тест успешно прошёл.
+
 1. Убедитесь, что в GitHub Secrets задан `DEPLOY_TMPDIR` (рекомендуется `<DEPLOY_PATH>/.tmp`).
 2. На сервере подготовьте каталог:
 ```bash
