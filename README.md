@@ -48,7 +48,7 @@ app/
     marketing_messaging.py # единый сервис отправки маркетинговых сообщений (consent-check, ссылка отписки, campaign-логирование)
   payments/           # платёжные провайдеры и проверки webhook
 scripts/              # вспомогательные скрипты
-  deploy.sh           # серверный деплой-скрипт (используется GitHub Actions; пишет маркер .last_deploy_success)
+  deploy.sh           # серверный деплой-скрипт (используется GitHub Actions; пишет JSON-маркер .last_deploy_success с DEPLOY_RUN_ID/GITHUB_SHA/UTC-временем)
   check_runtime_services.sh # post-deploy проверка systemd + HTTP health-check API (защита от "деплой успешен, но админка не отвечает")
   test.sh             # полный набор локальных проверок
   fast_checks.py      # быстрые сценарные проверки без внешних зависимостей
@@ -1177,8 +1177,8 @@ journalctl -u <service> -n 200 --no-pager
 
 ## Надёжность автодеплоя по SSH
 
-- Workflow `deploy_production` использует SSH keepalive (`ServerAliveInterval`/`ServerAliveCountMax`) и fallback-проверку маркера `$DEPLOY_PATH/.last_deploy_success`, чтобы ложные сетевые обрывы в конце сессии не ломали релиз.
-- Маркер успешного деплоя записывается в конце `scripts/deploy.sh`.
+- Workflow `deploy_production` использует SSH keepalive (`ServerAliveInterval`/`ServerAliveCountMax`) и fallback-проверку маркера `$DEPLOY_PATH/.last_deploy_success` по `DEPLOY_RUN_ID` текущего запуска, чтобы ложные сетевые обрывы в конце сессии не ломали релиз.
+- Маркер успешного деплоя записывается в конце `scripts/deploy.sh` в JSON-формате: `deploy_run_id`, `github_sha`, `finished_at_utc`.
 - После обязательного `cleanup-only` шага деплой всегда запускает `scripts/db/check_smoke_residuals.py`; если в ключевых таблицах остались smoke-записи (`count > 0`), деплой завершается с ошибкой и детализацией по таблицам.
 
 ## Обновление стабильности админки (2026-02-20)
