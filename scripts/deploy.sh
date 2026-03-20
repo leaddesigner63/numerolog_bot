@@ -10,6 +10,7 @@ SERVICE_NAME="${SERVICE_NAME:-}"
 SERVICE_NAMES="${SERVICE_NAMES:-}"
 PRESERVE_PATHS="${PRESERVE_PATHS:-app/assets/screen_images app/assets/pdf}"
 LANDING_TELEGRAM_BOT_USERNAME="${LANDING_TELEGRAM_BOT_USERNAME:-numminnbot}"
+DEPLOY_TMPDIR="${DEPLOY_TMPDIR:-}"
 
 if [ -z "$DEPLOY_PATH" ]; then
   echo "DEPLOY_PATH не задан. Укажите путь к директории проекта на сервере."
@@ -23,9 +24,41 @@ fi
 
 cd "$DEPLOY_PATH"
 
+if [ -z "$DEPLOY_TMPDIR" ]; then
+  DEPLOY_TMPDIR="$DEPLOY_PATH/.tmp"
+fi
+
+if mkdir -p "$DEPLOY_TMPDIR" 2>/dev/null; then
+  export TMPDIR="$DEPLOY_TMPDIR"
+fi
+
+mktemp_with_fallback() {
+  local mktemp_kind="$1"
+  local mktemp_target=""
+
+  if [ "$mktemp_kind" = "dir" ]; then
+    if mktemp_target="$(mktemp -d 2>/dev/null)"; then
+      printf '%s\n' "$mktemp_target"
+      return 0
+    fi
+    mkdir -p "$DEPLOY_TMPDIR"
+    mktemp_target="$(mktemp -d "$DEPLOY_TMPDIR/tmp.XXXXXXXXXX")"
+    printf '%s\n' "$mktemp_target"
+    return 0
+  fi
+
+  if mktemp_target="$(mktemp 2>/dev/null)"; then
+    printf '%s\n' "$mktemp_target"
+    return 0
+  fi
+  mkdir -p "$DEPLOY_TMPDIR"
+  mktemp_target="$(mktemp "$DEPLOY_TMPDIR/tmp.XXXXXXXXXX")"
+  printf '%s\n' "$mktemp_target"
+}
+
 backup_root=""
 if [ -n "$PRESERVE_PATHS" ]; then
-  backup_root="$(mktemp -d)"
+  backup_root="$(mktemp_with_fallback dir)"
   IFS=' ' read -r -a preserve_paths <<< "$PRESERVE_PATHS"
   for preserve_path in "${preserve_paths[@]}"; do
     [ -z "$preserve_path" ] && continue
@@ -221,7 +254,7 @@ cleanup_before_line=""
 cleanup_after_line=""
 if [ -x scripts/smoke_check_report_job_completion.sh ]; then
   echo "Запуск обязательной cleanup-only очистки smoke-данных после деплоя"
-  cleanup_before_log="$(mktemp)"
+  cleanup_before_log="$(mktemp_with_fallback file)"
   set +e
   bash scripts/smoke_check_report_job_completion.sh cleanup-only 2>&1 | tee "$cleanup_before_log"
   cleanup_status=${PIPESTATUS[0]}
@@ -234,7 +267,7 @@ if [ -x scripts/smoke_check_report_job_completion.sh ]; then
     exit 1
   fi
 
-  cleanup_after_log="$(mktemp)"
+  cleanup_after_log="$(mktemp_with_fallback file)"
   set +e
   bash scripts/smoke_check_report_job_completion.sh cleanup-only 2>&1 | tee "$cleanup_after_log"
   cleanup_verify_status=${PIPESTATUS[0]}
