@@ -79,6 +79,7 @@ docs/
     autodeploy_vk_subdomain_step_by_step.md # пошаговое подключение и автодеплой редиректа для vk.aireadu.ru
     autodeploy_landing_bot_username_step_by_step.md # пошаговая смена username Telegram-бота на лендинге через автодеплой
     autodeploy_numminnbot_cta_step_by_step.md # пошаговая фиксация всех CTA-кнопок лендинга на https://t.me/numminnbot
+    autodeploy_tmpdir_fallback_step_by_step.md # защита автодеплоя от переполнения /tmp (mktemp fallback в DEPLOY_TMPDIR)
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   landing/
     release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)
@@ -256,6 +257,7 @@ python -m http.server 8080 --directory web
 - Для фиксации всех кнопок лендинга на `https://t.me/numminnbot` используйте runbook: [`docs/deploy/autodeploy_numminnbot_cta_step_by_step.md`](docs/deploy/autodeploy_numminnbot_cta_step_by_step.md).
 - Для временного hot-switch оплаты (`provider -> manual -> provider`) используйте runbook: [`docs/deploy/autodeploy_manual_payment_mode_step_by_step.md`](docs/deploy/autodeploy_manual_payment_mode_step_by_step.md). После любого изменения `PAYMENT_MODE` обязателен рестарт `numerolog-bot.service` и `numerolog-api.service`.
 - Для релиза логики first-touch attribution (сценарий `/start` без payload -> `/start <payload>`) используйте runbook: [`docs/deploy/autodeploy_first_touch_attribution_step_by_step.md`](docs/deploy/autodeploy_first_touch_attribution_step_by_step.md).
+- Если деплой падал с `mktemp: No space left on device`, используйте runbook: [`docs/deploy/autodeploy_tmpdir_fallback_step_by_step.md`](docs/deploy/autodeploy_tmpdir_fallback_step_by_step.md) и задайте `DEPLOY_TMPDIR` в секретах CI.
 
 ### Checklist наблюдаемости (manual-оплаты)
 
@@ -1179,6 +1181,7 @@ journalctl -u <service> -n 200 --no-pager
 
 - Workflow `deploy_production` использует SSH keepalive (`ServerAliveInterval`/`ServerAliveCountMax`) и fallback-проверку маркера `$DEPLOY_PATH/.last_deploy_success` по `DEPLOY_RUN_ID` текущего запуска, чтобы ложные сетевые обрывы в конце сессии не ломали релиз.
 - Маркер успешного деплоя записывается в конце `scripts/deploy.sh` в JSON-формате: `deploy_run_id`, `github_sha`, `finished_at_utc`.
+- Для временных файлов деплоя используется `DEPLOY_TMPDIR` (по умолчанию `$DEPLOY_PATH/.tmp`), чтобы релиз не падал при переполненном системном `/tmp`.
 - После обязательного `cleanup-only` шага деплой всегда запускает `scripts/db/check_smoke_residuals.py`; если в ключевых таблицах остались smoke-записи (`count > 0`), деплой завершается с ошибкой и детализацией по таблицам.
 
 ## Обновление стабильности админки (2026-02-20)

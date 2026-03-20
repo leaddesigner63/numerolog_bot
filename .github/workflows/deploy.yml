@@ -90,7 +90,10 @@ jobs:
           RUNTIME_ADMIN_DB_READY_URL: ${{ secrets.RUNTIME_ADMIN_DB_READY_URL }}
           DEPLOY_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
           GITHUB_SHA: ${{ github.sha }}
+          DEPLOY_TMPDIR: ${{ secrets.DEPLOY_TMPDIR }}
         run: |
+          DEPLOY_TMPDIR="${DEPLOY_TMPDIR:-$DEPLOY_PATH/.tmp}"
+
           SSH_OPTS=(
             -p "$PORT"
             -o ServerAliveInterval=20
@@ -118,6 +121,7 @@ jobs:
               RUNTIME_ADMIN_DB_READY_URL='$RUNTIME_ADMIN_DB_READY_URL' \
               DEPLOY_RUN_ID='$DEPLOY_RUN_ID' \
               GITHUB_SHA='$GITHUB_SHA' \
+              DEPLOY_TMPDIR='$DEPLOY_TMPDIR' \
               DEPLOY_SUCCESS_MARKER='$DEPLOY_PATH/.last_deploy_success' \
               bash -se" <<'EOF'
           set -euo pipefail
