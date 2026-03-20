@@ -3,6 +3,8 @@ set -euo pipefail
 
 DEPLOY_PATH="${DEPLOY_PATH:-}"
 GIT_REF="${GIT_REF:-}"
+GITHUB_SHA="${GITHUB_SHA:-unknown_sha}"
+DEPLOY_RUN_ID="${DEPLOY_RUN_ID:-manual-$(date -u +'%Y%m%dT%H%M%SZ')}"
 ENV_FILE="${ENV_FILE:-}"
 SERVICE_NAME="${SERVICE_NAME:-}"
 SERVICE_NAMES="${SERVICE_NAMES:-}"
@@ -303,5 +305,7 @@ else
 fi
 
 DEPLOY_SUCCESS_MARKER="${DEPLOY_SUCCESS_MARKER:-$DEPLOY_PATH/.last_deploy_success}"
-printf '%s\n' "$(date -u +'%Y-%m-%dT%H:%M:%SZ')" > "$DEPLOY_SUCCESS_MARKER"
+DEPLOY_FINISHED_AT_UTC="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+printf '{"deploy_run_id":"%s","github_sha":"%s","finished_at_utc":"%s"}\n' \
+  "$DEPLOY_RUN_ID" "$GITHUB_SHA" "$DEPLOY_FINISHED_AT_UTC" > "$DEPLOY_SUCCESS_MARKER"
 echo "[OK] Деплой успешно завершен. Маркер: $DEPLOY_SUCCESS_MARKER"

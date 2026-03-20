@@ -88,6 +88,8 @@ jobs:
           RUNTIME_API_READINESS_URL: ${{ secrets.RUNTIME_API_READINESS_URL }}
           RUNTIME_ADMIN_URL: ${{ secrets.RUNTIME_ADMIN_URL }}
           RUNTIME_ADMIN_DB_READY_URL: ${{ secrets.RUNTIME_ADMIN_DB_READY_URL }}
+          DEPLOY_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+          GITHUB_SHA: ${{ github.sha }}
         run: |
           SSH_OPTS=(
             -p "$PORT"
@@ -114,6 +116,8 @@ jobs:
               RUNTIME_API_READINESS_URL='$RUNTIME_API_READINESS_URL' \
               RUNTIME_ADMIN_URL='$RUNTIME_ADMIN_URL' \
               RUNTIME_ADMIN_DB_READY_URL='$RUNTIME_ADMIN_DB_READY_URL' \
+              DEPLOY_RUN_ID='$DEPLOY_RUN_ID' \
+              GITHUB_SHA='$GITHUB_SHA' \
               DEPLOY_SUCCESS_MARKER='$DEPLOY_PATH/.last_deploy_success' \
               bash -se" <<'EOF'
           set -euo pipefail
@@ -127,13 +131,22 @@ jobs:
           EOF
           }
 
+          echo "Удаляем старый маркер деплоя на сервере: $DEPLOY_PATH/.last_deploy_success"
+          ssh "${SSH_OPTS[@]}" "$USER@$HOST" "rm -f '$DEPLOY_PATH/.last_deploy_success'"
+
           if run_remote_deploy; then
             exit 0
           fi
 
-          echo "Первичный SSH-запуск деплоя завершился с ошибкой. Проверяем маркер успешного завершения..."
-          ssh "${SSH_OPTS[@]}" "$USER@$HOST" \
-            "test -s '$DEPLOY_PATH/.last_deploy_success' && echo '[OK] Найден маркер успешного деплоя: $DEPLOY_PATH/.last_deploy_success'"
+          echo "Первичный SSH-запуск деплоя завершился с ошибкой. Проверяем маркер успешного завершения по DEPLOY_RUN_ID=$DEPLOY_RUN_ID..."
+          if ssh "${SSH_OPTS[@]}" "$USER@$HOST" \
+            "test -s '$DEPLOY_PATH/.last_deploy_success' && grep -F -- '$DEPLOY_RUN_ID' '$DEPLOY_PATH/.last_deploy_success' >/dev/null"; then
+            echo "[OK] Найден маркер текущего запуска: $DEPLOY_PATH/.last_deploy_success"
+            exit 0
+          fi
+
+          echo "[FAIL] Маркер текущего запуска не найден или DEPLOY_RUN_ID не совпадает: $DEPLOY_RUN_ID"
+          exit 1
 
       - name: Post-deploy smoke check social subdomains
         env:

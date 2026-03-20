@@ -456,14 +456,15 @@ server {
 
 ## 10. Troubleshooting: `client_loop: send disconnect: Broken pipe` (SSH exit code 255)
 
-1. Повторно откройте job `deploy_production` и убедитесь, что в логах есть строка: `Найден маркер успешного деплоя: <DEPLOY_PATH>/.last_deploy_success`.
+1. Повторно откройте job `deploy_production` и убедитесь, что в логах есть строка: `Найден маркер текущего запуска: <DEPLOY_PATH>/.last_deploy_success`.
 2. На сервере проверьте маркер вручную:
 ```bash
 ls -l <DEPLOY_PATH>/.last_deploy_success
 cat <DEPLOY_PATH>/.last_deploy_success
 ```
-3. Если маркер есть и сервисы активны (`systemctl status numerolog-api.service numerolog-bot.service`), деплой считается успешно завершённым, даже если SSH-сессия оборвалась в конце.
-4. Если маркера нет, перезапустите workflow и проверьте стабильность сети/фаервола между GitHub Actions и VPS.
+3. Убедитесь, что `deploy_run_id` внутри маркера совпадает с текущим `${{ github.run_id }}-${{ github.run_attempt }}` (из этого запуска workflow).
+4. Если `deploy_run_id` совпал и сервисы активны (`systemctl status numerolog-api.service numerolog-bot.service`), деплой считается успешно завершённым, даже если SSH-сессия оборвалась в конце.
+5. Если маркера нет или `deploy_run_id` не совпал, workflow обязан завершаться с ошибкой; перезапустите деплой после проверки сети/фаервола между GitHub Actions и VPS.
 
 ## Анти-таймаут проверка админки после деплоя (добавлено 2026-02-20)
 1. Убедиться, что деплой завершился без ошибок миграций и перезапуска API.
