@@ -6,6 +6,7 @@
 ## Что уже реализовано в проекте
 - `scripts/deploy.sh` теперь использует `DEPLOY_TMPDIR` и fallback-логику для `mktemp`.
 - Если системный `/tmp` недоступен, временные файлы создаются в каталоге проекта (`$DEPLOY_PATH/.tmp` по умолчанию).
+- GitHub Actions workflow перед запуском деплоя заранее проверяет и создаёт рабочий `DEPLOY_TMPDIR` на сервере, а также больше не принудительно прокидывает `TMPDIR` в невалидное значение.
 
 ## Как включить в GitHub Actions
 1. Откройте `Settings -> Secrets and variables -> Actions`.
@@ -25,3 +26,4 @@
 - Добавьте cron-задачу на очистку временных файлов старше 7 дней.
 - Настройте мониторинг свободного места (`df -h`) и алерты при заполнении > 85%.
 - Держите `DEPLOY_TMPDIR` на том же диске, где расположен `DEPLOY_PATH`, чтобы fallback был предсказуемым.
+- Если в CI снова видите ошибку `No such file or directory` для `mktemp`, проверьте права пользователя деплоя на запись в `DEPLOY_PATH/.tmp`, `${HOME}/.cache/numerolog_bot/tmp` и `/var/tmp/numerolog_bot`.

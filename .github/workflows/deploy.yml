@@ -103,6 +103,20 @@ jobs:
             -o ConnectTimeout=20
           )
 
+          echo "Проверяем и подготавливаем DEPLOY_TMPDIR на сервере..."
+          REMOTE_DEPLOY_TMPDIR="$(ssh "${SSH_OPTS[@]}" "$USER@$HOST" \
+            "set -euo pipefail; \
+            for candidate in '$DEPLOY_TMPDIR' '$DEPLOY_PATH/.tmp' \"\${HOME:-}/.cache/numerolog_bot/tmp\" '/var/tmp/numerolog_bot'; do \
+              [ -z \"\$candidate\" ] && continue; \
+              if mkdir -p \"\$candidate\" 2>/dev/null; then \
+                printf '%s\n' \"\$candidate\"; \
+                exit 0; \
+              fi; \
+            done; \
+            printf '%s\n' '/tmp'")"
+          DEPLOY_TMPDIR="$REMOTE_DEPLOY_TMPDIR"
+          echo "Используем DEPLOY_TMPDIR=$DEPLOY_TMPDIR"
+
           run_remote_deploy() {
             ssh "${SSH_OPTS[@]}" "$USER@$HOST" \
               "env DEPLOY_PATH='$DEPLOY_PATH' \
@@ -123,7 +137,6 @@ jobs:
               DEPLOY_RUN_ID='$DEPLOY_RUN_ID' \
               GITHUB_SHA='$GITHUB_SHA' \
               DEPLOY_TMPDIR='$DEPLOY_TMPDIR' \
-              TMPDIR='$DEPLOY_TMPDIR' \
               DEPLOY_SUCCESS_MARKER='$DEPLOY_PATH/.last_deploy_success' \
               bash -se" <<'EOF'
           set -euo pipefail
