@@ -42,13 +42,7 @@
         return;
       }
       redirected = true;
-      var targetUrl = 'https://t.me/numminnbot?start=' + encodeURIComponent(startPayload);
-      if (trackingUnavailable) {
-        targetUrl += '&trk=0';
-      }
-      if (reason) {
-        targetUrl += '&rr=' + encodeURIComponent(reason);
-      }
+      var targetUrl = 'https://t.me/numminnbot';
       window.location.replace(targetUrl);
     }
 
@@ -88,7 +82,7 @@
 </head>
 <body>
   <p>Если редирект не сработал автоматически, откройте бота по ссылке:
-    <a href="https://t.me/numminnbot?start=src%3Dvk%26cmp%3Dclips%26pl%3D1">@AIreadUbot</a>
+    <a href="https://t.me/numminnbot">@AIreadUbot</a>
   </p>
 </body>
 </html>

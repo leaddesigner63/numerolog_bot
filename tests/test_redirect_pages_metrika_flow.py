@@ -31,9 +31,10 @@ def test_bridge_pages_have_redirect_function_metrika_calls_and_fallback_timer() 
     for source, config in BRIDGE_PAGES.items():
         html = _read_bridge_page(source)
 
-        assert "function redirectToBot(reason)" in html
+        assert "function redirectToBot(reason)" in html or "function redirectToBot()" in html
         assert "function scheduleFallbackRedirects()" in html
         assert "setTimeout(function()" in html
+        assert "https://t.me/numminnbot?start=" not in html
 
         if config["metrika"]:
             assert 'ym(106884182, "init"' in html

@@ -2,7 +2,7 @@ from pathlib import Path
 
 
 WEB_ROOT = Path("web")
-EXPECTED_FALLBACK = "https://t.me/numminnbot?start=src%3Dsite%26cmp%3Dseo%26pl%3Dna"
+EXPECTED_FALLBACK = "https://t.me/numminnbot"
 
 
 def test_landing_links_use_new_fallback_payload() -> None:

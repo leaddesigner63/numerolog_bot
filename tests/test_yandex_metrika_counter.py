@@ -43,12 +43,12 @@ def test_bridge_pages_send_reach_goal_with_source_and_start_payload() -> None:
         assert f"var startPayload = '{payload}';" in html
         assert "var fallbackDelaysMs = [1200, 2400, 4200];" in html
         assert "var emergencyDelayMs = 10000;" in html
+        assert "https://t.me/numminnbot" in html
+        assert "https://t.me/numminnbot?start=" not in html
 
         if config["metrika"]:
             assert '"reachGoal", "bridge_redirect"' in html
             assert 'params:{source:source, start_payload:startPayload}' in html
             assert '{source: source, start_payload: startPayload}' in html
-            assert "targetUrl += '&trk=0';" in html
         else:
             assert '"reachGoal", "bridge_redirect"' not in html
-            assert "targetUrl += '&trk=0';" not in html
