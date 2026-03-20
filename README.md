@@ -78,6 +78,7 @@ docs/
     autodeploy_db_recovery_retry_step_by_step.md # защита автодеплоя при recovery PostgreSQL (ретраи Alembic до готовности БД)
     autodeploy_vk_subdomain_step_by_step.md # пошаговое подключение и автодеплой редиректа для vk.aireadu.ru
     autodeploy_landing_bot_username_step_by_step.md # пошаговая смена username Telegram-бота на лендинге через автодеплой
+    autodeploy_numminnbot_cta_step_by_step.md # пошаговая фиксация всех CTA-кнопок лендинга на https://t.me/numminnbot
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   landing/
     release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)
@@ -241,7 +242,7 @@ python -m http.server 8080 --directory web
 - Подробный чеклист релиза лендинга v2: [`docs/landing/release-v2-checklist.md`](docs/landing/release-v2-checklist.md).
 - Краткий порядок выкладки:
   1. Пройти контент- и SEO-ревизию, проверить `robots.txt`, `sitemap.xml`, JSON-LD, A11y и CTA smoke-check по чеклисту.
-  2. Проверить, что домен `aireadu.ru` (в canonical/OG/robots/sitemap) и ссылка на бота `https://t.me/${LANDING_TELEGRAM_BOT_USERNAME}` используются на всех ключевых страницах, а также заменить все `будет добавлено` на финальные значения перед прод-выкладкой.
+  2. Проверить, что домен `aireadu.ru` (в canonical/OG/robots/sitemap) и фиксированная ссылка на бота `https://t.me/numminnbot` используются на всех ключевых страницах, а также заменить все `будет добавлено` на финальные значения перед прод-выкладкой.
   3. Запустить автодеплой и выполнить пост-проверки из `AUTODEPLOY_INSTRUCTIONS.md` (включая smoke-check лендинга и ручной обход страниц).
   4. Перед публикацией новых статей обновить `docs/landing/seo-keyword-map.md` и подтвердить чек «новый URL не дублирует существующий кластер».
 
@@ -252,6 +253,7 @@ python -m http.server 8080 --directory web
 - Для отдельного пошагового автодеплоя поддомена `ok.aireadu.ru` (без Яндекс.Метрики) используйте runbook: [`docs/deploy/autodeploy_ok_subdomain_step_by_step.md`](docs/deploy/autodeploy_ok_subdomain_step_by_step.md).
 - После автодеплоя социальных поддоменов обязательны **оба** smoke-шага: статический `scripts/smoke_check_social_subdomains.sh` и runtime `scripts/smoke_check_social_subdomains_runtime.sh` (headless browser). Для `ok` проверяется fallback-редирект без Метрики.
 - Для смены username Telegram-бота на всех CTA лендинга используйте runbook: [`docs/deploy/autodeploy_landing_bot_username_step_by_step.md`](docs/deploy/autodeploy_landing_bot_username_step_by_step.md).
+- Для фиксации всех кнопок лендинга на `https://t.me/numminnbot` используйте runbook: [`docs/deploy/autodeploy_numminnbot_cta_step_by_step.md`](docs/deploy/autodeploy_numminnbot_cta_step_by_step.md).
 - Для временного hot-switch оплаты (`provider -> manual -> provider`) используйте runbook: [`docs/deploy/autodeploy_manual_payment_mode_step_by_step.md`](docs/deploy/autodeploy_manual_payment_mode_step_by_step.md). После любого изменения `PAYMENT_MODE` обязателен рестарт `numerolog-bot.service` и `numerolog-api.service`.
 - Для релиза логики first-touch attribution (сценарий `/start` без payload -> `/start <payload>`) используйте runbook: [`docs/deploy/autodeploy_first_touch_attribution_step_by_step.md`](docs/deploy/autodeploy_first_touch_attribution_step_by_step.md).
 
