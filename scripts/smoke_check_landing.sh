@@ -5,6 +5,7 @@ LANDING_URL="${LANDING_URL:-}"
 LANDING_TELEGRAM_BOT_USERNAME="${LANDING_TELEGRAM_BOT_USERNAME:-numminnbot}"
 LANDING_EXPECTED_CTA="${LANDING_EXPECTED_CTA:-}"
 LANDING_ASSET_URLS="${LANDING_ASSET_URLS:-}"
+DEPLOY_TMPDIR="${DEPLOY_TMPDIR:-}"
 
 if [ -n "$LANDING_TELEGRAM_BOT_USERNAME" ] && [ -z "$LANDING_EXPECTED_CTA" ]; then
   LANDING_TELEGRAM_BOT_USERNAME="${LANDING_TELEGRAM_BOT_USERNAME#@}"
@@ -16,7 +17,40 @@ if [ -z "$LANDING_URL" ]; then
   exit 0
 fi
 
-TMP_HTML="$(mktemp)"
+prepare_tmpdir() {
+  local candidate=""
+  for candidate in \
+    "$TMPDIR" \
+    "$DEPLOY_TMPDIR" \
+    "$(pwd)/.tmp" \
+    "${HOME:-}/.cache/numerolog_bot/tmp" \
+    "/var/tmp/numerolog_bot"; do
+    [ -z "$candidate" ] && continue
+    if mkdir -p "$candidate" 2>/dev/null; then
+      export TMPDIR="$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+mktemp_file_safe() {
+  if tmp_path="$(mktemp 2>/dev/null)"; then
+    printf '%s\n' "$tmp_path"
+    return 0
+  fi
+
+  prepare_tmpdir || true
+  if tmp_path="$(mktemp "${TMPDIR:-/tmp}/tmp.XXXXXXXXXX" 2>/dev/null)"; then
+    printf '%s\n' "$tmp_path"
+    return 0
+  fi
+
+  echo "Smoke-check: не удалось создать временный файл (TMPDIR=${TMPDIR:-/tmp})."
+  return 1
+}
+
+TMP_HTML="$(mktemp_file_safe)"
 trap 'rm -f "$TMP_HTML"' EXIT
 
 status_code="$(curl -sS -L -o "$TMP_HTML" -w '%{http_code}' "$LANDING_URL")"
