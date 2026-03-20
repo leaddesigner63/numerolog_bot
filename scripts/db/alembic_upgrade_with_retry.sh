@@ -26,6 +26,40 @@ fi
 ALEMBIC_UPGRADE_ATTEMPTS="${ALEMBIC_UPGRADE_ATTEMPTS:-60}"
 ALEMBIC_UPGRADE_INTERVAL_SECONDS="${ALEMBIC_UPGRADE_INTERVAL_SECONDS:-5}"
 ALEMBIC_RETRY_ON_ANY_ERROR="${ALEMBIC_RETRY_ON_ANY_ERROR:-1}"
+DEPLOY_TMPDIR="${DEPLOY_TMPDIR:-}"
+
+prepare_tmpdir() {
+  local candidate=""
+  for candidate in \
+    "$TMPDIR" \
+    "$DEPLOY_TMPDIR" \
+    "$(pwd)/.tmp" \
+    "${HOME:-}/.cache/numerolog_bot/tmp" \
+    "/var/tmp/numerolog_bot"; do
+    [ -z "$candidate" ] && continue
+    if mkdir -p "$candidate" 2>/dev/null; then
+      export TMPDIR="$candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+mktemp_file_safe() {
+  if tmp_path="$(mktemp 2>/dev/null)"; then
+    printf '%s\n' "$tmp_path"
+    return 0
+  fi
+
+  prepare_tmpdir || true
+  if tmp_path="$(mktemp "${TMPDIR:-/tmp}/tmp.XXXXXXXXXX" 2>/dev/null)"; then
+    printf '%s\n' "$tmp_path"
+    return 0
+  fi
+
+  echo "[FAIL] Не удалось создать временный файл для логов Alembic (TMPDIR=${TMPDIR:-/tmp})."
+  return 1
+}
 
 is_retryable_alembic_error() {
   # По умолчанию ретраим любую ошибку, чтобы переживать не только recovery PostgreSQL,
@@ -43,7 +77,7 @@ echo "[INFO] Запуск Alembic с ретраями: attempts=$ALEMBIC_UPGRADE
 
 for ((attempt=1; attempt<=ALEMBIC_UPGRADE_ATTEMPTS; attempt++)); do
   echo "[WAIT] Alembic upgrade attempt $attempt/$ALEMBIC_UPGRADE_ATTEMPTS"
-  alembic_log_file="$(mktemp)"
+  alembic_log_file="$(mktemp_file_safe)"
   set +e
   $ALEMBIC_CMD upgrade head >"$alembic_log_file" 2>&1
   alembic_exit_code=$?

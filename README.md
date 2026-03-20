@@ -80,6 +80,7 @@ docs/
     autodeploy_landing_bot_username_step_by_step.md # пошаговая смена username Telegram-бота на лендинге через автодеплой
     autodeploy_numminnbot_cta_step_by_step.md # пошаговая фиксация всех CTA-кнопок лендинга на https://t.me/numminnbot
     autodeploy_tmpdir_fallback_step_by_step.md # защита автодеплоя от переполнения /tmp (mktemp fallback в DEPLOY_TMPDIR)
+    autodeploy_tmp_no_space_recovery_step_by_step.md # восстановление автодеплоя при ошибке mktemp: No space left on device
     fonts_install.md      # установка системных шрифтов для корректного PDF (кириллица/жирные начертания)
   landing/
     release-v2-checklist.md # релизный чеклист лендинга v2 (контент/SEO/robots/sitemap/JSON-LD/A11y/smoke)
@@ -1182,6 +1183,7 @@ journalctl -u <service> -n 200 --no-pager
 - Workflow `deploy_production` использует SSH keepalive (`ServerAliveInterval`/`ServerAliveCountMax`) и fallback-проверку маркера `$DEPLOY_PATH/.last_deploy_success` по `DEPLOY_RUN_ID` текущего запуска, чтобы ложные сетевые обрывы в конце сессии не ломали релиз.
 - Маркер успешного деплоя записывается в конце `scripts/deploy.sh` в JSON-формате: `deploy_run_id`, `github_sha`, `finished_at_utc`.
 - Для временных файлов деплоя используется `DEPLOY_TMPDIR` (по умолчанию `$DEPLOY_PATH/.tmp`), чтобы релиз не падал при переполненном системном `/tmp`.
+- Скрипты `deploy.sh`, `db/alembic_upgrade_with_retry.sh` и `smoke_check_landing.sh` используют каскад fallback-каталогов (`DEPLOY_TMPDIR` → `<DEPLOY_PATH>/.tmp` → `$HOME/.cache/numerolog_bot/tmp` → `/var/tmp/numerolog_bot`) и продолжают работать даже при переполненном `/tmp`.
 - После обязательного `cleanup-only` шага деплой всегда запускает `scripts/db/check_smoke_residuals.py`; если в ключевых таблицах остались smoke-записи (`count > 0`), деплой завершается с ошибкой и детализацией по таблицам.
 
 ## Обновление стабильности админки (2026-02-20)

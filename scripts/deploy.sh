@@ -28,9 +28,26 @@ if [ -z "$DEPLOY_TMPDIR" ]; then
   DEPLOY_TMPDIR="$DEPLOY_PATH/.tmp"
 fi
 
-if mkdir -p "$DEPLOY_TMPDIR" 2>/dev/null; then
-  export TMPDIR="$DEPLOY_TMPDIR"
-fi
+resolve_tmpdir() {
+  local candidate=""
+  for candidate in \
+    "$DEPLOY_TMPDIR" \
+    "$DEPLOY_PATH/.tmp" \
+    "${HOME:-}/.cache/numerolog_bot/tmp" \
+    "/var/tmp/numerolog_bot"; do
+    [ -z "$candidate" ] && continue
+    if mkdir -p "$candidate" 2>/dev/null; then
+      DEPLOY_TMPDIR="$candidate"
+      export TMPDIR="$candidate"
+      return 0
+    fi
+  done
+
+  echo "[WARNING] Не удалось подготовить DEPLOY_TMPDIR, остаёмся на системном TMPDIR=${TMPDIR:-/tmp}"
+  return 1
+}
+
+resolve_tmpdir || true
 
 mktemp_with_fallback() {
   local mktemp_kind="$1"

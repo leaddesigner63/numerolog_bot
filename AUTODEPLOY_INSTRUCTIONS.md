@@ -466,6 +466,22 @@ cat <DEPLOY_PATH>/.last_deploy_success
 4. Если `deploy_run_id` совпал и сервисы активны (`systemctl status numerolog-api.service numerolog-bot.service`), деплой считается успешно завершённым, даже если SSH-сессия оборвалась в конце.
 5. Если маркера нет или `deploy_run_id` не совпал, workflow обязан завершаться с ошибкой; перезапустите деплой после проверки сети/фаервола между GitHub Actions и VPS.
 
+## 11. Troubleshooting: `mktemp: No space left on device`
+
+1. Убедитесь, что в GitHub Secrets задан `DEPLOY_TMPDIR` (рекомендуется `<DEPLOY_PATH>/.tmp`).
+2. На сервере подготовьте каталог:
+```bash
+mkdir -p <DEPLOY_PATH>/.tmp
+chmod 700 <DEPLOY_PATH>/.tmp
+```
+3. Проверьте свободное место:
+```bash
+df -h /tmp
+df -h <DEPLOY_PATH>
+```
+4. Перезапустите `deploy_production`.
+5. Полный runbook по восстановлению: `docs/deploy/autodeploy_tmp_no_space_recovery_step_by_step.md`.
+
 ## Анти-таймаут проверка админки после деплоя (добавлено 2026-02-20)
 1. Убедиться, что деплой завершился без ошибок миграций и перезапуска API.
 2. Проверить health:

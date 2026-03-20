@@ -93,6 +93,7 @@ jobs:
           DEPLOY_TMPDIR: ${{ secrets.DEPLOY_TMPDIR }}
         run: |
           DEPLOY_TMPDIR="${DEPLOY_TMPDIR:-$DEPLOY_PATH/.tmp}"
+          DEPLOY_TMPDIR="${DEPLOY_TMPDIR:-$HOME/.cache/numerolog_bot/tmp}"
 
           SSH_OPTS=(
             -p "$PORT"
@@ -122,6 +123,7 @@ jobs:
               DEPLOY_RUN_ID='$DEPLOY_RUN_ID' \
               GITHUB_SHA='$GITHUB_SHA' \
               DEPLOY_TMPDIR='$DEPLOY_TMPDIR' \
+              TMPDIR='$DEPLOY_TMPDIR' \
               DEPLOY_SUCCESS_MARKER='$DEPLOY_PATH/.last_deploy_success' \
               bash -se" <<'EOF'
           set -euo pipefail
